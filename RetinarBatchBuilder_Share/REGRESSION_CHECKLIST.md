@@ -29,6 +29,12 @@
 - [ ] Renderer Bounds 必须居中 SafeZone，尺寸不得过小或越界。
 - [ ] 根 BoxCollider 必须存在且中心与 Renderer Bounds 对齐。
 - [ ] 未知外部依赖必须停止，不得强行生成缺依赖包。
+- [ ] 阻断必须是单资产粒度：一批中混入一个不合规资产时，其余资产仍要正常出包，不合规的那个不得产出 AB/UnityPackage。
+- [ ] 被排除的资产必须出现在 `Deliverables/_diagnostics/validation_failures.txt`，且完成弹窗显示实际出包数量。
+- [ ] 连续对同一个生成预制体重跑两次，不得出现 `Assets/Art/<名字>_prefab/` 这类多余目录，AssetBundle 名与交付目录名必须保持一致。
+- [ ] 导入插件（`TOol`）的总开关处于开启状态时打包，`Assets/Art/<模型>/Model` 下仍不得出现 `Materials/` 或 `<FBX名>.fbm`。
+
+
 
 ## 三、贴图回归
 
@@ -39,6 +45,15 @@
 - [ ] 交付工作副本更新时，不得被较旧源图反向覆盖。
 - [ ] `01_source/Textures` 只归档最终 Prefab 实际引用的贴图版本。
 - [ ] `texture_size_report.txt` 必须显示 Unity Imported Size 和 Source File Size。
+- [ ] 被导入插件压缩过的二的幂贴图，压缩后仍必须是二的幂；`texture_size_report.txt` 中不得因压缩而新增非二的幂问题项。
+- [ ] 导入插件的 `maxSourceMegabytes` 必须 ≤ 5，与本工具的告警线一致。
+- [ ] 压缩必须在打包之前完成；若先打包后压缩，必须重跑打包并确认 `01_source/Textures` 与艺术家源图版本一致。
+- [ ] 含内嵌贴图的 FBX：`Texture/` 里的贴图压缩后重跑打包，压缩结果必须保留，不得被 FBX 重新抽取的大图覆盖。
+- [ ] 开着导入插件总开关拖入含内嵌贴图的 FBX：`<FBX名>.fbm` 里的贴图必须保持原始尺寸不被改写，且模型材质不得丢失。
+- [ ] 导入插件生成的外部 `.mat` 数量必须等于 FBX 里的材质数量；模型在 Scene/Inspector 中不得出现紫色材质槽。
+- [ ] 搬移 `.fbm` 抽取出来的贴图时，Console 不得出现 `Assertion failed on expression: 'm_hasValue'` 或 `Asset to move is not in asset database`；`Model/` 里不得残留 `.fbm` 目录。
+
+
 
 ## 四、动画与交互回归
 
@@ -48,6 +63,8 @@
 - [ ] Lua `OnClick` 等函数必须有平台事件或 C# 显式调用，不得只因函数存在就宣称可触发。
 - [ ] 带 XLua/DOTween/RichWidget 的包必须生成 `runtime_requirements.txt`。
 - [ ] AB 显示模型不代表交互已验收，必须在匹配 Runtime 中实际触发。
+
+
 
 ## 五、输出与回归验收
 
@@ -60,11 +77,15 @@
 - [ ] 发布分享包前必须更新 `CHANGELOG.md`、`PACKAGING_RULES.md` 和本检查表。
 - [ ] `RetinarBatchBuilder_Share.zip` 必须在最后一次代码/文档修改后重新生成。
 
+
+
 ## 六、GLB 边界
 
 - [ ] GLB 不得直接并入当前核心打包工具。
 - [ ] GLB 必须在独立转换工程中，从已验收 UnityPackage 的最终 Prefab 导出。
 - [ ] GLB 只是派生交换文件，不得替代原 FBX、UnityPackage 或 AB。
+
+
 
 ## 七、问题回溯要求
 

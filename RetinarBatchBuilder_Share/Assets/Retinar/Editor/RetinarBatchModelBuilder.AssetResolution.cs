@@ -204,6 +204,21 @@ public static partial class RetinarBatchModelBuilder
             return requestedDestinationPath;
         }
 
+        // 磁盘上已经有文件、但 AssetDatabase 还不认识它时，MoveAsset 会失败并顺带触发一次
+        // Unity 内部断言（Console 里表现为 Assertion failed on expression: 'm_hasValue'，
+        // 后面才跟着 "Asset to move is not in asset database"）。
+        // 典型来源：Unity 在导入 FBX 时会把内嵌贴图抽取到 <FBX名>.fbm/ 目录，文件立刻落盘，
+        // 但要等下一次 Refresh 才会成为资产；而调用方是用 Directory.GetFiles 按磁盘枚举的，
+        // 于是拿到了一个"存在但还没导入"的路径。这里按需补一次导入，让搬移不依赖调用方刷新。
+        if (!EnsureAssetIsInDatabase(sourcePath))
+        {
+            Debug.LogError("[Retinar] 待搬移的文件不在 AssetDatabase 中，且按需导入也没能注册它，已跳过：\n" +
+                "  源路径: " + sourcePath + "\n" +
+                "  目标路径: " + requestedDestinationPath + "\n" +
+                "  文件会留在原位置，可能导致后续目录清洁度校验失败。");
+            return sourcePath;
+        }
+
         string destinationPath = AssetDatabase.GenerateUniqueAssetPath(requestedDestinationPath);
         string error = AssetDatabase.MoveAsset(sourcePath, destinationPath);
         if (!string.IsNullOrEmpty(error))
@@ -220,6 +235,139 @@ public static partial class RetinarBatchModelBuilder
         }
 
         return destinationPath;
+    }
+
+    /// <summary>
+    /// 确认某个路径已经是 AssetDatabase 里的资产；只在磁盘上存在的话补一次同步导入。
+    /// 返回 false 表示文件根本不存在，或者 Unity 拒绝把它当作资产（例如被 .gitignore 之外的
+    /// 导入器规则排除），这两种情况都不该再往下调用 MoveAsset。
+    /// </summary>
+    private static bool EnsureAssetIsInDatabase(string assetPath)
+    {
+        if (!string.IsNullOrEmpty(AssetDatabase.AssetPathToGUID(assetPath)))
+        {
+            return true;
+        }
+
+        string fullPath = AssetPathToFullPath(assetPath);
+        if (string.IsNullOrEmpty(fullPath) || !File.Exists(fullPath))
+        {
+            return false;
+        }
+
+        // ForceSynchronousImport：搬移紧接着就要发生，不能等 Unity 自己排队。
+        AssetDatabase.ImportAsset(assetPath, ImportAssetOptions.ForceSynchronousImport);
+        return !string.IsNullOrEmpty(AssetDatabase.AssetPathToGUID(assetPath));
+    }
+
+    // ---------------------------------------------------------------------------
+    // 打包前校验的总调度：逐个资产判定，失败的只排除自己
+    // ---------------------------------------------------------------------------
+
+    /// <summary>
+    /// 对每个生成出来的资产分别跑三道校验，返回通过的那些；没通过的把原因写进
+    /// excludedReports，并清掉它的 AssetBundle 名字，避免它被打进 AssetBundle 输出里。
+    ///
+    /// 为什么要改成逐个判定：
+    ///   原来三道校验是"对整批一起做，任一条不通过就整批 return"。实际使用中，
+    ///   十个模型里有一个贴图放错位置，另外九个已经生成好、也完全合规的模型
+    ///   同样不会出包，用户只能去 Assets/Art 里把生成好的预设体一个个重新选中再打一遍。
+    ///   逐个判定之后，坏的那一个被单独挑出来写进报告，好的九个正常交付。
+    /// </summary>
+    private static List<GeneratedAsset> PartitionAssetsThatPassValidation(
+        List<GeneratedAsset> generated,
+        List<string> excludedReports)
+    {
+        var passed = new List<GeneratedAsset>();
+        foreach (GeneratedAsset asset in generated)
+        {
+            List<string> reasons = CollectValidationFailures(asset);
+            if (reasons.Count == 0)
+            {
+                passed.Add(asset);
+                continue;
+            }
+
+            // 这个资产的预设体如果还挂着 AssetBundle 名字，BuildPipeline 会照样把它
+            // 打进包里——校验都没过的东西不应该出现在交付物里，这里主动摘掉。
+            ClearBundleName(asset.PrefabPath);
+
+            excludedReports.Add(
+                "【" + asset.AssetName + "】未通过校验，已从本次出包中排除\n" +
+                "  预设体: " + asset.PrefabPath + "\n" +
+                "  资产目录: " + asset.AssetFolder + "\n" +
+                string.Join("\n", reasons.ToArray()));
+        }
+
+        return passed;
+    }
+
+    /// <summary>
+    /// 单个资产的三道校验。复用原来那三个接收 List 的校验函数，传进去只装一个元素的
+    /// 列表——这样校验逻辑本身完全没动，只是调用粒度从"整批"变成"单个"。
+    /// </summary>
+    private static List<string> CollectValidationFailures(GeneratedAsset asset)
+    {
+        var single = new List<GeneratedAsset> { asset };
+        var reasons = new List<string>();
+        string error;
+
+        if (!ValidateModelFoldersAreClean(single, out error))
+        {
+            reasons.Add("  [Model 目录不纯净] Model 目录只允许放模型文件、不允许有子文件夹\n" + Indent(error));
+        }
+
+        if (!ValidatePrefabSpatialPlacement(single, out error))
+        {
+            reasons.Add("  [SafeZone 位置校验未通过]\n" + Indent(error));
+        }
+
+        if (!ValidateExternalDependencies(single, out error))
+        {
+            reasons.Add("  [存在不支持的外部依赖] 自动自愈已经尝试过一次，下面是自愈之后仍然存在的问题\n" + Indent(error));
+        }
+
+        return reasons;
+    }
+
+    private static string Indent(string text)
+    {
+        if (string.IsNullOrEmpty(text))
+        {
+            return string.Empty;
+        }
+
+        string[] lines = text.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+        return "    " + string.Join("\n    ", lines);
+    }
+
+    /// <summary>
+    /// 三种校验失败合并写成一份报告。
+    /// 原来是每种校验各写一个固定文件名的报告（model_folder_not_clean.txt /
+    /// prefab_spatial_placement_failed.txt / unsupported_external_dependencies.txt），
+    /// 而且因为一失败就整批终止，后两份永远不会和第一份同时出现——排查时要挨个文件去翻。
+    /// 现在一次打包只产出一份，按资产分段，一眼能看完这批里所有问题。
+    /// </summary>
+    private static string WriteValidationFailureReport(List<string> excludedReports)
+    {
+        string outputDir = Path.Combine(Directory.GetCurrentDirectory(), DeliverableRoot, "_diagnostics");
+        EnsureDiskDirectory(outputDir);
+        string reportPath = Path.Combine(outputDir, "validation_failures.txt");
+
+        var lines = new List<string>
+        {
+            "Retinar Batch Builder - 未通过校验、已排除出本次打包的资产",
+            "Generated: " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"),
+            "",
+            "说明：名单里的资产只影响自己，同一批里通过校验的资产已经正常出包。",
+            "处理完下面的问题后，重新选中【原始 FBX】或【Assets/Art/<名字>/Prefab 里的预设体】再执行一次即可；",
+            "重新选中生成目录里的预设体不会再新建 Assets/Art/<名字>_prefab 这类多余目录。",
+            ""
+        };
+        lines.AddRange(excludedReports);
+
+        File.WriteAllLines(reportPath, lines.ToArray(), new UTF8Encoding(false));
+        return Path.GetFullPath(reportPath);
     }
 
     // ---------------------------------------------------------------------------
@@ -431,35 +579,6 @@ public static partial class RetinarBatchModelBuilder
         return errors.Count == 0;
     }
 
-    private static string WriteModelFolderFailureReport(string errorText)
-    {
-        string outputDir = Path.Combine(Directory.GetCurrentDirectory(), DeliverableRoot, "_diagnostics");
-        EnsureDiskDirectory(outputDir);
-        string reportPath = Path.Combine(outputDir, "model_folder_not_clean.txt");
-        File.WriteAllText(reportPath, errorText, new UTF8Encoding(false));
-        return Path.GetFullPath(reportPath);
-    }
-
-    private static string WriteExternalDependencyFailureReport(string dependencyError)
-    {
-        string outputDir = Path.Combine(
-            Directory.GetCurrentDirectory(),
-            DeliverableRoot,
-            "_diagnostics");
-        EnsureDiskDirectory(outputDir);
-        string reportPath = Path.Combine(outputDir, "unsupported_external_dependencies.txt");
-        var lines = new List<string>
-        {
-            "Retinar Batch Builder - Unsupported External Dependencies",
-            "Generated: " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"),
-            "",
-            "Packaging was stopped before AssetBundle and UnityPackage export.",
-            "自动自愈已经尝试过一次（见 Console 日志中 \"自动修复了\" 的记录）；下面列出的是自愈之后仍然存在的问题。",
-            "Move model-specific resources into Assets/Art/<model>/ or register verified public code in Retinar Runtime.",
-            "",
-            dependencyError
-        };
-        File.WriteAllLines(reportPath, lines.ToArray(), new UTF8Encoding(false));
-        return Path.GetFullPath(reportPath);
-    }
+    // WriteModelFolderFailureReport / WriteExternalDependencyFailureReport 已删除，
+    // 合并进上面的 WriteValidationFailureReport——一次打包只产出一份按资产分段的报告。
 }

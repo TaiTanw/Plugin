@@ -2,6 +2,99 @@
 
 记录规则：最新版本写在最上方；每次修改必须填写“原因、改动、影响、验证、回退”。
 
+## 2026-07-30 — v1.2.5 外部材质改按材质名生成，修复材质槽显示紫色
+
+- 原因：拖入 `fbx.FBX` 后模型显示紫色（材质槽解析不到材质）。取证：扫描 FBX 二进制得到里面有 **4** 个材质节点（`Material #25` 到 `#28`），但 `Assets/New Folder/Materials/` 只生成了 **3** 个 `.mat`。根因是导入插件设了 `materialLocation = External` 却没有指定 `materialName`，于是沿用了 External 模式的默认值 `BasedOnTextureName`——按材质用到的贴图名来生成和查找外部 `.mat`。这个策略隐含要求"每个材质都有贴图且互不相同"，一旦某个材质没有贴图、或两个材质共用同一张贴图，就会少生成 `.mat`，对应的材质槽解析不到外部材质，编辑器里就是紫色。
+- 改动：`ModelImportSettingsProcessor` 在设置 External 的同时显式指定 `materialName = BasedOnMaterialName`。该模式直接用 FBX 里的材质名，与材质严格一对一，不依赖贴图，几个材质就是几个 `.mat`。打包工具的 `ApplyModelImportSettings` 用的也是这一项，两边就此一致。
+- 影响：
+  - 生成的 `.mat` 文件名从贴图名改成 FBX 材质名（本例是 `Material #25` 这类），观感不如从前，但数量与材质严格对应，不会再有解析不到的槽位。
+  - 已经按旧命名导入过的模型会重新生成一套按材质名命名的 `.mat`，旧的那套变成孤儿资产，需要人工确认后删除；若已有 Prefab 手动引用过旧 `.mat`，重新指认后再删。
+  - 规则 14（复用原工程已有外部材质）不受影响，复用的仍是模型目录顶层 `Material` 里的资产。
+- 验证：Roslyn 全量编译零错误零警告。删除 `fbx.fbm` 与 `Materials` 后重新导入、确认生成 4 个 `.mat` 且模型不再显示紫色，标记为待在编辑器中验证。
+- 回退：删掉 `materialName` 那一行即可退回 Unity 默认；回退会重新引入"材质数量多于贴图数量时少生成 .mat、材质槽变紫"。
+- 关联问题：拖入 FBX 后模型显示紫色；4 个材质只生成 3 个 `.mat`。
+
+## 2026-07-30 — v1.2.4 导入插件不再改写 .fbm 内嵌媒体缓存
+
+- 原因：把 `fbx.FBX` 拖进 `Assets/New Folder/` 后出现材质丢失。日志显示导入插件的自动压缩改写了 `Assets/New Folder/fbx.fbm/` 下三张贴图（12/16/16 MB 压到 2.40/1.78/2.26 MB，2048 降到 1024），而 `.fbm` 是 Unity 从 FBX 二进制抽取内嵌贴图生成的缓存目录，不是艺术家维护的资产目录。两个后果：
+  1. 白做——模型下次重新导入，Unity 会照 FBX 原始数据重新抽取覆盖回去（`Assets/Art` 交付副本拿到 12 MB 原图正是这么来的）。
+  2. 有害——`ShrinkAndWriteBack` 里的 `AssetDatabase.ImportAsset` 会连带触发依赖它的 FBX 重新导入，于是"我们正在逐张改写 .fbm 文件"和"Unity 正在重新抽取 .fbm 并解析材质"两件事交叠，材质解析落在不一致的中间状态上。
+- 改动：
+  1. 新增 `TextureAssetPathUtility.IsInsideEmbeddedMediaFolder`，按路径段识别 `<FBX名>.fbm`。
+  2. `TextureSourceFileProcessor.QueueCandidates` 不再把 `.fbm` 里的贴图排进自动队列。
+  3. `ShrinkTextureSourceOperation.Execute` 对 `.fbm` 路径返回带原因的 Skipped，而不是静默跳过——手动在窗口里选中它时会明确告诉用户"该去压 Assets/Art/<模型>/Texture/ 里的那一份"。
+- 影响：
+  - 内嵌在 FBX 里的贴图，导入期不再有任何自动压缩，也压不了——唯一能压的位置是打包工具平铺到 `Assets/Art/<模型>/Texture/` 之后，即规则 35 的两遍流程。
+  - 导入插件不再在模型导入过程中改写模型的依赖文件，消除了上述重入风险。
+  - 独立存在的贴图（艺术家自己的贴图目录）不受影响，自动压缩照常。
+- 验证：Roslyn 全量编译零错误零警告。删除 `fbx.fbm` 与 `Materials` 后重新导入 FBX、确认材质恢复且 `.fbm` 贴图保持原始尺寸，标记为待在编辑器中验证。
+- 回退：撤销上述三处改动即可；回退会重新引入"压缩白做 + 材质在导入中途丢失"。
+- 关联问题：拖入 FBX 后材质丢失；`.fbm` 贴图被压到 1024 但交付副本仍是 2048 原图。
+
+## 2026-07-30 — v1.2.2 修复 .fbm 抽取贴图搬移失败 + 内嵌贴图超标的处理指引
+
+- 原因：打包 `Plane_WuZhi10w` 时 Console 出现 `Assertion failed on expression: 'm_hasValue'` 加 `Asset to move is not in asset database`，源路径是 `Assets/Art/Plane_WuZhi10w/Model/fbx.fbm/ch_ahe_z-10w_rgb_test.tga`。根因：`ApplyModelImportSettings` 的 `SaveAndReimport()` 让 Unity 把 FBX 内嵌贴图抽取到 `Model/<FBX名>.fbm/`，文件立刻落盘但要等一次 Refresh 才进 AssetDatabase；而 `FlattenModelCompanionFolders` 是用 `Directory.GetFiles` 按磁盘枚举后直接调 `AssetDatabase.MoveAsset`，于是对一个“存在但未导入”的路径发起搬移，触发 Unity 内部断言并让文件留在 `Model/` 里，可能连带把 Model 纯净性校验一起弄失败。
+- 改动：
+  1. `FlattenModelCompanionFolders` 在按磁盘枚举之前先 `AssetDatabase.Refresh()`。
+  2. `MoveAssetToExactPath` 新增 `EnsureAssetIsInDatabase` 前置检查：路径不在 AssetDatabase 但磁盘上有文件时，补一次 `ForceSynchronousImport`；仍注册不上才报错跳过。这样搬移逻辑不再依赖调用方记不记得刷新，也不会再触发 Unity 内部断言。
+  3. 源文件超标的告警补上可执行的处理指引（去 `Tools > 贴图处理工具` 压缩后重新打包），并说明重新打包会保留已压缩的那一份。
+- 影响：
+  - 只是把“搬移前确保资产已注册”这一步补齐，搬移结果与原设计一致，没有放宽任何校验。
+  - 新增一次 `AssetDatabase.Refresh()`，单个模型增加的耗时可忽略。
+  - 已知边界（本次未改，属既有设计）：`MoveAssetToExactPath` 在目标已存在时保留目标、删除新抽取的源文件。所以 FBX 里的内嵌贴图内容真的更新过时，必须先删掉 `Assets/Art/<模型>/Texture/` 里的旧副本，才能让新内容进来。
+- 验证：Unity 2020.3.49f1c1 自带 Roslyn 全量编译零错误零警告。实际重跑打包时 Console 不再出现 `m_hasValue` 断言与 `Asset to move is not in asset database`，标记为待在编辑器中验证。
+- 回退：恢复 `RetinarBatchModelBuilder.cs` 与 `.AssetResolution.cs` 本次改动即可；回退会重新引入上述断言与文件滞留在 `Model/` 的风险。
+- 关联问题：`Assertion failed on expression: 'm_hasValue'`；`Asset to move is not in asset database`；交付贴图报告中 `ch_ahe_z-10w_rgb_test.tga` 12 MB 超标。
+
+## 2026-07-30 — v1.2.3 修复 asset_info 模板因插件改路径而永远找不到
+
+- 原因：`AssetInfoTemplatePath` 常量写死为 `Assets/Retinar/Templates/asset_info_template.xlsx`，前提是插件整体放在 `Assets/Retinar` 下。本工程把插件收纳到 `Assets/Plugin/RetinarBatchBuilder_Share/Assets/Retinar/`，模板文件确实存在，但常量路径永远命中不了，于是每次打包都打一条 `Asset info template not found` 警告并静默回退成自己生成的版式。交付的 `06_docs/asset_info.xlsx` 因此不是交付方模板的版式——属于“弹窗显示完成、实际交错东西”的隐患，正是规则 9 要防的情况。
+- 改动：新增 `ResolveAssetInfoTemplatePath`：先按常量路径找，命中不了就用 `AssetDatabase.FindAssets` 按文件名在全工程搜一遍 `.xlsx`。常量退化为“默认位置”而不是唯一位置。回退时的警告文案也补上“回退版式不是交付方模板版式，交付前请确认”。
+- 影响：
+  - 之前所有 `06_docs/asset_info.xlsx` 都是回退版式，需要重新打包一次才会换成模板版式；已经交付出去的包若对版式有要求，需要重新出包。
+  - 插件以后被挪到任何目录都能找到模板，不用改代码。
+- 验证：静态确认模板实际位于 `Assets/Plugin/RetinarBatchBuilder_Share/Assets/Retinar/Templates/asset_info_template.xlsx`，与常量路径不一致；Roslyn 全量编译零错误零警告。重新打包后不再出现该警告、且 `asset_info.xlsx` 为模板版式，标记为待在编辑器中验证。
+- 回退：恢复 `RetinarBatchModelBuilder.AssetInfoWorkbook.cs` 本次改动即可；回退会重新导致模板永远找不到。
+- 关联问题：`Asset info template not found. Falling back to generated workbook`。
+
+## 2026-07-30 — v1.2.1 贴图压缩必须保持二的幂
+
+- 原因：v1.2 给导入插件加的压缩操作用连续二分找“刚好达标的最大尺寸”，算出来的尺寸几乎一定不是二的幂（4096 可能停在 2913）。而本工具的 `GetTextureIssueCount` / `BuildTextureReportLine` 会把每张非二的幂贴图记为一条问题项并在 Console 打警告。两个插件的目标直接对撞：压缩越成功，交付报告里的告警越多，且用户无法判断这些告警该不该管。
+- 改动：
+  1. 导入插件新增 `preservePowerOfTwo` 配置（默认开启）。源图长宽都是二的幂时，改在对折阶梯（2048→1024→512…）上从大到小取第一个达标档位——对折同时作用于长宽，长宽比精确不变，结果仍是二的幂。源图本来就不是二的幂时没有可保的东西，仍走连续二分。
+  2. `FindLargestSizeUnderLimit` 重写为“总体流程”形态：先试原尺寸（无损）→ 按源图是否为二的幂选搜索策略 → 都没找到解才走最小边长兜底。两种搜索各自独立成函数。
+  3. 顺带修掉一个会吞错误的分支：编解码器明确报错时不再落进“最小边长兜底”，而是原样上报（新增 `EncodeAttempt.Failed` 与 `Succeeded` 区分“报错”和“没找到达标尺寸”）。
+  4. `maxSourceMegabytes` 的 Tooltip 明确写出“不得大于 5”，并说明超出后会在交付报告才暴露。
+- 影响：
+  - 被压缩的贴图最多比“理论最优尺寸”少一档分辨率（例如 2913 → 2048），换来交付端零告警。这个取舍写进 `PACKAGING_RULES.md` 规则 34。
+  - 编码次数从固定 12 次降到阶梯档位数（8K 到 64 只有 8 档），批量处理反而更快。
+  - 关闭 `preservePowerOfTwo` 会恢复旧行为，交付报告会重新出现非二的幂告警，属于明确的取舍而不是缺陷。
+- 验证：Unity 2020.3.49f1c1 自带 Roslyn 全量编译 `Assets/Plugin`，零错误零警告。实际压缩结果的二的幂性、以及压缩后重跑打包时 `texture_size_report.txt` 不新增问题项，标记为待在编辑器中验证（见 `REGRESSION_CHECKLIST.md` 第三节新增三项）。
+- 回退：把 `preservePowerOfTwo` 设为 false 即可恢复连续二分，无需改代码。
+- 关联问题：压缩后的贴图在交付贴图报告中被记为非二的幂问题项。
+
+## 2026-07-30 — v1.2 阻断粒度改为单资产 + 与导入插件划清目录职责
+
+- 原因：三个独立问题。
+  1. 打包会“出现终止”，用户只能去 `Assets/Art` 里重新选中已生成的预制体再打一次。根因是三道校验（Model 纯净性、SafeZone 空间、外部依赖）对整批资产一起判定，任意一个资产不通过就 `return`，已经生成好且完全合规的其它资产一并不出包。
+  2. 上述手动补救每执行一次就多一份重复资产。`CreatePackagedAdjustedPrefab` 无条件用被选中文件的文件名当资产名，于是选中 `Assets/Art/Chair/Prefab/Chair_prefab.prefab` 会新开一个 `Assets/Art/Chair_prefab/` 目录，AssetBundle 名和交付目录也跟着变，交付时容易交错版本。
+  3. 与导入插件（`TOol`）在 FBX `materialLocation` 上互相覆盖。本工具设 `InPrefab` 后调 `SaveAndReimport()`，这次 reimport 会触发导入插件的 `OnPreprocessModel` 把它改回 `External`，于是 Unity 在 `Assets/Art/<模型>/Model/` 下生成 `Materials/` 与 `<FBX名>.fbm`，正好撞上 Model 纯净性校验，导致终止。最终生效哪一边取决于时序，无法稳定复现。
+- 改动：
+  1. 新增 `PartitionAssetsThatPassValidation`，三道校验改为逐个资产判定。未通过的资产被清掉 `assetBundleName`（保证它不会被打进 AB）并单独记入报告，通过的资产照常出包。完成弹窗同时显示 `已出包 N / 共 M` 与被排除清单预览。
+  2. 三份分散的失败报告（`model_folder_not_clean.txt` / `prefab_spatial_placement_failed.txt` / `unsupported_external_dependencies.txt`）合并为一份按资产分段的 `Deliverables/_diagnostics/validation_failures.txt`。
+  3. 新增 `ResolvePackagedAssetIdentity` 与 `PreparePackagePrefab`：被选中的预制体如果已经位于 `Assets/Art/<名字>/` 下（即本工具上一轮的产物），复用该 `<名字>` 与该目录；如果它就在目标 `Prefab/` 目录里，则原地处理不再复制副本。重跑任意多次结果一致。
+  4. `materialLocation = InPrefab` 保持不变（防回归基线）。冲突改由导入插件侧解决：`TOol` 新增 `excludedPathPrefixes` 配置，默认排除 `Assets/Art/`，其三个导入回调都不再介入本工具的产物区。
+  5. 删除死代码 `TrySetModelImporterMaterialLocation`（无任何调用方）和 `RetinarAssetInfoExporter.cs`（一次性调试脚本，内含他人机器的绝对路径 `C:/Users/小陶子/...`）。
+  6. `asset_info.xlsx` 的约 500 行手写 OOXML/zip 代码拆到 partial 分文件 `RetinarBatchModelBuilder.AssetInfoWorkbook.cs`，主文件从 2801 行降到约 2300 行。纯文件位置调整，逻辑逐行未改。
+- 影响：
+  - 阻断粒度从“整批”变为“单资产”，这是对规则 18/19/23/27 的粒度细化，不是放松——不合规的资产依然不会产出 AB 或 UnityPackage。相应的规则表述已在 `PACKAGING_RULES.md` 更新为规则 31。
+  - 规则 12（以选中 Prefab 文件名为命名基准）现在明确只适用于 `Assets/Art` 之外的预制体；对本工具产物重跑时以既有资产目录名为准，见新增规则 32。
+  - 一次打包只产出一份诊断报告，旧的三个文件名不再生成，已有的排查文档若引用旧文件名需同步。
+  - 导入插件不再对 `Assets/Art` 下的 FBX/贴图做任何导入期改动；如果以后产物目录改名，必须同步改 `TextureProcessSettings.excludedPathPrefixes`，否则会复现终止。
+- 验证：静态检查——`materialLocation` 在主文件中仅出现在 `ApplyModelImportSettings` 一处且值为 `InPrefab`；主文件已无 `ZipArchive`/`XElement` 引用；三个旧报告写入函数已无定义与调用。Unity 编译、单资产失败隔离的实际打包、重跑不再产生 `Assets/Art/<名字>_prefab`、以及 UnityPackage 导入后 `Model` 仍只有 FBX —— 均标记为待在编辑器中验证，需按 `REGRESSION_CHECKLIST.md` 执行。
+- 回退：恢复本次提交前的三个脚本（`RetinarBatchModelBuilder.cs`、`.AssetResolution.cs`，并删除 `.AssetInfoWorkbook.cs`）即可。回退会重新引入“一个资产失败导致整批终止”“重跑产生重复目录”，且必须同时回退 `TOol` 的 `excludedPathPrefixes`，否则两个插件会再次在 `materialLocation` 上互相覆盖。
+- 关联问题：打包中途终止、需要手动重新选中生成预制体补救、补救后出现重复的 `Assets/Art/<名字>_prefab` 目录。
+
 ## 2026-07-16 — v1.1 非破坏式打包基线
 
 - 原因：历史版本曾清空生成目录、移动资源、直接修改原始 FBX Importer，与“原工程可继续调整并重复打包”的要求冲突。
