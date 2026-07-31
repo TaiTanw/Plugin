@@ -939,34 +939,160 @@ public static partial class RetinarBatchModelBuilder
         return material;
     }
 
+    // 把"源资产里的子对象"映射到"交付副本里的同一个子对象"，
+    // 供后面改写预制体的 Mesh / 材质 / 贴图引用使用。
+    //
+    // 这里绝对不能按名字匹配。FBX 的节点名不保证唯一：3ds Max 里常按材质给物体命名，
+    // Plane_Zhi18 的 fbx-all.FBX 就有 117 个节点却只有 88 个不同名字，
+    // 其中 yy3d-zhi18-0012 重复 6 次、yy3d-zhi18-0003 重复 5 次。
+    // Unity 导入时不会给重名的 Mesh 改名，于是"按名字 + FirstOrDefault"会让
+    // 6 个不同的 Mesh 全部映射到副本里的第一个同名 Mesh，
+    // 剩下 5 个节点就拿到了别人的几何体。因为这些节点带着镜像（负缩放）和
+    // 高达 37 倍的非等比缩放，错配的表现是：主体外冒出碎片状物体、镜像节点绕序
+    // 翻转导致破面。源模型直接拖进场景时是正确的，只有打包产物坏掉，非常难查。
+    //
+    // 正确做法：源文件和交付副本是同一份字节、同一套导入设置，导入结果是确定的，
+    // 所以先按 localFileIdentifier 精确配对；万一副本的 ID 表没能保留（例如 .meta
+    // 没跟着拷过去、Unity 重新生成了 ID），退化成"同类型内按序号配对"。
+    // 两条路径都保证一对一，不会再出现多个源对象塌缩到同一个副本上。
     private static Dictionary<UnityEngine.Object, UnityEngine.Object> BuildCopiedObjectMap(Dictionary<string, string> copiedDependencies)
     {
         var objectMap = new Dictionary<UnityEngine.Object, UnityEngine.Object>();
         foreach (KeyValuePair<string, string> pair in copiedDependencies)
         {
-            UnityEngine.Object[] originals = AssetDatabase.LoadAllAssetsAtPath(pair.Key);
-            UnityEngine.Object[] copies = AssetDatabase.LoadAllAssetsAtPath(pair.Value);
-
-            foreach (UnityEngine.Object original in originals)
-            {
-                if (original == null)
-                {
-                    continue;
-                }
-
-                UnityEngine.Object copy = copies.FirstOrDefault(candidate =>
-                    candidate != null &&
-                    candidate.GetType() == original.GetType() &&
-                    candidate.name == original.name);
-
-                if (copy != null && !objectMap.ContainsKey(original))
-                {
-                    objectMap.Add(original, copy);
-                }
-            }
+            MapSubAssetsBetweenCopies(pair.Key, pair.Value, objectMap);
         }
 
         return objectMap;
+    }
+
+    private static void MapSubAssetsBetweenCopies(
+        string sourcePath,
+        string copyPath,
+        Dictionary<UnityEngine.Object, UnityEngine.Object> objectMap)
+    {
+        List<UnityEngine.Object> originals = LoadSubAssetsForMapping(sourcePath);
+        List<UnityEngine.Object> copies = LoadSubAssetsForMapping(copyPath);
+        if (originals.Count == 0 || copies.Count == 0)
+        {
+            return;
+        }
+
+        foreach (IGrouping<System.Type, UnityEngine.Object> group in originals.GroupBy(item => item.GetType()))
+        {
+            List<UnityEngine.Object> originalsOfType = group.ToList();
+            List<UnityEngine.Object> copiesOfType = copies.Where(item => item.GetType() == group.Key).ToList();
+
+            // 数量对不上说明两边不是同一份资产（或者导入设置不一致），
+            // 此时任何配对都是猜的。宁可不改写引用，也不要改错——
+            // 引用没改写只会被后面的外部依赖校验拦下来报错，改错了却会静默产出坏几何体。
+            if (originalsOfType.Count != copiesOfType.Count)
+            {
+                Debug.LogError(
+                    "[Retinar] 源资产与交付副本的子对象数量不一致，已跳过这一类的引用改写，请检查两者是否同源：\n" +
+                    "  类型: " + group.Key.Name + "\n" +
+                    "  源路径: " + sourcePath + "（" + originalsOfType.Count + " 个）\n" +
+                    "  副本路径: " + copyPath + "（" + copiesOfType.Count + " 个）");
+                continue;
+            }
+
+            if (!TryPairByLocalFileIdentifier(originalsOfType, copiesOfType, objectMap))
+            {
+                PairByOrdinalIndex(originalsOfType, copiesOfType, objectMap);
+            }
+        }
+    }
+
+    // 只取需要改写引用的子对象。模型资产里的 GameObject 是导入器生成的层级节点，
+    // 预制体引用的是它们的 Mesh 而不是节点本身，纳入映射没有意义还会干扰按序号配对。
+    private static List<UnityEngine.Object> LoadSubAssetsForMapping(string assetPath)
+    {
+        var result = new List<UnityEngine.Object>();
+        foreach (UnityEngine.Object candidate in AssetDatabase.LoadAllAssetsAtPath(assetPath))
+        {
+            if (candidate != null && !(candidate is GameObject) && !(candidate is Transform))
+            {
+                result.Add(candidate);
+            }
+        }
+
+        return result;
+    }
+
+    // 首选路径：交付副本是连 .meta 一起拷过去的，Unity 会沿用同一套 localFileIdentifier，
+    // 于是可以精确配对，与 LoadAllAssetsAtPath 的返回顺序无关。
+    // 只有两边的 ID 集合完全一致时才认这条路径，否则交给按序号配对。
+    private static bool TryPairByLocalFileIdentifier(
+        List<UnityEngine.Object> originals,
+        List<UnityEngine.Object> copies,
+        Dictionary<UnityEngine.Object, UnityEngine.Object> objectMap)
+    {
+        var copiesById = new Dictionary<long, UnityEngine.Object>();
+        foreach (UnityEngine.Object copy in copies)
+        {
+            if (!TryGetLocalFileIdentifier(copy, out long copyId) || copiesById.ContainsKey(copyId))
+            {
+                return false;
+            }
+
+            copiesById.Add(copyId, copy);
+        }
+
+        var pairs = new List<KeyValuePair<UnityEngine.Object, UnityEngine.Object>>();
+        foreach (UnityEngine.Object original in originals)
+        {
+            if (!TryGetLocalFileIdentifier(original, out long originalId) ||
+                !copiesById.TryGetValue(originalId, out UnityEngine.Object matched))
+            {
+                return false;
+            }
+
+            pairs.Add(new KeyValuePair<UnityEngine.Object, UnityEngine.Object>(original, matched));
+        }
+
+        foreach (KeyValuePair<UnityEngine.Object, UnityEngine.Object> entry in pairs)
+        {
+            if (!objectMap.ContainsKey(entry.Key))
+            {
+                objectMap.Add(entry.Key, entry.Value);
+            }
+        }
+
+        return true;
+    }
+
+    // 退化路径：同一份字节、同一套导入设置，导入是确定性的，
+    // 所以同类型子对象在两边的出现顺序一致，按序号配对即可，且天然一对一。
+    // 名字不一致说明顺序假设不成立，此时报错并放弃这一类的改写。
+    private static void PairByOrdinalIndex(
+        List<UnityEngine.Object> originals,
+        List<UnityEngine.Object> copies,
+        Dictionary<UnityEngine.Object, UnityEngine.Object> objectMap)
+    {
+        for (int i = 0; i < originals.Count; i++)
+        {
+            if (originals[i].name != copies[i].name)
+            {
+                Debug.LogError(
+                    "[Retinar] 源资产与交付副本的子对象顺序不一致，已跳过这一类的引用改写：\n" +
+                    "  序号 " + i + " 源为 \"" + originals[i].name + "\"，副本为 \"" + copies[i].name + "\"");
+                return;
+            }
+        }
+
+        for (int i = 0; i < originals.Count; i++)
+        {
+            if (!objectMap.ContainsKey(originals[i]))
+            {
+                objectMap.Add(originals[i], copies[i]);
+            }
+        }
+    }
+
+    private static bool TryGetLocalFileIdentifier(UnityEngine.Object target, out long localId)
+    {
+        localId = 0L;
+        return AssetDatabase.TryGetGUIDAndLocalFileIdentifier(target, out string _, out localId);
     }
 
     private static void RemapCopiedMaterials(string assetFolder, Dictionary<UnityEngine.Object, UnityEngine.Object> objectMap)
