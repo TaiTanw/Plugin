@@ -32,6 +32,13 @@ public static class TextureOperationRunner
         List<PendingWork> pendingWork = CollectPendingWork(operations, assetPaths, settings);
         if (pendingWork.Count == 0)
         {
+            // 命中了贴图但 CanProcess 全否时，以前直接返回空结果，窗口和 Console 都没声音。
+            // 留一条可诊断信息，让人知道是"操作不适用"而不是"没点到"。
+            if (operations != null && operations.Count > 0 && assetPaths != null && assetPaths.Count > 0)
+            {
+                Debug.LogWarning("[贴图处理] 命中 " + assetPaths.Count + " 张贴图，但对当前勾选的操作都不适用（CanProcess 全否），未执行任何处理。");
+            }
+
             return summary;
         }
 
@@ -156,6 +163,7 @@ public static class TextureOperationRunner
         else
         {
             summary.SkippedCount++;
+            summary.SkippedLines.Add(line);
         }
     }
 
@@ -217,7 +225,22 @@ public static class TextureOperationRunner
             report.AddRange(summary.ChangedLines);
         }
 
-        Debug.Log(string.Join("\n", report.ToArray()));
+        if (summary.SkippedLines.Count > 0)
+        {
+            report.Add("");
+            report.Add("已跳过:");
+            report.AddRange(summary.SkippedLines);
+        }
+
+        // 全是跳过时用 Warning，避免用户以为"完全没跑"。
+        if (summary.ChangedCount == 0 && summary.FailedCount == 0 && summary.SkippedCount > 0)
+        {
+            Debug.LogWarning(string.Join("\n", report.ToArray()));
+        }
+        else
+        {
+            Debug.Log(string.Join("\n", report.ToArray()));
+        }
 
         if (summary.FailedLines.Count > 0)
         {

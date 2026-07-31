@@ -61,6 +61,20 @@ public class TextureProcessSettings : ScriptableObject
              "所以材质引用不会断。取消勾选则两个文件并存，需要你自己处理引用。")]
     public bool deleteTgaAfterConvert = true;
 
+    [Header("亮度写入 Alpha（旋翼/光晕）")]
+    [Tooltip("亮度 = max(R,G,B)。低于此值的像素 Alpha 直接置 0，并清掉 RGB，" +
+             "用来砍掉黑底周边的半透明影子。0 = 只把纯黑切透明；调高会切掉更多暗边。")]
+    [Range(0, 255)]
+    public int luminanceAlphaCutoff = 24;
+
+    [Tooltip("勾选后，把「阈值 ~ 255」的亮度重新映射到 Alpha 0~255，" +
+             "软边从阈值处重新起算，避免刚过阈值的像素仍带着一层灰雾。")]
+    public bool luminanceAlphaRemapAboveCutoff = true;
+
+    [Tooltip("勾选后，保留的像素 RGB 改写成灰度（等于亮度）。" +
+             "彩色源图在半透明边缘容易显得过分多彩时打开；需要保留旋翼本身颜色时关掉。")]
+    public bool luminanceAlphaWriteGrayscaleRgb = false;
+
     [Header("导入期自动执行的操作")]
     [Tooltip("填写操作的 Id（见贴图处理窗口里每个操作后面标注的 Id）。" +
              "留空表示导入时什么都不自动做，全靠窗口里手动触发。")]
@@ -232,5 +246,6 @@ public class TextureProcessSettings : ScriptableObject
         maxSourceMegabytes = Mathf.Max(0.05f, maxSourceMegabytes);
         minDimension = Mathf.Clamp(minDimension, 1, 8192);
         maxSearchIterations = Mathf.Clamp(maxSearchIterations, 1, 32);
+        luminanceAlphaCutoff = Mathf.Clamp(luminanceAlphaCutoff, 0, 255);
     }
 }

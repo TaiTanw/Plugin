@@ -20,6 +20,12 @@ public class TextureOperationRunSummary
     /// <summary>每一条失败记录，按执行顺序。</summary>
     public readonly List<string> FailedLines = new List<string>();
 
+    /// <summary>
+    /// 每一条跳过记录。以前不存这个，窗口只显示"跳过 N 项"却没有任何原因，
+    /// 用户会以为点了执行却完全没反应（亮度写 Alpha 对 .fbm / 已有 Alpha 的图全是跳过）。
+    /// </summary>
+    public readonly List<string> SkippedLines = new List<string>();
+
     public int TotalHandled
     {
         get { return ChangedCount + SkippedCount + FailedCount; }
@@ -27,6 +33,6 @@ public class TextureOperationRunSummary
 
     public bool HasAnythingToReport
     {
-        get { return ChangedCount > 0 || FailedCount > 0; }
+        get { return ChangedCount > 0 || FailedCount > 0 || SkippedCount > 0; }
     }
 }
