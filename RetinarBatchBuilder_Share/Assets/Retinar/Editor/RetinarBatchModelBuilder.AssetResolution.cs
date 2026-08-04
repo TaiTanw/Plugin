@@ -417,7 +417,36 @@ public static partial class RetinarBatchModelBuilder
                 }
             }
 
+            // 自愈后再扫一遍；若仍挂着导入区 .fbm，再强制 Extract+remap 一次后重取依赖。
             string[] dependencies = AssetDatabase.GetDependencies(asset.PrefabPath, true);
+            List<string> externalFbmBefore = CollectExternalFbmPathsFromDependencies(asset, dependencies);
+            if (externalFbmBefore.Count > 0)
+            {
+                Debug.LogWarning("[Retinar] " + asset.AssetName + "：自愈后仍有外部 .fbm 依赖 " +
+                    externalFbmBefore.Count + " 条，开始校验阶段强制 Extract+remap：\n" +
+                    string.Join("\n", externalFbmBefore.ToArray()));
+                ExtractAndBindPackagedModelTextures(asset.AssetFolder);
+                RemapAllArtMaterialsToLocalTextures(asset.AssetFolder);
+                AssetDatabase.SaveAssets();
+                AssetDatabase.Refresh();
+                dependencies = AssetDatabase.GetDependencies(asset.PrefabPath, true);
+                List<string> externalFbmAfter = CollectExternalFbmPathsFromDependencies(asset, dependencies);
+                if (externalFbmAfter.Count == 0)
+                {
+                    Debug.Log("[Retinar] " + asset.AssetName + "：校验阶段强制 Extract+remap 后，外部 .fbm 依赖已清零");
+                }
+                else
+                {
+                    Debug.LogError("[Retinar] " + asset.AssetName + "：校验阶段强制 Extract+remap 后仍剩 " +
+                        externalFbmAfter.Count + " 条外部 .fbm 依赖：\n" +
+                        string.Join("\n", externalFbmAfter.ToArray()));
+                }
+            }
+            else
+            {
+                Debug.Log("[Retinar] " + asset.AssetName + "：自愈后无外部 .fbm 依赖");
+            }
+
             foreach (string rawDependency in dependencies)
             {
                 string dependency = rawDependency.Replace("\\", "/");
@@ -437,16 +466,86 @@ public static partial class RetinarBatchModelBuilder
         return errors.Count == 0;
     }
 
+    private static bool HasExternalEmbeddedMediaDependency(GeneratedAsset asset, string[] dependencies)
+    {
+        return CollectExternalFbmPathsFromDependencies(asset, dependencies).Count > 0;
+    }
+
+    private static List<string> CollectExternalFbmPathsFromDependencies(GeneratedAsset asset, string[] dependencies)
+    {
+        var result = new List<string>();
+        if (dependencies == null)
+        {
+            return result;
+        }
+
+        string assetFolderPrefix = asset.AssetFolder + "/";
+        foreach (string rawDependency in dependencies)
+        {
+            string dependency = rawDependency.Replace("\\", "/");
+            if (!dependency.StartsWith("Assets/", StringComparison.OrdinalIgnoreCase) ||
+                dependency.StartsWith(assetFolderPrefix, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            if (IsTextureAsset(dependency) && IsInsideEmbeddedMediaFolderPath(dependency))
+            {
+                result.Add(dependency);
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>打包流程用：按预制体路径收集仍落在外部 .fbm 的贴图依赖。</summary>
+    private static List<string> CollectExternalFbmTextureDependencies(string assetFolder, string prefabPath)
+    {
+        var asset = new GeneratedAsset(
+            Path.GetFileName(assetFolder),
+            assetFolder,
+            string.Empty,
+            string.Empty,
+            prefabPath,
+            string.Empty,
+            default(AssetStats));
+        return CollectExternalFbmPathsFromDependencies(asset, AssetDatabase.GetDependencies(prefabPath, true));
+    }
+
+    private static bool IsInsideEmbeddedMediaFolderPath(string assetPath)
+    {
+        string[] segments = assetPath.Replace("\\", "/").Split('/');
+        for (int i = 0; i < segments.Length - 1; i++)
+        {
+            if (segments[i].EndsWith(".fbm", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     /// <summary>
     /// 尝试把预制体里指向"资产文件夹之外"的贴图/材质依赖，复制并重定向进该模型自己的
-    /// Art 目录。只处理贴图和材质这两种最常见、也最容易因为"文件被挪动"而失联的类型；
-    /// 其它类型（脚本、动画控制器、网格等）不做自动处理，交给后面的报错去暴露真正的结构性问题。
+    /// Art 目录。
+    ///
+    /// 重要：材质【已经】在 Art/Material 里时也必须重映射贴图。
+    /// 旧逻辑在"材质已在 Art"时直接 continue，导致材质仍引用导入区 .fbm 的情况
+    /// 完全得不到自愈（Plane_Jian31：Texture 已拷进 Art，但依赖校验仍报 AAA/.../fbx.fbm）。
     /// </summary>
     private static bool TryHealExternalDependencies(GeneratedAsset asset, out List<string> healedPaths)
     {
         healedPaths = new List<string>();
         string materialFolder = asset.AssetFolder + "/Material";
         string textureFolder = asset.AssetFolder + "/Texture";
+        EnsureAssetFolder(materialFolder);
+        EnsureAssetFolder(textureFolder);
+
+        List<string> fbmBeforeHeal = CollectExternalFbmTextureDependencies(asset.AssetFolder, asset.PrefabPath);
+        Debug.Log("[Retinar] " + asset.AssetName + "：开始自愈外部依赖（自愈前外部 .fbm=" +
+            fbmBeforeHeal.Count + "）" +
+            (fbmBeforeHeal.Count > 0 ? "：\n" + string.Join("\n", fbmBeforeHeal.ToArray()) : string.Empty));
 
         GameObject instance = PrefabUtility.LoadPrefabContents(asset.PrefabPath);
         bool changed = false;
@@ -466,27 +565,34 @@ public static partial class RetinarBatchModelBuilder
                     }
 
                     string materialPath = AssetDatabase.GetAssetPath(material).Replace("\\", "/");
-                    if (string.IsNullOrEmpty(materialPath) ||
-                        materialPath.StartsWith(asset.AssetFolder + "/", StringComparison.OrdinalIgnoreCase) ||
-                        !IsMaterialAsset(materialPath))
+                    if (string.IsNullOrEmpty(materialPath) || !IsMaterialAsset(materialPath))
                     {
                         continue;
                     }
 
-                    string targetMaterialPath = materialFolder + "/" + Path.GetFileName(materialPath);
-                    string copiedMaterialPath = CopyAssetToExactPath(materialPath, targetMaterialPath);
-                    Material copiedMaterial = AssetDatabase.LoadAssetAtPath<Material>(copiedMaterialPath);
-                    if (copiedMaterial == null)
+                    Material workingMaterial = material;
+                    if (!materialPath.StartsWith(asset.AssetFolder + "/", StringComparison.OrdinalIgnoreCase))
                     {
-                        continue;
+                        string targetMaterialPath = materialFolder + "/" + Path.GetFileName(materialPath);
+                        string copiedMaterialPath = CopyAssetToExactPath(materialPath, targetMaterialPath);
+                        Material copiedMaterial = AssetDatabase.LoadAssetAtPath<Material>(copiedMaterialPath);
+                        if (copiedMaterial == null)
+                        {
+                            continue;
+                        }
+
+                        workingMaterial = copiedMaterial;
+                        materials[i] = copiedMaterial;
+                        rendererChanged = true;
+                        healedPaths.Add(materialPath + "  ->  " + copiedMaterialPath);
                     }
 
-                    RemapMaterialTexturesToArtFolder(copiedMaterial, textureFolder);
-                    EditorUtility.SetDirty(copiedMaterial);
-
-                    materials[i] = copiedMaterial;
-                    rendererChanged = true;
-                    healedPaths.Add(materialPath + "  ->  " + copiedMaterialPath);
+                    if (RemapMaterialTexturesToArtFolder(workingMaterial, textureFolder))
+                    {
+                        EditorUtility.SetDirty(workingMaterial);
+                        changed = true;
+                        healedPaths.Add("贴图重映射: " + AssetDatabase.GetAssetPath(workingMaterial));
+                    }
                 }
 
                 if (rendererChanged)
@@ -507,7 +613,541 @@ public static partial class RetinarBatchModelBuilder
             PrefabUtility.UnloadPrefabContents(instance);
         }
 
+        // 兜底：Art/Material 下所有材质再扫一遍贴图（含未被 Renderer 引用到的）。
+        string[] materialGuids = AssetDatabase.FindAssets("t:Material", new[] { materialFolder });
+        foreach (string guid in materialGuids)
+        {
+            string path = AssetDatabase.GUIDToAssetPath(guid);
+            Material material = AssetDatabase.LoadAssetAtPath<Material>(path);
+            if (material == null)
+            {
+                continue;
+            }
+
+            if (RemapMaterialTexturesToArtFolder(material, textureFolder))
+            {
+                EditorUtility.SetDirty(material);
+                changed = true;
+                healedPaths.Add("贴图重映射: " + path);
+            }
+        }
+
+        // 切断 Model FBX 对导入区 .fbm 的依赖：
+        // materialSearch=Local 不够——内嵌贴图提取仍会复用工程里已有的同名 .fbm。
+        // 必须 ExtractTextures 到本模型 Texture/，再按文件名把外部依赖 remap 回来。
+        if (ExtractAndBindPackagedModelTextures(asset.AssetFolder))
+        {
+            changed = true;
+            healedPaths.Add("ExtractTextures + remap -> " + asset.AssetFolder + "/Texture");
+        }
+
+        if (RemapAllArtMaterialsToLocalTextures(asset.AssetFolder))
+        {
+            changed = true;
+            healedPaths.Add("Art/Material 贴图全部收到本模型 Texture/");
+        }
+
+        if (changed)
+        {
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+        }
+
+        List<string> fbmAfterHeal = CollectExternalFbmTextureDependencies(asset.AssetFolder, asset.PrefabPath);
+        Debug.Log("[Retinar] " + asset.AssetName + "：自愈结束 changed=" + changed +
+            " 修复条目=" + healedPaths.Count + " 自愈后外部 .fbm=" + fbmAfterHeal.Count +
+            (fbmAfterHeal.Count > 0 ? "：\n" + string.Join("\n", fbmAfterHeal.ToArray()) : string.Empty));
+
         return changed;
+    }
+
+    /// <summary>
+    /// 把交付区 FBX 的内嵌贴图强制抽到 Assets/Art/&lt;模型&gt;/Texture，
+    /// 并把 ModelImporter 上仍指向外部（尤其是导入区 .fbm）的贴图 remap 到本地副本。
+    ///
+    /// 根因：Copy/Flatten 之后 Art/Texture 里已有副本，但 FBX 再导入时 Unity 会按
+    /// 贴图名复用工程里先存在的 Assets/AAA/.../fbx.fbm，GetDependencies 于是一直挂外部路径。
+    /// materialSearch=Local 只影响材质搜索，管不到这层“同名贴图复用”。
+    /// </summary>
+    private static bool ExtractAndBindPackagedModelTextures(string assetFolder)
+    {
+        string modelFolder = assetFolder + "/Model";
+        string textureFolder = assetFolder + "/Texture";
+        if (!AssetDatabase.IsValidFolder(modelFolder))
+        {
+            Debug.Log("[Retinar] ExtractAndBind 跳过：无 Model 目录 " + modelFolder);
+            return false;
+        }
+
+        EnsureAssetFolder(textureFolder);
+        bool changed = false;
+        string[] modelGuids = AssetDatabase.FindAssets("t:Model", new[] { modelFolder });
+        Debug.Log("[Retinar] ExtractAndBind 开始 assetFolder=" + assetFolder +
+            " 模型数=" + modelGuids.Length + " -> " + textureFolder);
+        foreach (string guid in modelGuids)
+        {
+            string modelPath = AssetDatabase.GUIDToAssetPath(guid);
+            if (!IsModelAsset(modelPath))
+            {
+                continue;
+            }
+
+            var importer = AssetImporter.GetAtPath(modelPath) as ModelImporter;
+            if (importer == null)
+            {
+                Debug.LogWarning("[Retinar] ExtractAndBind：无 ModelImporter " + modelPath);
+                continue;
+            }
+
+            List<string> externalBefore = CollectModelExternalFbmTextures(modelPath, assetFolder);
+            Debug.Log("[Retinar] ExtractAndBind 模型=" + modelPath +
+                " Extract 前外部 .fbm 贴图=" + externalBefore.Count +
+                (externalBefore.Count > 0 ? "：\n" + string.Join("\n", externalBefore.ToArray()) : string.Empty));
+
+            // 已无外部 .fbm 时不必再 Extract（会盖贴图、触发重导冲顶点色）。
+            // 仅在材质搜索设置不合规时做一次保留顶点色的重导。
+            if (externalBefore.Count == 0)
+            {
+                bool settingsDirty =
+                    importer.materialLocation != ModelImporterMaterialLocation.InPrefab ||
+                    importer.materialSearch != ModelImporterMaterialSearch.Local ||
+                    importer.materialName != ModelImporterMaterialName.BasedOnMaterialName;
+                if (settingsDirty)
+                {
+                    importer.materialLocation = ModelImporterMaterialLocation.InPrefab;
+                    importer.materialSearch = ModelImporterMaterialSearch.Local;
+                    importer.materialName = ModelImporterMaterialName.BasedOnMaterialName;
+                    Debug.Log("[Retinar] ExtractAndBind 跳过 Extract（无外部 .fbm），仅校正材质搜索并重导: " + modelPath);
+                    SaveAndReimportPreservingMeshVertexColors(importer);
+                    changed = true;
+                }
+                else
+                {
+                    Debug.Log("[Retinar] ExtractAndBind 跳过: 无外部 .fbm 且材质搜索已是 Local — " + modelPath);
+                }
+
+                continue;
+            }
+
+            // ExtractTextures 会把 FBX 内嵌原始大图写进 Texture/，覆盖两遍流程里已压缩的同名文件。
+            // 先快照再抽取，抽取后把“被放大”的文件恢复成压缩版；缺失的仍用抽取结果补齐。
+            Dictionary<string, byte[]> preservedTextures = SnapshotTextureFolderFiles(textureFolder);
+
+            try
+            {
+                importer.ExtractTextures(textureFolder);
+                changed = true;
+                Debug.Log("[Retinar] ExtractTextures 已调用: " + modelPath + " -> " + textureFolder);
+            }
+            catch (System.Exception exception)
+            {
+                Debug.LogWarning("[Retinar] ExtractTextures 失败: " + modelPath + " -> " + exception.Message);
+            }
+
+            AssetDatabase.Refresh();
+            int restored = RestorePreservedTexturesIfExtractGrewThem(preservedTextures);
+            if (restored > 0)
+            {
+                changed = true;
+                Debug.Log("[Retinar] ExtractTextures 后已恢复 " + restored +
+                    " 张更小的 Art 贴图（避免盖掉已压缩结果）");
+            }
+
+            importer.materialLocation = ModelImporterMaterialLocation.InPrefab;
+            importer.materialSearch = ModelImporterMaterialSearch.Local;
+            importer.materialName = ModelImporterMaterialName.BasedOnMaterialName;
+
+            // 先按当前依赖表 remap 一次，再导入；导入后若仍挂外部 .fbm，再 remap + 导入一次。
+            int remapPass1 = RemapModelImporterTexturesToArtFolder(importer, assetFolder, textureFolder);
+            if (remapPass1 > 0)
+            {
+                changed = true;
+            }
+
+            Debug.Log("[Retinar] ExtractAndBind 第 1 次 SaveAndReimport: " + modelPath +
+                "（本轮 AddRemap 贴图数=" + remapPass1 + "）");
+            SaveAndReimportPreservingMeshVertexColors(importer);
+            AssetDatabase.Refresh();
+
+            importer = AssetImporter.GetAtPath(modelPath) as ModelImporter;
+            if (importer != null)
+            {
+                int remapPass2 = RemapModelImporterTexturesToArtFolder(importer, assetFolder, textureFolder);
+                if (remapPass2 > 0)
+                {
+                    importer.materialLocation = ModelImporterMaterialLocation.InPrefab;
+                    importer.materialSearch = ModelImporterMaterialSearch.Local;
+                    Debug.Log("[Retinar] ExtractAndBind 第 2 次 SaveAndReimport: " + modelPath +
+                        "（本轮 AddRemap 贴图数=" + remapPass2 + "）");
+                    SaveAndReimportPreservingMeshVertexColors(importer);
+                    changed = true;
+                }
+                else
+                {
+                    Debug.Log("[Retinar] ExtractAndBind 第 2 轮无需再 AddRemap: " + modelPath);
+                    changed = true;
+                }
+            }
+
+            List<string> externalAfter = CollectModelExternalFbmTextures(modelPath, assetFolder);
+            if (externalAfter.Count == 0)
+            {
+                Debug.Log("[Retinar] ExtractAndBind 完成: " + modelPath + " 外部 .fbm 贴图已清零");
+            }
+            else
+            {
+                Debug.LogWarning("[Retinar] ExtractAndBind 完成仍剩外部 .fbm 贴图 " +
+                    externalAfter.Count + " 条: " + modelPath + "\n" +
+                    string.Join("\n", externalAfter.ToArray()));
+            }
+        }
+
+        FlattenModelCompanionFolders(assetFolder);
+        Debug.Log("[Retinar] ExtractAndBind 结束 assetFolder=" + assetFolder + " changed=" + changed);
+        return changed;
+    }
+
+    private static Dictionary<string, byte[]> SnapshotTextureFolderFiles(string textureFolder)
+    {
+        var snapshot = new Dictionary<string, byte[]>(System.StringComparer.OrdinalIgnoreCase);
+        string textureFullPath = AssetPathToFullPath(textureFolder);
+        if (!Directory.Exists(textureFullPath))
+        {
+            return snapshot;
+        }
+
+        foreach (string filePath in Directory.GetFiles(textureFullPath, "*.*", SearchOption.TopDirectoryOnly))
+        {
+            if (Path.GetExtension(filePath).Equals(".meta", System.StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            string assetPath = FullPathToAssetPath(filePath);
+            if (string.IsNullOrEmpty(assetPath) || !IsTextureAsset(assetPath))
+            {
+                continue;
+            }
+
+            snapshot[assetPath] = File.ReadAllBytes(filePath);
+        }
+
+        return snapshot;
+    }
+
+    /// <summary>
+    /// ExtractTextures 之后：若同名文件变大（典型为未压缩内嵌大图盖掉已压缩 Art），写回快照。
+    /// 文件被删则也恢复。变小或等大则保留当前磁盘内容。
+    /// </summary>
+    private static int RestorePreservedTexturesIfExtractGrewThem(Dictionary<string, byte[]> preservedTextures)
+    {
+        if (preservedTextures == null || preservedTextures.Count == 0)
+        {
+            return 0;
+        }
+
+        int restored = 0;
+        foreach (KeyValuePair<string, byte[]> pair in preservedTextures)
+        {
+            string assetPath = pair.Key;
+            byte[] preservedBytes = pair.Value;
+            if (preservedBytes == null || preservedBytes.Length == 0)
+            {
+                continue;
+            }
+
+            string fullPath = AssetPathToFullPath(assetPath);
+            bool missing = !File.Exists(fullPath);
+            long currentLength = missing ? long.MaxValue : new FileInfo(fullPath).Length;
+            if (!missing && currentLength <= preservedBytes.LongLength)
+            {
+                continue;
+            }
+
+            File.WriteAllBytes(fullPath, preservedBytes);
+            AssetDatabase.ImportAsset(assetPath, ImportAssetOptions.ForceUpdate);
+            restored++;
+            Debug.Log("[Retinar] 保留已压缩 Art 贴图: " + assetPath +
+                (missing
+                    ? "（抽取后缺失，已写回）"
+                    : "（" + FormatBytes(currentLength) + " -> " + FormatBytes(preservedBytes.LongLength) + "）"));
+        }
+
+        return restored;
+    }
+
+    /// <returns>本次成功 AddRemap 的外部贴图数量。</returns>
+    private static int RemapModelImporterTexturesToArtFolder(
+        ModelImporter importer,
+        string assetFolder,
+        string textureFolder)
+    {
+        int remapCount = 0;
+        string modelPath = importer.assetPath;
+        string[] dependencies = AssetDatabase.GetDependencies(modelPath, true);
+        foreach (string rawDependency in dependencies)
+        {
+            string dependency = rawDependency.Replace("\\", "/");
+            if (!IsTextureAsset(dependency) ||
+                dependency.StartsWith(assetFolder + "/", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            string fileName = Path.GetFileName(dependency);
+            string targetPath = textureFolder + "/" + fileName;
+            bool copied = false;
+            if (AssetDatabase.LoadMainAssetAtPath(targetPath) == null)
+            {
+                CopyAssetToExactPath(dependency, targetPath);
+                copied = true;
+            }
+
+            Texture artTexture = AssetDatabase.LoadAssetAtPath<Texture>(targetPath);
+            if (artTexture == null)
+            {
+                Debug.LogWarning("[Retinar] AddRemap 跳过：Art 贴图加载失败 " + dependency + " -> " + targetPath);
+                continue;
+            }
+
+            string textureName = Path.GetFileNameWithoutExtension(dependency);
+            importer.AddRemap(new AssetImporter.SourceAssetIdentifier(typeof(Texture), textureName), artTexture);
+            importer.AddRemap(new AssetImporter.SourceAssetIdentifier(typeof(Texture2D), textureName), artTexture);
+            importer.AddRemap(new AssetImporter.SourceAssetIdentifier(typeof(Texture), fileName), artTexture);
+            importer.AddRemap(new AssetImporter.SourceAssetIdentifier(typeof(Texture2D), fileName), artTexture);
+            remapCount++;
+            Debug.Log("[Retinar] AddRemap: " + modelPath + "\n  " + dependency + "  ->  " + targetPath +
+                (copied ? "（已拷贝）" : "（已有本地副本）"));
+        }
+
+        return remapCount;
+    }
+
+    private static List<string> CollectModelExternalFbmTextures(string modelPath, string assetFolder)
+    {
+        var result = new List<string>();
+        string[] dependencies = AssetDatabase.GetDependencies(modelPath, true);
+        string assetFolderPrefix = assetFolder + "/";
+        foreach (string rawDependency in dependencies)
+        {
+            string dependency = rawDependency.Replace("\\", "/");
+            if (!dependency.StartsWith("Assets/", StringComparison.OrdinalIgnoreCase) ||
+                dependency.StartsWith(assetFolderPrefix, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            if (IsTextureAsset(dependency) && IsInsideEmbeddedMediaFolderPath(dependency))
+            {
+                result.Add(dependency);
+            }
+        }
+
+        return result;
+    }
+
+    private static bool RemapAllArtMaterialsToLocalTextures(string assetFolder)
+    {
+        string materialFolder = assetFolder + "/Material";
+        string textureFolder = assetFolder + "/Texture";
+        if (!AssetDatabase.IsValidFolder(materialFolder))
+        {
+            return false;
+        }
+
+        bool changed = false;
+        int remappedMaterials = 0;
+        string[] materialGuids = AssetDatabase.FindAssets("t:Material", new[] { materialFolder });
+        foreach (string guid in materialGuids)
+        {
+            string path = AssetDatabase.GUIDToAssetPath(guid);
+            Material material = AssetDatabase.LoadAssetAtPath<Material>(path);
+            if (material == null)
+            {
+                continue;
+            }
+
+            if (RemapMaterialTexturesToArtFolder(material, textureFolder))
+            {
+                EditorUtility.SetDirty(material);
+                changed = true;
+                remappedMaterials++;
+                Debug.Log("[Retinar] Art 材质贴图收到本地: " + path);
+            }
+        }
+
+        if (changed)
+        {
+            Debug.Log("[Retinar] RemapAllArtMaterials 完成 assetFolder=" + assetFolder +
+                " 改动材质数=" + remappedMaterials);
+        }
+
+        return changed;
+    }
+
+    /// <summary>
+    /// 交付区 FBX 若仍是 Everywhere，Flatten 之后会重新搜到工程里其它 .fbm。
+    /// 这里把 Art 下模型统一收成 Local；有改动才 Reimport。
+    /// </summary>
+    private static bool TryRestrictPackagedModelMaterialSearch(string assetFolder)
+    {
+        string modelFolder = assetFolder + "/Model";
+        if (!AssetDatabase.IsValidFolder(modelFolder))
+        {
+            return false;
+        }
+
+        bool changed = false;
+        string[] modelGuids = AssetDatabase.FindAssets("t:Model", new[] { modelFolder });
+        foreach (string guid in modelGuids)
+        {
+            string modelPath = AssetDatabase.GUIDToAssetPath(guid);
+            if (!IsModelAsset(modelPath))
+            {
+                continue;
+            }
+
+            var importer = AssetImporter.GetAtPath(modelPath) as ModelImporter;
+            if (importer == null)
+            {
+                continue;
+            }
+
+            if (importer.materialLocation != ModelImporterMaterialLocation.InPrefab ||
+                importer.materialSearch != ModelImporterMaterialSearch.Local)
+            {
+                importer.materialLocation = ModelImporterMaterialLocation.InPrefab;
+                importer.materialSearch = ModelImporterMaterialSearch.Local;
+                importer.materialName = ModelImporterMaterialName.BasedOnMaterialName;
+                SaveAndReimportPreservingMeshVertexColors(importer);
+                changed = true;
+            }
+        }
+
+        return changed;
+    }
+
+    /// <summary>
+    /// FBX/OBJ 的 SaveAndReimport 会从磁盘二进制重建全部 Mesh 子资产，
+    /// TOol「顶点色设为全白」等改的是导入后 Mesh，会被冲掉。
+    /// 打包链路凡重导交付区 Model，必须先快照顶点色再写回。
+    /// </summary>
+    private static void SaveAndReimportPreservingMeshVertexColors(ModelImporter importer)
+    {
+        if (importer == null)
+        {
+            return;
+        }
+
+        string modelPath = importer.assetPath.Replace("\\", "/");
+        List<MeshVertexColorSnapshot> snapshot = SnapshotMeshVertexColors(modelPath);
+        importer.SaveAndReimport();
+        int restored = RestoreMeshVertexColors(modelPath, snapshot);
+        if (restored > 0)
+        {
+            Debug.Log("[Retinar] SaveAndReimport 后已恢复 Mesh 顶点色: " + modelPath +
+                " 数量=" + restored + "/" + snapshot.Count);
+        }
+    }
+
+    private struct MeshVertexColorSnapshot
+    {
+        public string Name;
+        public int VertexCount;
+        public Color[] Colors;
+    }
+
+    private static List<MeshVertexColorSnapshot> SnapshotMeshVertexColors(string modelPath)
+    {
+        var snapshot = new List<MeshVertexColorSnapshot>();
+        UnityEngine.Object[] assets = AssetDatabase.LoadAllAssetsAtPath(modelPath);
+        if (assets == null)
+        {
+            return snapshot;
+        }
+
+        foreach (UnityEngine.Object asset in assets)
+        {
+            Mesh mesh = asset as Mesh;
+            if (mesh == null || mesh.vertexCount <= 0)
+            {
+                continue;
+            }
+
+            Color[] colors = mesh.colors;
+            Color[] copy = null;
+            if (colors != null && colors.Length == mesh.vertexCount)
+            {
+                copy = new Color[colors.Length];
+                System.Array.Copy(colors, copy, colors.Length);
+            }
+
+            snapshot.Add(new MeshVertexColorSnapshot
+            {
+                Name = mesh.name,
+                VertexCount = mesh.vertexCount,
+                Colors = copy
+            });
+        }
+
+        return snapshot;
+    }
+
+    private static int RestoreMeshVertexColors(string modelPath, List<MeshVertexColorSnapshot> snapshot)
+    {
+        if (snapshot == null || snapshot.Count == 0)
+        {
+            return 0;
+        }
+
+        var remaining = new List<MeshVertexColorSnapshot>(snapshot);
+        int restored = 0;
+        UnityEngine.Object[] assets = AssetDatabase.LoadAllAssetsAtPath(modelPath);
+        if (assets == null)
+        {
+            return 0;
+        }
+
+        foreach (UnityEngine.Object asset in assets)
+        {
+            Mesh mesh = asset as Mesh;
+            if (mesh == null || mesh.vertexCount <= 0)
+            {
+                continue;
+            }
+
+            int matchIndex = -1;
+            for (int i = 0; i < remaining.Count; i++)
+            {
+                MeshVertexColorSnapshot candidate = remaining[i];
+                if (candidate.Colors == null ||
+                    candidate.VertexCount != mesh.vertexCount ||
+                    !string.Equals(candidate.Name, mesh.name, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                matchIndex = i;
+                break;
+            }
+
+            if (matchIndex < 0)
+            {
+                continue;
+            }
+
+            mesh.colors = remaining[matchIndex].Colors;
+            EditorUtility.SetDirty(mesh);
+            remaining.RemoveAt(matchIndex);
+            restored++;
+        }
+
+        if (restored > 0)
+        {
+            AssetDatabase.SaveAssets();
+        }
+
+        return restored;
     }
 
     private static string BuildDependencyDiagnosticLine(GeneratedAsset asset, string dependency)

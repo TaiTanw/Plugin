@@ -1,0 +1,25 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a47420870d3e8e94fba94c53f876f6b5, type: 3}
+  m_Name: TextureProcessSettings
+  m_EditorClassIdentifier: 
+  maxSourceMegabytes: 5
+  minDimension: 64
+  jpgQuality: 90
+  maxSearchIterations: 12
+  tgaUseRunLengthEncoding: 1
+  deleteTgaAfterConvert: 1
+  importAutoOperationIds:
+  - shrink_source_file
+  textureDisableReadWrite: 1
+  excludedPathPrefixes:
+  - Assets/Art/

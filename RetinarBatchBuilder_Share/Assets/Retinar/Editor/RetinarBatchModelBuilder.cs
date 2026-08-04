@@ -319,14 +319,19 @@ public static partial class RetinarBatchModelBuilder
         // 艺术家新导入的 FBX 用 External（编辑器生成外部 .mat，符合上游流程），
         // 打包工具的交付工作副本用 InPrefab（符合交付规范）。两者不再有交集。
         importer.materialLocation = ModelImporterMaterialLocation.InPrefab;
-        importer.materialSearch = ModelImporterMaterialSearch.Everywhere;
+        // 交付副本必须用 Local，不能用 Everywhere。
+        // 踩过的坑（Plane_Jian31）：Flatten 把 Model/<fbx>.fbm 平铺进 Texture/ 之后，
+        // 若仍是 Everywhere，再 SaveAndReimport 时 Unity 按贴图文件名全工程搜索，
+        // 会再次命中导入区残留的 Assets/**/xxx.fbm/，于是预制体依赖里一直挂着
+        // 外部 .fbm 路径，外部依赖校验失败。Local 只在模型同目录找，避免跨到 AAA/New Folder。
+        importer.materialSearch = ModelImporterMaterialSearch.Local;
         importer.materialName = ModelImporterMaterialName.BasedOnMaterialName;
         importer.importCameras = false;
         importer.importLights = false;
         importer.importAnimation = true;
         importer.animationCompression = ModelImporterAnimationCompression.Optimal;
         importer.addCollider = false;
-        importer.SaveAndReimport();
+        SaveAndReimportPreservingMeshVertexColors(importer);
     }
 
     private static GeneratedAsset CreateNormalizedPrefab(string sourcePath)
@@ -456,10 +461,32 @@ public static partial class RetinarBatchModelBuilder
         AssetDatabase.SaveAssets();
         AssetDatabase.Refresh();
         ApplyImportSettingsToPackagedModels(assetFolder);
+        // 内嵌贴图：Unity 可能复用工程里已有的同名 Assets/**/xxx.fbm（导入区残留），
+        // 导致 Art/Model/fbx 一直依赖 AAA/.../fbx.fbm。强制抽到本模型 Texture/ 并重绑。
+        Debug.Log("[Retinar] " + assetName + "：开始 ExtractTextures/重绑（打包流程第 1 次） -> " + assetFolder + "/Texture");
+        ExtractAndBindPackagedModelTextures(assetFolder);
         RemapPackagedModelImporterMaterials(assetFolder, copiedDependencies);
         RemapCopiedAssetReferences(copiedDependencies, assetFolder);
         RemapCopiedPrefabModelReferences(prefabPath, copiedDependencies);
         CopyPrefabRendererMaterials(prefabPath, assetFolder, assetName);
+        Debug.Log("[Retinar] " + assetName + "：开始 ExtractTextures/重绑（打包流程第 2 次，材质拷贝之后）");
+        ExtractAndBindPackagedModelTextures(assetFolder);
+        if (RemapAllArtMaterialsToLocalTextures(assetFolder))
+        {
+            Debug.Log("[Retinar] " + assetName + "：已把 Art/Material 贴图引用收到本模型 Texture/");
+        }
+
+        List<string> leftoverFbm = CollectExternalFbmTextureDependencies(assetFolder, prefabPath);
+        if (leftoverFbm.Count > 0)
+        {
+            Debug.LogWarning("[Retinar] " + assetName + "：打包流程结束后仍有 " + leftoverFbm.Count +
+                " 条外部 .fbm 依赖（校验阶段还会再自愈一次）：\n" + string.Join("\n", leftoverFbm.ToArray()));
+        }
+        else
+        {
+            Debug.Log("[Retinar] " + assetName + "：打包流程后未发现外部 .fbm 依赖");
+        }
+
         AssetDatabase.SaveAssets();
         AssetDatabase.Refresh();
 
@@ -725,6 +752,16 @@ public static partial class RetinarBatchModelBuilder
         var targetInfo = new FileInfo(targetFullPath);
         if (sourceInfo.Length == targetInfo.Length && File.ReadAllBytes(sourceFullPath).SequenceEqual(File.ReadAllBytes(targetFullPath)))
         {
+            return;
+        }
+
+        // 两遍流程：Art/Texture 可能已手动压小；导入区 .fbm 再导入后时间戳更新，
+        // 不能仅凭“源更新”把更大的内嵌原图盖回已压缩副本。
+        if (sourceInfo.Length > targetInfo.Length)
+        {
+            Debug.Log("[Retinar] SyncNewer 跳过（保留更小的 Art 贴图）: " + targetPath +
+                "  Art=" + FormatBytes(targetInfo.Length) + "  源=" + FormatBytes(sourceInfo.Length) +
+                "  源路径=" + sourcePath);
             return;
         }
 
@@ -1708,7 +1745,7 @@ public static partial class RetinarBatchModelBuilder
 
             if (changed)
             {
-                importer.SaveAndReimport();
+                SaveAndReimportPreservingMeshVertexColors(importer);
             }
         }
     }
@@ -1777,8 +1814,9 @@ public static partial class RetinarBatchModelBuilder
             // 最常见的成因是 FBX 内嵌贴图：Unity 每次导入模型工作副本都会从 FBX 二进制里
             // 重新抽取一份原始大图，艺术家在导入区压过的那一份帮不上忙。
             Debug.LogWarning("Texture source file is larger than 5 MB and should be optimized: " + line +
-                "\n处理方式：打开 Tools > 贴图处理工具，选中该贴图执行\"压缩超标的贴图源文件\"，然后重新打包一次。" +
-                "\n重新打包时会保留已压缩的这一份，不会被 FBX 里重新抽取的大图覆盖。");
+                "\n处理方式：打开 Tools > 资源处理总面板 / 贴图子面板，选中 Assets/Art/<模型>/Texture/ 下该贴图，" +
+                "执行\"压缩超标的贴图源文件\"，确认体积 < 5 MB 后再重新打包。" +
+                "\n不要压 .fbm；重新打包会保留已压缩的 Art 副本（ExtractTextures / SyncNewer 不再用更大内嵌图覆盖）。");
         }
 
         return line;
@@ -2244,8 +2282,9 @@ public static partial class RetinarBatchModelBuilder
         return material;
     }
 
-    private static void RemapMaterialTexturesToArtFolder(Material material, string textureFolder)
+    private static bool RemapMaterialTexturesToArtFolder(Material material, string textureFolder)
     {
+        bool changed = false;
         foreach (string propertyName in material.GetTexturePropertyNames())
         {
             Texture texture = material.GetTexture(propertyName);
@@ -2279,7 +2318,10 @@ public static partial class RetinarBatchModelBuilder
             }
 
             material.SetTexture(propertyName, copiedTexture);
+            changed = true;
         }
+
+        return changed;
     }
 
     private static void ClearDuplicateBundleNames(string prefabFolder, string currentPrefabPath, string bundleName)

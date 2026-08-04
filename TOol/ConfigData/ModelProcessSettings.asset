@@ -1,0 +1,22 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b9ddfb229140f9347a0ad46ce9c8bf44, type: 3}
+  m_Name: ModelProcessSettings
+  m_EditorClassIdentifier: 
+  modelUseExternalMaterials: 1
+  modelStripLightsAndCameras: 1
+  supportedExtensions:
+  - .fbx
+  importAutoOperationIds:
+  - set_vertex_colors_white
+  excludedPathPrefixes:
+  - Assets/Art/

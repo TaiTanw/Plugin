@@ -2,6 +2,42 @@
 
 记录规则：最新版本写在最上方；每次修改必须填写“原因、改动、影响、验证、回退”。
 
+## 2026-07-31 — v1.2.9 打包重导 FBX 时保留已写入的 Mesh 顶点色
+
+- 原因：用户在 `Assets/Art/<模型>/Model` 上手动「顶点色设为全白」后，再选 Prefab Batch Build，Model 里顶点色又变回源数据。根因与贴图覆盖同类：打包链路 `ApplyModelImportSettings` / `ExtractAndBind` / 材质 remap / Local 校正会对交付区 FBX 多次 `SaveAndReimport`，Unity 从 FBX 二进制重建 Mesh 子资产，导入后改过的 `mesh.colors` 全部丢失。日志上贴图保护已生效（`保留已压缩 Art 贴图`），但顶点色此前无快照。
+- 改动：
+  1. 新增 `SaveAndReimportPreservingMeshVertexColors`：重导前按（Mesh 名 + 顶点数）快照 `colors`，重导后写回。
+  2. 交付区 Model 相关 `SaveAndReimport` 全部改走该封装。
+  3. 无外部 `.fbm` 时跳过 `ExtractTextures`（避免无意义重导与贴图盖写）。
+  4. TOol 顶点色操作说明改为与打包保留行为一致。
+  5. **文档**：`PACKAGING_RULES` 规则 40；回归检查与分享说明 FAQ；新增插件 2 结构说明 `TOol/ARCHITECTURE.md`。
+- 影响：手动改过的 Art 模型顶点色，在不删 Art 的重复打包后应保留。删掉 Art 重打仍会从 FBX 源色开始，需再手动跑一次顶点色。
+- 验证：对 `Plane_Jian31/Model/fbx.FBX` 设全白 → 选 Prefab 再打包 → Console 应有「SaveAndReimport 后已恢复 Mesh 顶点色」或因跳过 Extract 而无冲掉；模型子资产顶点色仍为白。标记为待在编辑器中验证。
+- 回退：恢复直接 `importer.SaveAndReimport()` 即可；回退会再次出现“处理顶点色后再打包又变回去”。
+- 关联问题：模型文件夹处理后，点预制体导出包，模型文件夹顶点色问题又来了。
+
+## 2026-07-31 — v1.2.8 重新打包不再用 FBX 内嵌大图盖掉已压缩的 Art 贴图
+
+- 原因：两遍流程里先压好 `Assets/Art/<模型>/Texture/` 后再次 Batch Build，贴图又变回超标。根因是为切断外部 `.fbm` 依赖而调用的 `ExtractTextures` 会把 FBX 内嵌原始大图写回同名 Art 文件；另外 `SyncNewerSourceTextureToWorkingCopy` 仅看时间戳，导入区 `.fbm` 再导入变“更新”时也会用更大源文件覆盖已压缩副本。用户侧表现：压缩工具显示「1 文件修改」，立刻再打包 `texture_size_report` 又 WARN。关联误判：Art「看起来都达标」但报告仍 issue——实际是磁盘字节略超 5MB（如 `J310003.png` 5.64MB），或压缩结果已被盖回大图。
+- 改动：
+  1. `ExtractTextures` 前快照 Art/Texture，抽取后若同名文件变大（或被删）则写回快照。
+  2. `SyncNewer`：源文件更大时跳过覆盖，并打 `[Retinar]` 日志。
+  3. 超标告警文案改为与上述保护一致。
+  4. **文档同步**：`PACKAGING_RULES.md` 修订规则 34–36，新增 37–39 与「已知问题对照表」；`REGRESSION_CHECKLIST.md` 增补两遍流程/Console 期望与第八节速查表；`RetinarBatchBuilder_分享说明.md` 新增 §6.1。
+- 影响：首次打包仍会抽出大图（需手动压 Art）；压完再打应保留压缩结果。外部 `.fbm` 的 Extract+remap 自愈仍保留。
+- 验证：压小 `J310003.png` 后不删 Art 再打包，Console 应出现“恢复 N 张更小的 Art 贴图”或 SyncNewer 跳过；`texture_size_report.txt` 该行保持 OK。标记为待在编辑器中验证。
+- 回退：去掉快照恢复与 SyncNewer 体积判断即可；回退会再次出现“压完再打包又超标”。文档可随代码一并回退对应章节。
+- 关联问题：压缩显示 1 文件修改，再次打包体积回去；Art 未超标观感与报告 WARN 并存。
+
+## 2026-07-31 — v1.2.7 补齐 ExtractTextures / 外部 .fbm 自愈链路日志
+
+- 原因：`Plane_Jian31` 仍报外部 `AAA/.../fbx.fbm` 依赖时，Console 看不清打包流程、自愈、校验各阶段是否跑过 Extract/AddRemap，以及前后还剩哪些 .fbm 路径，排查困难。此前为切断依赖已加入交付区 `materialSearch=Local`、`ExtractTextures`+`AddRemap`、材质已在 Art 时仍 remap 等逻辑；缺日志时无法确认是否执行及是否被后续步骤抵消。
+- 改动：在打包流程两轮 Extract、自愈前后、校验强制 Extract 前后，以及 `ExtractAndBind` / `AddRemap` / `RemapAllArtMaterials` 内补齐 `[Retinar]` 日志（含外部 .fbm 清单与 remap 计数）。
+- 影响：仅增加 Console 输出，不改变修复逻辑本身。**注意**：本版引入的 Extract 写回同名文件，会与两遍压缩冲突，由 **v1.2.8** 补保护。
+- 验证：重新打包 `Plane_Jian31`，Console 应能按阶段看到 Extract/AddRemap 与 .fbm 清零或残留清单；标记为待在编辑器中验证。
+- 回退：去掉新增 `Debug.Log`/`LogWarning`/`LogError` 即可。
+- 关联问题：外部 `.fbm` 依赖自愈排查。
+
 ## 2026-07-30 — v1.2.6 子资产映射不再按名字匹配，修复重名节点导致的错位、碎片与破面
 
 - 原因：`Plane_Zhi18` 导入源模型时正常，打包出来的预制体却位置错乱、主体外出现碎片状物体并伴随破面。取证：

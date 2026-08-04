@@ -1,7 +1,8 @@
 # Retinar Unity 打包工具硬性规范
 
-版本：1.0  
-生效日期：2026-07-16
+版本：1.1  
+生效日期：2026-07-16  
+最近同步：2026-07-31（v1.2.9 顶点色跨重导保留）
 
 本文是后续修改打包工具时必须遵守的基线。发生冲突时，以本文和最新经确认的变更记录为准。
 
@@ -39,13 +40,27 @@
 30. 每次代码修改、流程变更、Unity 版本变更或正式分享前，必须执行 `REGRESSION_CHECKLIST.md`。已自动化项必须保留阻断，无法自动化项必须保留人工验收记录。发现新问题时必须同步更新 `CHANGELOG.md`、`PACKAGING_RULES.md` 和 `REGRESSION_CHECKLIST.md`，不得只修代码不留回溯基线。
 31. 校验失败的阻断粒度是**单个资产**，不是整批。Model 纯净性、SafeZone 空间和外部依赖三道校验必须逐个资产判定：未通过的资产必须清掉 `assetBundleName`、不得产出它的 AB 与 UnityPackage、并写入 `Deliverables/_diagnostics/validation_failures.txt`；同一批中通过校验的资产必须正常出包。禁止因为一个资产不合规就让整批终止——那会迫使用户去生成目录里重新选中预制体补救，而补救本身又会引入新的重复资产。完成弹窗必须同时显示实际出包数量与被排除清单。
 32. 命名基准（规则 12）只适用于 `Assets/Art` 之外的预制体。如果被选中的预制体已经位于 `Assets/Art/<名字>/` 下（即本工具上一轮的产物），必须复用该 `<名字>` 与该资产目录；若它就在目标 `Prefab/` 目录内，必须原地处理而不是再复制一份副本。禁止出现 `Assets/Art/<名字>_prefab/`、`<名字>_prefab_prefab/` 这类逐次叠加的目录。
-33. 本工具与资源导入插件（`TOol`）必须按目录划清职责，禁止两边同时设置同一个 Importer 属性。`Assets/Art/**` 是本工具的产物区，导入插件必须在其 `excludedPathPrefixes` 中排除它；其它目录是艺术家导入区，`materialLocation = External` 由导入插件负责。若本工具的产物根目录改名，必须同步修改导入插件的排除配置，否则会复现“打包中途终止”。
-34. 贴图源文件压缩由导入插件在艺术家导入区完成，且必须发生在打包之前；本工具只做“归档 + 报告”，不压缩、不改写任何贴图像素。由此产生三条必须同时成立的跨插件约束：
+33. 本工具与资源导入插件（`TOol`）必须按目录划清职责，禁止两边同时设置同一个 Importer 属性。`Assets/Art/**` 是本工具的产物区，导入插件必须在其 `excludedPathPrefixes` 中排除它；其它目录是艺术家导入区，`materialLocation = External` 由导入插件负责。若本工具的产物根目录改名，必须同步修改导入插件的排除配置，否则会复现“打包中途终止”。插件 2 的目录/类结构说明见 `Assets/Plugin/TOol/ARCHITECTURE.md`。
+34. 贴图源文件压缩由导入插件（`TOol`）完成，本工具只做“归档 + 报告”，不主动改写贴图像素。由此产生必须同时成立的跨插件约束：
     - 压缩后的尺寸必须仍是二的幂（导入插件的 `preservePowerOfTwo`，对二的幂源图走对折阶梯）。规则 28 的贴图报告会把非二的幂记为问题项，“压缩成功”不得换来“交付告警”。
     - 导入插件的 `maxSourceMegabytes` 不得大于本工具的 5MB 告警线，否则超标贴图会一路走到交付报告才被发现。
-    - 先压缩、再打包。若在打包之后才压缩源图，`Assets/Art` 工作副本与 `01_source/Textures` 仍是旧的大图，必须按规则 29 重跑打包让工作副本重新同步。
-35. 任何工具都不得改写 `<FBX名>.fbm` 目录里的文件。那是 Unity 从 FBX 二进制抽取内嵌媒体生成的缓存，模型重新导入时会被原始数据覆盖，改它既留不住、又会和 Unity 正在进行的模型导入抢同一批文件，导致材质在导入中途解析失败。需要压缩内嵌贴图时，只能压打包工具平铺到 `Assets/Art/<模型>/Texture/` 之后的那一份。
-36. FBX **内嵌贴图**（导入时被 Unity 抽取到 `<FBX名>.fbm/` 的贴图）是上一条的例外，必须按两遍流程处理，不得指望一次打包就达标：Unity 每次导入模型工作副本都会从 FBX 二进制里重新抽取一份原始大图，艺术家在导入区压过的 `.fbm` 副本对交付副本无效。正确做法是第一遍打包让贴图落到 `Assets/Art/<模型>/Texture/`，用导入插件的窗口手动压缩它，再打包第二遍——`MoveAssetToExactPath` 在目标已存在时保留目标、删除新抽取的源文件，所以压缩结果在后续重跑中稳定保留。反过来，FBX 里的内嵌贴图内容真的更新过时，必须先手动删除 `Texture/` 里的旧副本才能让新内容进来。
+    - **独立贴图**（不在 `.fbm` 内）：可在艺术家导入区先压再打包。
+    - **FBX 内嵌贴图**：导入区压 `.fbm` 无效（见规则 35/36），必须走两遍流程——先打包落到 `Assets/Art/<模型>/Texture/`，再手动压这一份，再打包。
+    - 告警看的是 **磁盘源文件字节数**（`FileInfo.Length`），不是 Inspector 导入尺寸/显存。例如 `2048×2048` 的 PNG 仍可能是 5.64 MB 超标。
+35. 任何工具都不得改写 `<FBX名>.fbm` 目录里的文件。那是 Unity 从 FBX 二进制抽取内嵌媒体生成的缓存，模型重新导入时会被原始数据覆盖，改它既留不住、又会和 Unity 正在进行的模型导入抢同一批文件，导致材质在导入中途解析失败。导入插件对 `.fbm` 内贴图必须跳过自动/手动压缩；需要压缩时只能压 `Assets/Art/<模型>/Texture/` 里的平铺副本。
+36. FBX **内嵌贴图**必须按两遍流程处理，不得指望一次打包就达标：
+    1. 第一遍 Batch Build：内嵌大图落到 `Assets/Art/<模型>/Texture/`。
+    2. 在 `TOol` 贴图面板选中 **Art/Texture 下超标文件**（不要选 `.fbm`）执行「压缩超标的贴图源文件」。
+    3. **不要删除** `Assets/Art/<模型>/`，直接选同一预制体再打第二遍。
+    保护压缩结果的机制（必须同时成立，缺一会复现“压完再打包又超标”）：
+    - `Flatten` / `MoveAssetToExactPath`：目标 Art 贴图已存在时保留目标，删除 Model 下新抽的源文件。
+    - `ExtractTextures`（为切断外部 `.fbm` 依赖而调用）：抽取前快照 Art/Texture；抽取后若同名文件变大或被删，写回快照（v1.2.8）。
+    - `SyncNewerSourceTextureToWorkingCopy`：不得仅凭源文件更新时间覆盖；源文件更大时跳过，保留更小的 Art 副本（v1.2.8）。
+    若 FBX 内嵌贴图内容真的更新过，必须先手动删除 `Texture/` 里对应旧副本，再打包，才能让新内容进来。
+37. 交付区 FBX 的 `materialSearch` 必须为 `Local`（配合 `InPrefab`）。`Everywhere` 会在 Flatten 后再导入时按贴图名全工程搜索，重新挂上导入区残留的 `Assets/**/xxx.fbm`，导致外部依赖校验失败（`Plane_Jian31`）。`Local` 不够单独解决“同名贴图复用”时，允许对交付区 Model 调用 `ExtractTextures` + `AddRemap` 收到本模型 `Texture/`，但必须遵守规则 36 的快照保护，不得盖掉已压缩 Art 贴图。
+38. 材质已在 `Art/Material` 时仍必须做贴图重映射与（必要时）Extract/remap。旧逻辑在“材质已在 Art”时跳过，会导致 Texture 目录已有副本、但 Prefab/FBX 依赖仍指向导入区 `.fbm` 的假收敛。
+39. `texture_size_report.txt` 与完成弹窗的 Texture check 统计的是 **最终 Prefab 依赖链上的贴图路径**（通常为 `Assets/Art/<模型>/Texture/...`）的磁盘体积与是否二的幂。Art 目录里“看起来都不大”但报告仍 WARN 时，先打开该报告核对具体路径与 `Source File Size`（例如刚好略超 5MB 的单张），不得先假定是误扫了外部 `.fbm`。
+40. 对 `Assets/Art/<模型>/Model` 内 FBX/OBJ 的任何 `SaveAndReimport`，必须保留导入后已写入的 Mesh 顶点色（及其他同等“改子资产、不改 FBX 二进制”的编辑）。TOol「顶点色设为全白」只改 Mesh 子资产；无保护的重导会从 FBX 源色重建。无外部 `.fbm` 时不得无意义地 `ExtractTextures`+重导。
 
 ## 二、发布前强制验收
 
@@ -75,3 +90,23 @@
 - 禁止恢复“任一资产校验失败即整批终止”的阻断粒度。
 - 禁止让导入插件介入 `Assets/Art` 产物区的 FBX/贴图导入设置。
 - 禁止让贴图压缩输出非二的幂尺寸，导致每张被压缩的贴图都在交付报告里告警。
+- 禁止改写 `.fbm` 缓存当作压缩手段；禁止指望压导入区 `.fbm` 能让交付 Art 贴图达标。
+- 禁止 `ExtractTextures` / `SyncNewer` 用更大的内嵌原图覆盖已压缩的 `Art/Texture`（两遍流程第二遍必须保留压缩结果）。
+- 禁止交付区 Model 使用 `materialSearch = Everywhere`，导致依赖重新挂回导入区 `.fbm`。
+- 禁止在“Art/Material 已存在”时跳过贴图重映射，留下 Prefab 仍依赖外部 `.fbm` 的假收敛。
+- 禁止对交付区 Model 无保护地 `SaveAndReimport`，冲掉已手动写入的 Mesh 顶点色。
+
+---
+
+## 四、已知问题与对应改动（贴图 / 外部 .fbm）
+
+便于对照 `CHANGELOG.md` 回溯，不替代完整变更记录。
+
+| 现象 | 根因 | 规范/代码要点 | 版本 |
+|------|------|----------------|------|
+| 压了导入区 `.fbm`，打包 Art 仍超标 | `.fbm` 是 FBX 内嵌缓存，交付副本从 FBX 重抽 | 规则 35/36；TOol 跳过 `.fbm` | v1.2.3+ |
+| Art 已压小，再打包又变大；工具显示改了 1 个文件 | `ExtractTextures` 写回内嵌大图；`SyncNewer` 按时间戳用更大源覆盖 | 规则 36 快照恢复 + SyncNewer 体积保护 | **v1.2.8** |
+| Art 里“都不大”但弹窗仍报 texture issue | 告警看磁盘字节；可能有单张略超 5MB（如 5.64MB） | 规则 28/39；先读 `texture_size_report.txt` | — |
+| Prefab 依赖仍含 `AAA/.../fbx.fbm`，校验失败 | `Everywhere` 全工程搜同名贴图；仅 Local 不够时需 Extract+remap | 规则 37/38；Extract 须带规则 36 保护 | v1.2.7+ |
+| Art 模型已刷顶点色全白，再打 Prefab 包后又变回源色 | 打包对交付区 FBX 多次 `SaveAndReimport`，Mesh 子资产被重建 | 规则 40；`SaveAndReimportPreservingMeshVertexColors` | **v1.2.9** |
+| 压缩出非二的幂，报告大量 WARN | 连续二分尺寸与交付 POT 检查冲突 | 规则 34；对折阶梯 | v1.2.1 |

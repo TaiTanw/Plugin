@@ -1,7 +1,7 @@
 # Retinar Unity 模型打包工具使用手册
 
-版本：v1.1  
-更新日期：2026-07-16  
+版本：v1.2  
+更新日期：2026-07-31  
 适用环境：Unity 2020.3.49f1c1、Built-in Render Pipeline、Windows Editor
 
 ## 1. 工具用途
@@ -39,6 +39,12 @@ Assets/
    ├─ PACKAGING_RULES.md
    └─ CHANGELOG.md
 ```
+
+同仓库另有导入/后处理插件 **`Assets/Plugin/TOol`**（菜单 `Tools > 资源处理总面板`）。目录层级、类职责与扩展方式见：
+
+`Assets/Plugin/TOol/ARCHITECTURE.md`
+
+两插件目录边界见 `PACKAGING_RULES.md` 规则 33；贴图两遍与顶点色保留见规则 34–40。
 
 ## 3. 推荐工作流程
 
@@ -114,6 +120,29 @@ Assets/
 不得出现额外的根目录 `Assets/Model`，也不得夹带 Examples、Library、Logs、Temp 或无关模型。
 
 `Model` 中只保留 FBX、OBJ 等模型文件。原模型目录已有的材质和贴图会复制并整理到 `Material / Texture`；只有 FBX 使用内嵌材质、没有独立 `.mat` 时，工具才生成必要材质资产。
+
+## 6.1 贴图超标与两遍压缩（必读）
+
+完成弹窗若出现 `Texture check: N texture issue(s)`，**先打开**：
+
+`Deliverables/<模型名>/01_source/texture_size_report.txt`
+
+告警看的是 **磁盘源文件体积**（阈值 5MB），不是 Inspector 里的导入分辨率。Art 目录“看起来都不大”时，仍可能有单张略超 5MB（例如 5.64 MB）。
+
+### FBX 内嵌贴图（最常见）
+
+贴图最初在 FBX 里，Unity 抽到 `<FBX名>.fbm/`。这种图：
+
+1. **不要压 `.fbm`**——重新导入会被原始数据盖掉；导入插件也会跳过并提示。
+2. **第一遍打包** → 贴图落到 `Assets/Art/<模型名>/Texture/`。
+3. 用 `Tools > 资源处理总面板`（贴图子面板）只压 **Art/Texture** 里超标的文件。
+4. **不要删 Art**，选同一预制体 **再打第二遍**。
+
+第二遍必须保留已压缩结果。若出现“压缩显示改了 1 个文件，再打包又变大”，属于历史缺陷（`ExtractTextures` / `SyncNewer` 用内嵌大图覆盖 Art）；自 **v1.2.8** 起已用快照恢复 + 体积保护修复。细节见 `PACKAGING_RULES.md` 规则 34–39 与 `CHANGELOG.md` v1.2.8。
+
+### 外部 `.fbm` 依赖校验失败
+
+若校验报 Prefab 仍依赖导入区 `Assets/**/xxx.fbm`，而 Art/Texture 已有同名副本：多为交付区模型材质搜索/同名贴图复用问题。工具会对交付区做 Extract + remap，并打 `[Retinar]` 日志；与两遍压缩保护同时生效（不得为了切依赖而盖掉已压小的 Art 贴图）。
 
 ## 7. 外部交付目录
 
@@ -196,12 +225,29 @@ Deliverables/<模型名>/
 
 停止重复点击打包，等待 Unity 完成资源刷新后清空 Console 再试。若持续出现，请记录截图、Unity 版本、选中资源路径和操作步骤，反馈给工具维护人员。
 
+### 弹窗提示 Texture check / 贴图问题，但 Art 里感觉都不大
+
+打开 `Deliverables/<模型名>/01_source/texture_size_report.txt`，看 **Source File Size** 与 Status。告警按磁盘字节 &gt; 5MB，与分辨率不是一回事；常见是单张 5.x MB。详见 §6.1。
+
+### 压缩显示改了 1 个文件，再打包又超标
+
+确认压的是 `Assets/Art/<模型>/Texture/`，不是 `.fbm`；第二遍前不要删 Art。v1.2.8 起应保留压缩结果；若仍变大，把带 `[Retinar]` 的 Console 日志一并反馈。
+
+### 校验失败提到导入区 `xxx.fbm` 路径
+
+Prefab/FBX 仍依赖工程里另一份同名 `.fbm`。看 Console `[Retinar]` Extract/remap 日志；规范见 `PACKAGING_RULES.md` 规则 37–38。
+
+### 模型顶点色处理好了，再打 Prefab 包又变回去
+
+与贴图同类：打包会重导 `Art/Model` 下 FBX，Mesh 被重建。v1.2.9 起会快照/恢复顶点色；请确认脚本已编译，流程仍是「先处理 Art/Model，再打 Prefab，不要删 Art」。Console 可搜「恢复 Mesh 顶点色」。
+
 ## 12. 反馈问题时需要提供
 
 - Unity 完整版本号
 - 选中的是 Prefab 还是 FBX
 - 选中资源的工程路径
-- Console 完整错误截图
+- Console 完整错误截图（含 `[Retinar]` 贴图/Extract 相关日志）
+- `01_source/texture_size_report.txt`（若涉及贴图告警）
 - UnityPackage 导入后的目录截图
 - Prefab Inspector 和 Materials 页签截图
-- 是否为重复打包同一模型
+- 是否为重复打包同一模型；若做过压缩，压的是 Art 还是 `.fbm`
