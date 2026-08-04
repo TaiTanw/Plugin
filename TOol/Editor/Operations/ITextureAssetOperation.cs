@@ -16,6 +16,9 @@
 //     弹窗和汇总交给 TextureOperationRunner），这样同一个操作既能被窗口调用，
 //     也能被导入回调调用，行为完全一致。
 // =====================================================================================
+/// <summary>
+/// 图片处理器行为
+/// </summary>
 public interface ITextureAssetOperation
 {
     /// <summary>

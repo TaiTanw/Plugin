@@ -10,6 +10,10 @@ using UnityEngine;
 // 用反射发现的原因和 TextureCodecRegistry 一样：让"加一个操作"这件事不需要
 //   回来改任何已有文件。窗口、导入回调都只跟这个注册表打交道。
 // =====================================================================================
+
+/// <summary>
+/// 纹理操作注册表管理器
+/// </summary>
 public static class TextureOperationRegistry
 {
     private static List<ITextureAssetOperation> operations;

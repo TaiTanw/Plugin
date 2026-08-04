@@ -9,6 +9,10 @@ using System;
 //   每加一个都改接口签名，所有实现类跟着编译报错。用一个 context 结构体之后，
 //   加字段不会破坏任何已有的操作实现——这是"提供功能拓展的基本接口"的关键一环。
 // =====================================================================================
+
+/// <summary>
+/// 纹理操作上下文
+/// </summary>
 public struct TextureOperationContext
 {
     public readonly string AssetPath;

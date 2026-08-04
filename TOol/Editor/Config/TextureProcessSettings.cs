@@ -22,6 +22,9 @@ using UnityEngine;
 //   读到——在导入回调的调用栈里调 AssetDatabase.CreateAsset 会引发嵌套导入，
 //   属于必须避免的操作。所以 Current 在找不到资产时退回一份纯内存的默认值。
 // =====================================================================================
+/// <summary>
+/// 纹理操作配置数据（SO）
+/// </summary>
 public class TextureProcessSettings : ScriptableObject
 {
     // 默认存放位置。如果你们把这套插件整体挪到别的目录，不用改这里——

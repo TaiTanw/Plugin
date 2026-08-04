@@ -31,10 +31,22 @@ using UnityEditor;
 //   另外 isRunning 这个标记会让"我们自己发起的那次重新导入"完全不参与排队，
 //   相当于加了第二道保险。
 // =====================================================================================
+/// <summary>
+/// 纹理源文件处理器（纹理总流程控制，文件类型判断）
+/// </summary>
 public class TextureSourceFileProcessor : AssetPostprocessor
 {
+    /// <summary>
+    /// 待处理资产路径
+    /// </summary>
     private static readonly HashSet<string> pendingAssetPaths = new HashSet<string>();
+    /// <summary>
+    /// 导入操作合批
+    /// </summary>
     private static bool deferredRunScheduled;
+    /// <summary>
+    /// 防止自触发
+    /// </summary>
     private static bool isRunning;
 
     /// <summary>
@@ -83,7 +95,7 @@ public class TextureSourceFileProcessor : AssetPostprocessor
     /// 某个文件去执行，是明确的用户意图，不受这里限制——那个窗口存在的意义就是
     /// 让你能在需要的时候越过自动规则手动处理。
     /// </summary>
-    private static int QueueCandidates(string[] assetPaths, TextureProcessSettings settings)
+    private static int QueueCandidates(string[] assetPaths, TextureProcessSettings settings)//过滤阶段============================================================================1
     {
         if (assetPaths == null)
         {
@@ -93,6 +105,7 @@ public class TextureSourceFileProcessor : AssetPostprocessor
         int queuedCount = 0;
         foreach (string assetPath in assetPaths)
         {
+            //后缀与特殊路径判断
             if (!TextureCodecRegistry.IsSupported(assetPath) || settings.IsExcludedPath(assetPath))
             {
                 continue;
@@ -114,7 +127,7 @@ public class TextureSourceFileProcessor : AssetPostprocessor
         return queuedCount;
     }
 
-    private static void ScheduleDeferredRun()
+    private static void ScheduleDeferredRun()//提交阶段============================================================================2
     {
         // 一批导入可能触发多次 OnPostprocessAllAssets，但只需要安排一次延迟执行，
         // 队列会把这几次的路径合并起来一起处理。
@@ -122,7 +135,7 @@ public class TextureSourceFileProcessor : AssetPostprocessor
         {
             return;
         }
-
+        //防止事件多次添加
         deferredRunScheduled = true;
         EditorApplication.delayCall += RunPendingWork;
     }
@@ -130,8 +143,9 @@ public class TextureSourceFileProcessor : AssetPostprocessor
     /// <summary>
     /// 已经脱离导入调用栈，这里可以安全地读写文件、调 ImportAsset。
     /// </summary>
-    private static void RunPendingWork()
+    private static void RunPendingWork()//执行阶段=============================================================================3
     {
+        //数据消费
         deferredRunScheduled = false;
 
         var assetPaths = new List<string>(pendingAssetPaths);
@@ -144,6 +158,7 @@ public class TextureSourceFileProcessor : AssetPostprocessor
         }
 
         TextureProcessSettings settings = TextureProcessSettings.Current;
+        //获取导入时自动执行操作
         List<ITextureAssetOperation> operations = TextureOperationRegistry.GetImportAutoOperations(settings);
         if (operations.Count == 0)
         {

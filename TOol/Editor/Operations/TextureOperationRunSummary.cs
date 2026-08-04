@@ -5,6 +5,9 @@ using System.Collections.Generic;
 //   只承载一次批量执行的结果。窗口用它渲染结果面板，Runner 用它拼汇总日志。
 //   不做任何执行逻辑。
 // =====================================================================================
+/// <summary>
+/// 执行结果数据
+/// </summary>
 public class TextureOperationRunSummary
 {
     public int ChangedCount;

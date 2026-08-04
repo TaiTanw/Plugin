@@ -16,6 +16,9 @@ public enum TextureOperationStatus
     Failed
 }
 
+/// <summary>
+/// 纹理操作结果0
+/// </summary>
 public struct TextureOperationResult
 {
     public readonly TextureOperationStatus Status;

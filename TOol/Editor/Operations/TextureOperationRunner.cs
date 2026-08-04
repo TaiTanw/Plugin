@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
 
@@ -14,14 +14,22 @@ using UnityEngine;
 //   出问题时分不清是哪条路径干的。统一到这里之后，唯一的区别只有
 //   context.TriggeredByImport 这一个标记，行为完全相同。
 // =====================================================================================
+/// <summary>
+/// 纹理处理器（流程控制，文件与需执行操作是否可执行）
+/// </summary>
 public static class TextureOperationRunner
 {
     private const string ProgressBarTitle = "贴图处理";
 
     /// <summary>
     /// 总体流程：先算出真正需要处理的（资产 × 操作）组合，再逐个执行并刷进度条，
-    /// 最后统一保存刷新一次并把结果汇总成日志。
+    /// 最后统一保存刷新一次并把结果汇总成日志
     /// </summary>
+    /// <param name="operations">操作集合</param>
+    /// <param name="assetPaths">资源路径</param>
+    /// <param name="settings">配置</param>
+    /// <param name="triggeredByImport">手动或自动</param>
+    /// <returns></returns>
     public static TextureOperationRunSummary Run(
         IList<ITextureAssetOperation> operations,
         IList<string> assetPaths,
@@ -29,6 +37,7 @@ public static class TextureOperationRunner
         bool triggeredByImport)
     {
         var summary = new TextureOperationRunSummary();
+        //获得待处理工作内容
         List<PendingWork> pendingWork = CollectPendingWork(operations, assetPaths, settings);
         if (pendingWork.Count == 0)
         {
@@ -51,6 +60,8 @@ public static class TextureOperationRunner
             // 中途抛异常也必须清掉进度条，否则编辑器会一直卡着一个不会消失的进度框。
             EditorUtility.ClearProgressBar();
         }
+
+        //数据读取
 
         FlushAssetDatabase(summary);
         LogSummary(summary, triggeredByImport);
@@ -100,7 +111,13 @@ public static class TextureOperationRunner
     // ---------------------------------------------------------------------------
     // 2) 执行：两级进度 + 可取消 + 单条失败不影响整批
     // ---------------------------------------------------------------------------
-
+    /// <summary>
+    /// 执行全部工作
+    /// </summary>
+    /// <param name="pendingWork"></param>
+    /// <param name="settings"></param>
+    /// <param name="triggeredByImport"></param>
+    /// <param name="summary"></param>
     private static void ExecuteAll(
         List<PendingWork> pendingWork,
         TextureProcessSettings settings,
@@ -112,11 +129,13 @@ public static class TextureOperationRunner
             PendingWork work = pendingWork[i];
             int currentIndex = i;
 
+            //构建内层操作进度更新逻辑委托
             // 两级进度：外层是"第几个文件"，内层是操作自己上报的"这个文件处理到哪了"。
             // 二分搜索一张 8K 图要编码十几次，没有内层进度会看起来像卡死。
             System.Action<float, string> subProgress = (ratio, detail) =>
                 UpdateProgressBar(pendingWork.Count, currentIndex, ratio, work, detail);
 
+            //进度条相关
             // 只在每个文件开始时用可取消的版本刷一次，给用户留出中断的机会；
             // 文件内部的子进度用不可取消的版本，避免一次执行里反复检测取消按钮拖慢速度。
             if (EditorUtility.DisplayCancelableProgressBar(
@@ -146,7 +165,12 @@ public static class TextureOperationRunner
             return TextureOperationResult.Failed("执行时抛出异常: " + exception.GetType().Name + ": " + exception.Message);
         }
     }
-
+    /// <summary>
+    /// 执行结果汇总：单文件操作情况，执行结果数据写入
+    /// </summary>
+    /// <param name="summary"></param>
+    /// <param name="work"></param>
+    /// <param name="result"></param>
     private static void Accumulate(TextureOperationRunSummary summary, PendingWork work, TextureOperationResult result)
     {
         string line = work.Operation.DisplayName + " | " + work.AssetPath + " | " + result.Message;
@@ -166,13 +190,25 @@ public static class TextureOperationRunner
             summary.SkippedLines.Add(line);
         }
     }
-
+    /// <summary>
+    /// 更新进度条
+    /// </summary>
+    /// <param name="total"></param>
+    /// <param name="index"></param>
+    /// <param name="subRatio"></param>
+    /// <param name="work"></param>
+    /// <param name="detail"></param>
     private static void UpdateProgressBar(int total, int index, float subRatio, PendingWork work, string detail)
     {
         float progress = (index + Mathf.Clamp01(subRatio)) / total;
         EditorUtility.DisplayProgressBar(ProgressBarTitle, BuildProgressText(work, detail), progress);
     }
-
+    /// <summary>
+    /// 构建进度文本
+    /// </summary>
+    /// <param name="work"></param>
+    /// <param name="detail">附加说明</param>
+    /// <returns></returns>
     private static string BuildProgressText(PendingWork work, string detail)
     {
         string text = work.Operation.DisplayName + "：" + work.AssetPath;
@@ -249,6 +285,9 @@ public static class TextureOperationRunner
         }
     }
 
+    /// <summary>
+    /// 待处理工作的结构体数据
+    /// </summary>
     private struct PendingWork
     {
         public readonly ITextureAssetOperation Operation;
