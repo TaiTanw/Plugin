@@ -12,7 +12,7 @@ using UnityEngine;
 // =====================================================================================
 
 /// <summary>
-/// 纹理操作注册表管理器
+/// 纹理操作反射注册表
 /// </summary>
 public static class TextureOperationRegistry
 {
