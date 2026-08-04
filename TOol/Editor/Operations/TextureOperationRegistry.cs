@@ -26,7 +26,11 @@ public static class TextureOperationRegistry
             return operations;
         }
     }
-
+    /// <summary>
+    /// 通过ID查找
+    /// </summary>
+    /// <param name="id"></param>
+    /// <returns></returns>
     public static ITextureAssetOperation FindById(string id)
     {
         if (string.IsNullOrEmpty(id))
@@ -82,7 +86,9 @@ public static class TextureOperationRegistry
 
         return result.OrderBy(operation => operation.Order).ToList();
     }
-
+    /// <summary>
+    /// 确保存在（反射获得拓展的关键部分）
+    /// </summary>
     private static void EnsureDiscovered()
     {
         if (operations != null)
@@ -92,8 +98,10 @@ public static class TextureOperationRegistry
 
         operations = new List<ITextureAssetOperation>();
         Type interfaceType = typeof(ITextureAssetOperation);
+        //获得类型所在程序集
         foreach (Type type in interfaceType.Assembly.GetTypes())
         {
+            //过滤程序集类型：不要抽象类/接口/不能赋值给interfaceType
             if (type.IsAbstract || type.IsInterface || !interfaceType.IsAssignableFrom(type))
             {
                 continue;
@@ -104,16 +112,17 @@ public static class TextureOperationRegistry
                 Debug.LogWarning("[TextureOperationRegistry] " + type.Name + " 实现了 ITextureAssetOperation 但没有无参构造函数，已跳过。");
                 continue;
             }
-
+            //实例化并假如列表
             operations.Add((ITextureAssetOperation)Activator.CreateInstance(type));
         }
-
+        //排序，order升序，字母升序（A到Z)
         operations = operations.OrderBy(operation => operation.Order).ThenBy(operation => operation.DisplayName).ToList();
         WarnOnDuplicateIds();
     }
 
     private static void WarnOnDuplicateIds()
     {
+        //重名ID分组，count大于1表示有重复
         foreach (IGrouping<string, ITextureAssetOperation> group in operations.GroupBy(operation => operation.Id))
         {
             if (group.Count() > 1)

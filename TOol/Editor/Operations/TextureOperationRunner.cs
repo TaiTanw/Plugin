@@ -15,7 +15,7 @@ using UnityEngine;
 //   context.TriggeredByImport 这一个标记，行为完全相同。
 // =====================================================================================
 /// <summary>
-/// 纹理处理器（流程控制，文件与需执行操作是否可执行）
+/// 纹理处理器（流程控制，文件与执行调度）
 /// </summary>
 public static class TextureOperationRunner
 {
