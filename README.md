@@ -3,7 +3,8 @@
 Unity Editor 插件集合，用于模型/贴图的**导入期处理**与**交付打包**。  
 适用环境：Unity 2020.3（Built-in RP）、Windows Editor。
 
-远程仓库：`http://swm-server.local:3000/Hanson/asset-bundle.git`
+远程仓库：`http://swm-server.local:3000/Hanson/asset-bundle.git`  
+当前稳定版：**v1.3.1**（`other` 分支 / 标签 `v1.3.1`）
 
 ---
 
@@ -12,7 +13,7 @@ Unity Editor 插件集合，用于模型/贴图的**导入期处理**与**交付
 | 目录 | 定位 | 菜单入口 |
 |------|------|----------|
 | [`TOol/`](./TOol/) | 导入期设置 + 源文件/模型后处理（压缩贴图、顶点色等） | `Tools > 资源处理总面板` |
-| [`RetinarBatchBuilder_Share/`](./RetinarBatchBuilder_Share/) | 交付打包（Art 整理、AB、UnityPackage、报告） | `Tools > Retinar > …` |
+| [`RetinarBatchBuilder_Share/`](./RetinarBatchBuilder_Share/) | 交付打包：平铺 Art → 手动处理 → 导出 | `Tools > Retinar > 平铺到 Art` / `从 Art 导出交付物` / `打开交付文件夹` |
 
 **目录边界：** 自动处理流默认不碰 `Assets/Art/**`（交付产物区由打包工具管理）。两边不得同时改同一 Importer 属性。详见 [`RetinarBatchBuilder_Share/PACKAGING_RULES.md`](./RetinarBatchBuilder_Share/PACKAGING_RULES.md) 规则 33。
 
@@ -32,12 +33,13 @@ Unity Editor 插件集合，用于模型/贴图的**导入期处理**与**交付
 - 简要：[TOol/README.md](./TOol/README.md)
 - 结构与扩展：[TOol/ARCHITECTURE.md](./TOol/ARCHITECTURE.md)
 
-### Retinar（批量打包）
+### Retinar（批量打包，v1.3+）
 
 1. 确认工程内存在 Retinar Editor 脚本并可编译。
-2. 选中已调好的 Prefab（正式交付推荐）。
-3. 执行 **`Tools > Retinar > Batch Build Selected Models`**。
-4. 用 **`Open Deliverables Folder`** 查看输出。
+2. 选中已调好的 Prefab/FBX，执行 **`Tools > Retinar > 平铺到 Art（选中）`**。
+3. 在 Art 上按需用插件 2 压贴图 / 刷顶点色（交付不依赖后处理自动）。
+4. 执行 **`从 Art 导出交付物`**：`导出 Art 全部` 或 `导出选中的 Art 预制体`（v1.3.1）。
+5. 用 **`打开交付文件夹`** 查看输出。
 
 说明文档：
 
@@ -51,9 +53,11 @@ Unity Editor 插件集合，用于模型/贴图的**导入期处理**与**交付
 
 ```text
 导入 FBX / 贴图
-    → TOol：设置自动 + 后处理（压缩、顶点色等）
+    → TOol：设置自动（导入区）；交付相关处理建议手动
     → 场景中人工调材质 / Prefab
-    → Retinar：Batch Build 产出 AB / UnityPackage / 报告
+    → Retinar：平铺到 Art
+    → TOol：手动压 Art 贴图 / 刷顶点色（按需）
+    → Retinar：从 Art 导出交付物（全部或选中）
     → 空工程或真机验收
 ```
 

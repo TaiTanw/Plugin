@@ -7,11 +7,24 @@ public static class ModelTargetCollector
 {
     public enum Scope
     {
+        /// <summary>Project 面板当前选中；选中文件夹时递归其下模型。</summary>
         Selection,
-        Folder
+
+        /// <summary>窗口临时指定的单个文件夹。</summary>
+        Folder,
+
+        /// <summary>子面板持久化的批量文件夹路径列表（总面板也只用这份）。</summary>
+        BatchByPath
     }
 
-    public static List<string> Collect(Scope scope, DefaultAsset folder)
+    public static readonly string[] ScopeLabels =
+    {
+        "当前选中",
+        "指定文件夹",
+        "依据文件路径批量"
+    };
+
+    public static List<string> Collect(Scope scope, DefaultAsset folder, IList<string> batchFolders)
     {
         var result = new List<string>();
         ModelProcessSettings settings = ModelProcessSettings.Current;
@@ -30,9 +43,9 @@ public static class ModelTargetCollector
                 {
                     CollectUnderFolder(path, settings, result);
                 }
-                else if (settings.IsSupportedModelExtension(path) && !result.Contains(path))
+                else
                 {
-                    result.Add(path);
+                    CollectFromAsset(path, settings, result);
                 }
             }
         }
@@ -44,20 +57,88 @@ public static class ModelTargetCollector
                 CollectUnderFolder(folderPath, settings, result);
             }
         }
+        else if (scope == Scope.BatchByPath)
+        {
+            List<string> valid = ResourceBatchFolderStore.GetValidFolders(batchFolders);
+            for (int i = 0; i < valid.Count; i++)
+            {
+                CollectUnderFolder(valid[i], settings, result);
+            }
+        }
 
         return result;
     }
 
+    /// <summary>总面板：始终按批量路径收集，忽略子面板当前范围。</summary>
+    public static List<string> CollectFromBatchFolders()
+    {
+        return Collect(Scope.BatchByPath, null, ResourceBatchFolderStore.GetModelFolders());
+    }
+
     private static void CollectUnderFolder(string folderPath, ModelProcessSettings settings, List<string> result)
     {
-        string[] guids = AssetDatabase.FindAssets("t:Model", new[] { folderPath });
-        foreach (string guid in guids)
+        string[] modelGuids = AssetDatabase.FindAssets("t:Model", new[] { folderPath });
+        foreach (string guid in modelGuids)
         {
-            string path = AssetDatabase.GUIDToAssetPath(guid);
-            if (settings.IsSupportedModelExtension(path) && !result.Contains(path))
+            CollectFromAsset(AssetDatabase.GUIDToAssetPath(guid), settings, result);
+        }
+
+        // Prefab 文件夹里往往只有 .prefab；Mesh 在依赖的 FBX 上。
+        string[] prefabGuids = AssetDatabase.FindAssets("t:Prefab", new[] { folderPath });
+        foreach (string guid in prefabGuids)
+        {
+            CollectModelsFromPrefab(AssetDatabase.GUIDToAssetPath(guid), settings, result);
+        }
+    }
+
+    private static void CollectFromAsset(string assetPath, ModelProcessSettings settings, List<string> result)
+    {
+        if (string.IsNullOrEmpty(assetPath))
+        {
+            return;
+        }
+
+        if (settings.IsSupportedModelExtension(assetPath))
+        {
+            AddUnique(result, assetPath);
+            return;
+        }
+
+        if (IsPrefabAsset(assetPath))
+        {
+            CollectModelsFromPrefab(assetPath, settings, result);
+        }
+    }
+
+    private static void CollectModelsFromPrefab(
+        string prefabPath,
+        ModelProcessSettings settings,
+        List<string> result)
+    {
+        if (string.IsNullOrEmpty(prefabPath) || !IsPrefabAsset(prefabPath))
+        {
+            return;
+        }
+
+        foreach (string dependency in AssetDatabase.GetDependencies(prefabPath, true))
+        {
+            if (settings.IsSupportedModelExtension(dependency))
             {
-                result.Add(path);
+                AddUnique(result, dependency);
             }
+        }
+    }
+
+    private static bool IsPrefabAsset(string assetPath)
+    {
+        return string.Equals(Path.GetExtension(assetPath), ".prefab", System.StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static void AddUnique(List<string> result, string assetPath)
+    {
+        if (!string.IsNullOrEmpty(assetPath) && !result.Contains(assetPath))
+        {
+            result.Add(assetPath);
         }
     }
 }

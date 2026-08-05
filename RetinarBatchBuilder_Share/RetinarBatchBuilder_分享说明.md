@@ -1,7 +1,7 @@
 # Retinar Unity 模型打包工具使用手册
 
-版本：v1.2  
-更新日期：2026-07-31  
+版本：v1.3.1  
+更新日期：2026-08-05  
 适用环境：Unity 2020.3.49f1c1、Built-in Render Pipeline、Windows Editor
 
 ## 1. 工具用途
@@ -48,19 +48,18 @@ Assets/
 
 ## 3. 推荐工作流程
 
-正式交付推荐选择“已经调整好的 Prefab”打包。
+正式交付推荐选择“已经调整好的 Prefab”。**平铺与导出已拆成两步**（已移除一键 Batch Build）。
 
-1. 把 FBX 导入 Unity。
+1. 把 FBX 导入 Unity（`Assets/Art` 之外）。
 2. 检查 FBX 的 Model、Rig、Animation、Materials 设置。
-3. 把模型拖入场景。
-4. 人工检查材质、贴图、法线、朝向、缩放、层级和动画。
-5. 完成玻璃、外发光、旋转部件等实际效果调整。
-6. 保存为最终 Prefab。
-7. 在 Project 面板中选中这个 Prefab。
-8. 执行 `Tools > Retinar > Batch Build Selected Models`。
-9. 等待完成弹窗，不要在执行过程中进入 Play Mode 或关闭 Unity。
-10. 点击 `Tools > Retinar > Open Deliverables Folder` 打开交付目录。
-11. 在空工程导入 UnityPackage，并在目标设备加载 AB 做最终验收。
+3. 把模型拖入场景，人工检查材质、贴图、法线、朝向、缩放、层级和动画。
+4. 完成玻璃、外发光、旋转部件等实际效果调整。
+5. 保存为最终 Prefab（建议同一导入区文件夹内，便于多选）。
+6. 在 Project 中选中该 Prefab（可 Ctrl 多选），执行 `Tools > Retinar > 平铺到 Art（选中）`。
+7. （按需）打开 `Tools > 资源处理总面板`：压 Art 贴图、刷 Art 模型顶点色。导入自动**不保证**交付生效。
+8. 执行 `Tools > Retinar > 从 Art 导出交付物 > 导出选中的 Art 预制体`（或「导出 Art 全部」免手找）。
+9. 等待完成弹窗；用 `打开交付文件夹` 验收 Deliverables。
+10. 在空工程导入 UnityPackage，并在目标设备加载 AB 做最终验收。
 
 ## 4. Prefab 与 FBX 应该选哪个
 
@@ -83,22 +82,32 @@ Assets/
 ## 5. Unity 菜单说明
 
 ```text
-Tools > Retinar > Batch Build Selected Models
+Tools > Retinar > 平铺到 Art（选中）
 ```
 
-完整打包：生成规范 Prefab、UnityPackage、Android/iOS AB、源文件归档、报告和表格。
+只把选中的 Prefab/FBX（可多选）整理进 `Assets/Art/<名>/`，**不**输出 AB / UnityPackage / Deliverables。  
+不支持选中文件夹递归；请多选文件。
 
 ```text
-Tools > Retinar > Normalize Selected Models Only
+Tools > Retinar > 从 Art 导出交付物 > 导出 Art 全部
 ```
 
-只在 Unity 工程内建立或更新规范工作副本，不输出完整交付包。
+扫描 `Assets/Art/*/Prefab/*.prefab`，确认数量后全部导出。不依赖 Project 选中。
 
 ```text
-Tools > Retinar > Open Deliverables Folder
+Tools > Retinar > 从 Art 导出交付物 > 导出选中的 Art 预制体
 ```
 
-直接打开当前工程的交付目录。
+只接受选中的 Art 下 Prefab（可多选）。非 Art / 非 Prefab 会警告并跳过；合格项为 0 则中止。  
+导入区资源请先平铺。
+
+```text
+Tools > Retinar > 打开交付文件夹
+```
+
+打开本机 `Deliverables` 绝对路径。
+
+**已移除：** `Batch Build Selected Models`、`Normalize Selected Models Only`、`Open Deliverables Folder`（英文旧名）。
 
 ## 6. UnityPackage 内部规范
 
@@ -215,7 +224,7 @@ Deliverables/<模型名>/
 
 ### 找不到输出文件
 
-执行 `Tools > Retinar > Open Deliverables Folder`。输出不在 `Assets` 内，而在 Unity 工程根目录的 `Deliverables`。
+执行 `Tools > Retinar > 打开交付文件夹`。输出不在 `Assets` 内，而在 Unity 工程根目录的 `Deliverables`。
 
 ### UnityPackage 导入后只有 Collider，没有模型
 
@@ -231,7 +240,7 @@ Deliverables/<模型名>/
 
 ### 压缩显示改了 1 个文件，再打包又超标
 
-确认压的是 `Assets/Art/<模型>/Texture/`，不是 `.fbm`；第二遍前不要删 Art。v1.2.8 起应保留压缩结果；若仍变大，把带 `[Retinar]` 的 Console 日志一并反馈。
+确认压的是 `Assets/Art/<模型>/Texture/`，不是 `.fbm`；第二遍导出前不要删 Art。v1.2.8 起应保留压缩结果；若仍变大，把带 `[Retinar]` 的 Console 日志一并反馈。
 
 ### 校验失败提到导入区 `xxx.fbm` 路径
 

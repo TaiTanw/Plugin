@@ -1,20 +1,22 @@
+using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
 
 // =====================================================================================
 // 资源处理总面板：唯一菜单入口。
-//   - 总开关 + 贴图/模型【设置自动】【后处理自动】（均本机 EditorPrefs）
-//   - 打开贴图 / 模型子面板（手动执行不受总开关影响）
-//   - 后处理阶段顺序固定：模型 → 贴图（v1 不提供拖拽）
+//   - 总开关 + 贴图/模型【设置自动】【后处理自动】（本机 EditorPrefs）
+//   - 按子面板批量路径手动执行（与子面板当前范围下拉无关）
+//   - 打开贴图 / 模型子面板
 // =====================================================================================
 public class ResourceProcessWindow : EditorWindow
 {
     private Vector2 scroll;
+    private string lastBatchMessage;
 
     [MenuItem("Tools/资源处理总面板")]
     public static void ShowWindow()
     {
-        GetWindow<ResourceProcessWindow>("资源处理").minSize = new Vector2(460f, 360f);
+        GetWindow<ResourceProcessWindow>("资源处理").minSize = new Vector2(460f, 420f);
     }
 
     private void OnGUI()
@@ -25,10 +27,11 @@ public class ResourceProcessWindow : EditorWindow
 
             EditorGUILayout.LabelField("自动化开关（本机 EditorPrefs，不进版本库）", EditorStyles.boldLabel);
             EditorGUILayout.HelpBox(
-                "总开关：关掉后，所有导入设置自动与后处理自动都不跑；手动在子面板执行不受影响。\n" +
-                "设置自动：导入前改 Importer 参数。\n" +
-                "后处理自动：导入结束后 delayCall 跑 Operation（还需在子面板勾选具体操作）。\n" +
-                "后处理阶段顺序固定为：模型 → 贴图。",
+                "总开关：关掉后设置自动/后处理自动都不跑；手动执行不受影响。\n" +
+                "设置自动：导入前改 Importer（导入区建议按需开启）。\n" +
+                "后处理自动：导入后跑 Operation——不保证交付生效（Art 被排除；" +
+                "内嵌贴图/顶点色须平铺后再到贴图·模型面板或总面板批量路径手动处理）。默认请保持关闭。\n" +
+                "后处理阶段顺序：模型 → 贴图。",
                 MessageType.Info);
 
             using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
@@ -51,7 +54,9 @@ public class ResourceProcessWindow : EditorWindow
                 v => ResourceProcessSwitches.TextureSettingsAuto = v,
                 () => ResourceProcessSwitches.TexturePostProcessAuto,
                 v => ResourceProcessSwitches.TexturePostProcessAuto = v,
-                TextureToolWindow.ShowWindow);
+                TextureToolWindow.ShowWindow,
+                RunTextureBatch,
+                ResourceBatchFolderStore.GetTextureFolders());
 
             DrawResourceBlock(
                 "模型",
@@ -59,7 +64,15 @@ public class ResourceProcessWindow : EditorWindow
                 v => ResourceProcessSwitches.ModelSettingsAuto = v,
                 () => ResourceProcessSwitches.ModelPostProcessAuto,
                 v => ResourceProcessSwitches.ModelPostProcessAuto = v,
-                ModelToolWindow.ShowWindow);
+                ModelToolWindow.ShowWindow,
+                RunModelBatch,
+                ResourceBatchFolderStore.GetModelFolders());
+
+            if (!string.IsNullOrEmpty(lastBatchMessage))
+            {
+                EditorGUILayout.Space(6f);
+                EditorGUILayout.HelpBox(lastBatchMessage, MessageType.None);
+            }
 
             EditorGUILayout.Space(10f);
             EditorGUILayout.LabelField("配置资产", EditorStyles.boldLabel);
@@ -80,13 +93,15 @@ public class ResourceProcessWindow : EditorWindow
         }
     }
 
-    private static void DrawResourceBlock(
+    private void DrawResourceBlock(
         string title,
         System.Func<bool> getSettings,
         System.Action<bool> setSettings,
         System.Func<bool> getPost,
         System.Action<bool> setPost,
-        System.Action openPanel)
+        System.Action openPanel,
+        System.Action runBatch,
+        List<string> batchFolders)
     {
         EditorGUILayout.Space(8f);
         using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
@@ -101,10 +116,37 @@ public class ResourceProcessWindow : EditorWindow
                     setSettings(settingsAuto);
                 }
 
-                bool postAuto = EditorGUILayout.ToggleLeft("后处理自动（Operation）", getPost());
+                bool postAuto = EditorGUILayout.ToggleLeft(
+                    "后处理自动（不保证交付；平铺后请手动）", getPost());
                 if (postAuto != getPost())
                 {
                     setPost(postAuto);
+                }
+            }
+
+            EditorGUILayout.Space(4f);
+            EditorGUILayout.LabelField("手动批量（用子面板批量路径）", EditorStyles.miniBoldLabel);
+            List<string> valid = ResourceBatchFolderStore.GetValidFolders(batchFolders);
+            if (valid.Count == 0)
+            {
+                EditorGUILayout.HelpBox(
+                    "尚未配置批量文件夹。请打开" + title + "处理面板 → 范围选「依据文件路径批量」→ 添加文件夹。",
+                    MessageType.Warning);
+            }
+            else
+            {
+                EditorGUILayout.LabelField("路径 " + valid.Count + " 个：", EditorStyles.miniLabel);
+                for (int i = 0; i < valid.Count; i++)
+                {
+                    EditorGUILayout.LabelField("  " + valid[i], EditorStyles.miniLabel);
+                }
+            }
+
+            using (new EditorGUI.DisabledScope(valid.Count == 0))
+            {
+                if (GUILayout.Button("按批量路径执行勾选的" + title + "操作", GUILayout.Height(28f)))
+                {
+                    runBatch();
                 }
             }
 
@@ -113,5 +155,67 @@ public class ResourceProcessWindow : EditorWindow
                 openPanel();
             }
         }
+    }
+
+    private void RunTextureBatch()
+    {
+        List<string> targets = TextureTargetCollector.CollectFromBatchFolders();
+        List<ITextureAssetOperation> operations = ResourceManualOperationStore.CollectSelectedTextureOperations();
+        if (operations.Count == 0)
+        {
+            lastBatchMessage = "[贴图] 没有勾选任何手动操作（请在贴图子面板勾选）。";
+            Debug.LogWarning(lastBatchMessage);
+            return;
+        }
+
+        if (targets.Count == 0)
+        {
+            lastBatchMessage = "[贴图] 批量路径下没有命中贴图。";
+            Debug.LogWarning(lastBatchMessage);
+            return;
+        }
+
+        TextureProcessSettings settings = TextureProcessSettings.GetOrCreateAsset();
+        TextureOperationRunSummary summary = TextureOperationRunner.Run(operations, targets, settings, false);
+        lastBatchMessage = FormatTextureSummary(summary, targets.Count);
+        Repaint();
+    }
+
+    private void RunModelBatch()
+    {
+        List<string> targets = ModelTargetCollector.CollectFromBatchFolders();
+        List<IModelAssetOperation> operations = ResourceManualOperationStore.CollectSelectedModelOperations();
+        if (operations.Count == 0)
+        {
+            lastBatchMessage = "[模型] 没有勾选任何手动操作（请在模型子面板勾选）。";
+            Debug.LogWarning(lastBatchMessage);
+            return;
+        }
+
+        if (targets.Count == 0)
+        {
+            lastBatchMessage = "[模型] 批量路径下没有命中模型。";
+            Debug.LogWarning(lastBatchMessage);
+            return;
+        }
+
+        ModelProcessSettings settings = ModelProcessSettings.GetOrCreateAsset();
+        ModelOperationRunSummary summary = ModelOperationRunner.Run(operations, targets, settings, false);
+        lastBatchMessage =
+            "[模型] 批量完成：目标 " + targets.Count +
+            "，改动 " + summary.ChangedCount +
+            "，跳过 " + summary.SkippedCount +
+            "，失败 " + summary.FailedCount +
+            (summary.Canceled ? "（已取消）" : string.Empty);
+        Repaint();
+    }
+
+    private static string FormatTextureSummary(TextureOperationRunSummary summary, int targetCount)
+    {
+        return "[贴图] 批量完成：目标 " + targetCount +
+               "，改动 " + summary.ChangedCount +
+               "，跳过 " + summary.SkippedCount +
+               "，失败 " + summary.FailedCount +
+               (summary.Canceled ? "（已取消）" : string.Empty);
     }
 }

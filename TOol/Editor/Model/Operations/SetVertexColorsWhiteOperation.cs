@@ -3,12 +3,17 @@ using UnityEditor;
 using UnityEngine;
 
 // =====================================================================================
-// v1 最小实现：把模型内 Mesh 的顶点色设为 RGBA(1,1,1,1)。
+// v1：把模型内 Mesh 的顶点色设为 RGBA(1,1,1,1)。
 //
-// 时序（重要）：
-//   OnPostprocessModel 阶段 AssetDatabase.LoadAllAssetsAtPath 经常仍返回空
-//   （日志里的「无法加载模型资产」），必须用 context.ImportRoot 层级上的 Mesh。
-//   delayCall / 手动执行时 ImportRoot 为空，再走 LoadAllAssetsAtPath。
+// 时序：
+//   OnPostprocessModel：AssetDatabase.LoadAllAssetsAtPath 常为空，必须用 ImportRoot。
+//   delayCall / 手动：走 LoadAllAssetsAtPath。
+//
+// Art 手动失效的常见原因（Plane_Jian31）：
+//   1) 选中 Prefab / Prefab 文件夹时旧收集器只认 .fbx → 命中 0（由 TargetCollector 修）。
+//   2) ModelImporter.isReadable=0 时，mesh.colors 写入在 Editor 里可能像成功，
+//      但不稳定落库；UnityGLTF 从 Prefab 导出时仍读到 FBX 原黄顶点色。
+//      手动路径先打开 Read/Write（会触发一次重导，冲掉旧 Mesh），再写全白并校验。
 // =====================================================================================
 public class SetVertexColorsWhiteOperation : IModelAssetOperation
 {
@@ -28,7 +33,8 @@ public class SetVertexColorsWhiteOperation : IModelAssetOperation
         {
             return "将模型内所有 Mesh 的顶点色设为 RGBA(1,1,1,1)。\n" +
                    "导入区自动：OnPostprocessModel（层级 Mesh）+ delayCall（资产库 Mesh）。\n" +
-                   "Assets/Art/ 自动跳过；请对手动选中的 Art/Model FBX 执行后再打包。";
+                   "Assets/Art/ 自动跳过；请对手动选中的 Art Model / Prefab（会解析到依赖 FBX）执行后再导 GLB。\n" +
+                   "手动执行时若 FBX 未开 Read/Write，会先打开再写入（保证落盘与导出可读）。";
         }
     }
 
@@ -44,10 +50,19 @@ public class SetVertexColorsWhiteOperation : IModelAssetOperation
 
     public ModelOperationResult Execute(ModelOperationContext context)
     {
+        // 导入回调里 Mesh 已在内存中可写，禁止此处 SaveAndReimport（会递归/冲掉本次写入）。
+        if (!context.TriggeredByImport)
+        {
+            string readableError;
+            if (!EnsureModelReadable(context.AssetPath, out readableError))
+            {
+                return ModelOperationResult.Failed(readableError);
+            }
+        }
+
         List<Mesh> meshes = CollectMeshes(context);
         if (meshes.Count == 0)
         {
-            // 导入回调里库未就绪：不要报 Failed（会吓人且误导），交给 delayCall 再跑。
             if (context.ImportRoot != null)
             {
                 return ModelOperationResult.Skipped(
@@ -59,6 +74,7 @@ public class SetVertexColorsWhiteOperation : IModelAssetOperation
 
         int meshCount = meshes.Count;
         int changedCount = 0;
+        int verifyFailedCount = 0;
         Color white = Color.white;
 
         for (int i = 0; i < meshes.Count; i++)
@@ -72,21 +88,7 @@ public class SetVertexColorsWhiteOperation : IModelAssetOperation
                 continue;
             }
 
-            Color[] colors = mesh.colors;
-            bool alreadyWhite = colors != null && colors.Length == vertexCount;
-            if (alreadyWhite)
-            {
-                for (int c = 0; c < colors.Length; c++)
-                {
-                    if (colors[c] != white)
-                    {
-                        alreadyWhite = false;
-                        break;
-                    }
-                }
-            }
-
-            if (alreadyWhite)
+            if (IsAllWhite(mesh, white))
             {
                 continue;
             }
@@ -99,7 +101,21 @@ public class SetVertexColorsWhiteOperation : IModelAssetOperation
 
             mesh.colors = whiteColors;
             EditorUtility.SetDirty(mesh);
+
+            if (!IsAllWhite(mesh, white))
+            {
+                verifyFailedCount++;
+                continue;
+            }
+
             changedCount++;
+        }
+
+        if (verifyFailedCount > 0)
+        {
+            return ModelOperationResult.Failed(
+                "有 " + verifyFailedCount + "/" + meshCount +
+                " 个 Mesh 写入后校验仍非全白（请确认 FBX Read/Write Enabled）");
         }
 
         if (changedCount == 0)
@@ -109,6 +125,50 @@ public class SetVertexColorsWhiteOperation : IModelAssetOperation
 
         return ModelOperationResult.Changed(
             "已将 " + changedCount + "/" + meshCount + " 个 Mesh 顶点色设为 (1,1,1,1)");
+    }
+
+    /// <summary>
+    /// 手动路径：未开 Read/Write 时先打开并重导，否则顶点色写入不可靠。
+    /// 重导会重建 Mesh（恢复 FBX 原色），调用方必须在之后立刻写全白。
+    /// </summary>
+    private static bool EnsureModelReadable(string assetPath, out string error)
+    {
+        error = null;
+        var importer = AssetImporter.GetAtPath(assetPath) as ModelImporter;
+        if (importer == null)
+        {
+            error = "不是 ModelImporter 资产: " + assetPath;
+            return false;
+        }
+
+        if (importer.isReadable)
+        {
+            return true;
+        }
+
+        importer.isReadable = true;
+        importer.SaveAndReimport();
+        Debug.Log("[模型处理] 已开启 Read/Write 并重导，随后写入顶点色: " + assetPath);
+        return true;
+    }
+
+    private static bool IsAllWhite(Mesh mesh, Color white)
+    {
+        Color[] colors = mesh.colors;
+        if (colors == null || colors.Length != mesh.vertexCount)
+        {
+            return false;
+        }
+
+        for (int i = 0; i < colors.Length; i++)
+        {
+            if (colors[i] != white)
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private static List<Mesh> CollectMeshes(ModelOperationContext context)
@@ -121,8 +181,6 @@ public class SetVertexColorsWhiteOperation : IModelAssetOperation
             CollectFromHierarchy(context.ImportRoot, meshes, seen);
         }
 
-        // 手动 / delayCall：从资产库拉全量子 Mesh（含未被 Renderer 引用的）。
-        // OnPostprocessModel 时库常为空，作为补充尝试无害。
         CollectFromAssetPath(context.AssetPath, meshes, seen);
         return meshes;
     }

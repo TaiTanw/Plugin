@@ -2,7 +2,7 @@
 
 版本：1.1  
 生效日期：2026-07-24  
-最近同步：2026-07-31（v1.2.8 压缩后再打包保留 Art 贴图）
+最近同步：2026-08-05（v1.3.1 导出 Art 全部 / 选中；v1.3.0 平铺/导出拆分）
 
 本文是每次修改工具、更换 Unity 版本、发布分享包或正式批量打包前必须执行的回归基线。不得因为某个模型打包成功就跳过其他类型。
 
@@ -15,7 +15,7 @@
 - [ ] 根节点存在偏移补偿的模型：验证 AR 端居中和尺寸。
 - [ ] Photoshop 修改过实体贴图的模型：验证工作副本、AB 和 `01_source` 版本一致。
 - [ ] 同一模型连续打包两次：验证重复打包与首次结果一致。
-- [ ] 含内嵌大贴图的模型（如曾超标的 `Plane_Jian31` / `Plane_WuZhi10w`）：验证两遍压缩流程。
+- [ ] 含内嵌大贴图的模型（如曾超标的 `Plane_Jian31` / `Plane_WuZhi10w`）：验证「平铺 → 压 Art 贴图 → 导出」两遍流程。
 - [ ] 导入区仍残留同名 `.fbm` 的模型：验证第二遍打包后 Prefab 依赖不再指向导入区 `.fbm`。
 
 ## 二、自动阻断项
@@ -35,7 +35,7 @@
 - [ ] 阻断必须是单资产粒度：一批中混入一个不合规资产时，其余资产仍要正常出包，不合规的那个不得产出 AB/UnityPackage。
 - [ ] 被排除的资产必须出现在 `Deliverables/_diagnostics/validation_failures.txt`，且完成弹窗显示实际出包数量。
 - [ ] 连续对同一个生成预制体重跑两次，不得出现 `Assets/Art/<名字>_prefab/` 这类多余目录，AssetBundle 名与交付目录名必须保持一致。
-- [ ] 导入插件（`TOol`）的总开关处于开启状态时打包，`Assets/Art/<模型>/Model` 下仍不得出现 `Materials/` 或 `<FBX名>.fbm`。
+- [ ] 导入插件（`TOol`）的总开关处于开启状态时**平铺/导出**，`Assets/Art/<模型>/Model` 下仍不得出现 `Materials/` 或 `<FBX名>.fbm`。
 - [ ] 交付区 Model 的 `materialSearch` 为 Local；`GetDependencies(Prefab)` 不得再出现 `Assets/` 下 Art 以外的 `*.fbm/*` 贴图路径。
 
 ## 三、贴图回归
@@ -60,7 +60,8 @@
 - [ ] 导入插件生成的外部 `.mat` 数量必须等于 FBX 里的材质数量；模型在 Scene/Inspector 中不得出现紫色材质槽。
 - [ ] 搬移 `.fbm` 抽取出来的贴图时，Console 不得出现 `Assertion failed on expression: 'm_hasValue'` 或 `Asset to move is not in asset database`；`Model/` 里不得残留 `.fbm` 目录。
 - [ ] Extract/remap 自愈开启时，压缩后再打包仍不得把 Art 贴图盖回大图（与外部 `.fbm` 切断可同时成立）。
-- [ ] **顶点色**：对 `Art/Model` FBX 手动「顶点色设为全白」后，不删 Art、选 Prefab 再打包；Model 子 Mesh 顶点色须仍为白。Console 可出现「SaveAndReimport 后已恢复 Mesh 顶点色」，或因无外部 `.fbm` 而跳过 Extract。
+- [ ] **顶点色**：对 `Art/Model` FBX 手动「顶点色设为全白」后，不删 Art、选 Prefab 再**导出**；Model 子 Mesh 顶点色须仍为白。Console 可出现「SaveAndReimport 后已恢复 Mesh 顶点色」，或因无外部 `.fbm` 而跳过 Extract。
+- [ ] **菜单拆分**：`Tools/Retinar` 见「平铺到 Art」「从 Art 导出交付物」子菜单（全部 / 选中）、「打开交付文件夹」；无 Batch Build。选导入区 Prefab 点「导出选中」应警告跳过；「导出 Art 全部」不依赖选中。
 
 ## 四、动画与交互回归
 

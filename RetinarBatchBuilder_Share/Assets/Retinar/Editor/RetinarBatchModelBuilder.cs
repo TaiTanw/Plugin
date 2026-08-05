@@ -59,8 +59,8 @@ public static partial class RetinarBatchModelBuilder
         EditorApplication.delayCall += () => EditorUtility.DisplayDialog(title, message, ok);
     }
 
-    [MenuItem("Tools/Retinar/Batch Build Selected Models")]
-    public static void BatchBuildSelectedModels()
+    [MenuItem("Tools/Retinar/平铺到 Art（选中）")]
+    public static void FlattenSelectedToArt()
     {
         if (StopIfEditorIsPlaying())
         {
@@ -70,7 +70,150 @@ public static partial class RetinarBatchModelBuilder
         List<string> sourcePaths = GetSelectedModelPaths();
         if (sourcePaths.Count == 0)
         {
-            ShowDialogDeferred("Retinar Batch Builder", "Select one or more FBX or Prefab assets.", "OK");
+            ShowDialogDeferred(
+                "Retinar",
+                "请在 Project 中选中一个或多个 Prefab / FBX（可多选），再执行平铺。\n" +
+                "本菜单只写入 Assets/Art/<名>/，不打 AssetBundle、不出 Deliverables。",
+                "OK");
+            return;
+        }
+
+        EnsureAssetFolder(ArtRoot);
+
+        int generatedCount = 0;
+        try
+        {
+            for (int i = 0; i < sourcePaths.Count; i++)
+            {
+                string sourcePath = sourcePaths[i];
+                EditorUtility.DisplayProgressBar(
+                    "Retinar 平铺到 Art",
+                    "平铺: " + sourcePath,
+                    (float)i / sourcePaths.Count);
+
+                GeneratedAsset asset = CreateNormalizedPrefab(sourcePath);
+                if (asset.IsValid)
+                {
+                    generatedCount++;
+                }
+            }
+        }
+        finally
+        {
+            EditorUtility.ClearProgressBar();
+        }
+
+        AssetDatabase.SaveAssets();
+        AssetDatabase.Refresh();
+
+        ShowDialogDeferred(
+            "Retinar 平铺到 Art",
+            "完成。已平铺 " + generatedCount + " / " + sourcePaths.Count + " 个资产到 " + ArtRoot + "\n\n" +
+            "下一步：用插件 2（资源处理）对手动压 Art 贴图 / 刷顶点色，再执行「从 Art 导出交付物」。",
+            "OK");
+    }
+
+    [MenuItem("Tools/Retinar/从 Art 导出交付物/导出 Art 全部", false, 120)]
+    public static void ExportAllArtPrefabs()
+    {
+        if (StopIfEditorIsPlaying())
+        {
+            return;
+        }
+
+        List<string> sourcePaths = CollectAllArtDeliveryPrefabPaths();
+        if (sourcePaths.Count == 0)
+        {
+            ShowDialogDeferred(
+                "Retinar 导出",
+                "在 " + ArtRoot + " 下未找到规范交付预制体（期望路径：Art/<名>/Prefab/*.prefab）。\n" +
+                "请先执行「平铺到 Art」。",
+                "OK");
+            return;
+        }
+
+        if (!EditorUtility.DisplayDialog(
+                "Retinar 导出 Art 全部",
+                "将导出 " + ArtRoot + " 下 " + sourcePaths.Count + " 个交付 Prefab。\n\n是否继续？",
+                "导出",
+                "取消"))
+        {
+            return;
+        }
+
+        ExportArtPrefabPaths(sourcePaths);
+    }
+
+    [MenuItem("Tools/Retinar/从 Art 导出交付物/导出选中的 Art 预制体", false, 121)]
+    public static void ExportSelectedArtPrefabs()
+    {
+        if (StopIfEditorIsPlaying())
+        {
+            return;
+        }
+
+        List<string> skipped;
+        List<string> sourcePaths = CollectSelectedArtPrefabPaths(out skipped);
+        if (skipped.Count > 0)
+        {
+            Debug.LogWarning("[Retinar] 导出选中：已跳过非 Art 或非 Prefab 项：\n" +
+                string.Join("\n", skipped.ToArray()));
+        }
+
+        if (sourcePaths.Count == 0)
+        {
+            string skipHint = skipped.Count == 0
+                ? "请选中 Assets/Art/<名>/Prefab/ 下的预制体（可多选）。"
+                : "选中项均不在 " + ArtRoot + " 下或不是 Prefab，已全部跳过。\n\n" +
+                  BuildDialogPreview(string.Join("\n", skipped.ToArray()), 8);
+            ShowDialogDeferred(
+                "Retinar 导出",
+                skipHint + "\n\n导入区资源请先「平铺到 Art」；若要一次导出全部可用「导出 Art 全部」。",
+                "OK");
+            return;
+        }
+
+        if (skipped.Count > 0)
+        {
+            if (!EditorUtility.DisplayDialog(
+                    "Retinar 导出",
+                    "将导出 " + sourcePaths.Count + " 个 Art Prefab。\n\n" +
+                    "已跳过 " + skipped.Count + " 项（非 Art 或非 Prefab），详见 Console。\n\n是否继续？",
+                    "导出",
+                    "取消"))
+            {
+                return;
+            }
+        }
+
+        ExportArtPrefabPaths(sourcePaths);
+    }
+
+    [MenuItem("Tools/Retinar/平铺到 Art（选中）", true)]
+    private static bool ValidateFlattenSelectedToArt()
+    {
+        return !EditorApplication.isCompiling;
+    }
+
+    [MenuItem("Tools/Retinar/从 Art 导出交付物/导出 Art 全部", true)]
+    private static bool ValidateExportAllArtPrefabs()
+    {
+        return !EditorApplication.isCompiling;
+    }
+
+    [MenuItem("Tools/Retinar/从 Art 导出交付物/导出选中的 Art 预制体", true)]
+    private static bool ValidateExportSelectedArtPrefabs()
+    {
+        return !EditorApplication.isCompiling;
+    }
+
+    /// <summary>
+    /// 导出共用后半段：规范化 → 校验 → AB → 交付物。
+    /// </summary>
+    private static void ExportArtPrefabPaths(List<string> sourcePaths)
+    {
+        if (sourcePaths == null || sourcePaths.Count == 0)
+        {
             return;
         }
 
@@ -85,10 +228,11 @@ public static partial class RetinarBatchModelBuilder
             {
                 string sourcePath = sourcePaths[i];
                 EditorUtility.DisplayProgressBar(
-                    "Retinar Batch Builder",
-                    "Building prefab: " + sourcePath,
+                    "Retinar 导出交付物",
+                    "准备: " + sourcePath,
                     (float)i / sourcePaths.Count);
 
+                // 对已在 Art 内的 Prefab 再跑规范化：复用同名目录、保留已压缩贴图/已刷顶点色（有保护）。
                 GeneratedAsset asset = CreateNormalizedPrefab(sourcePath);
                 if (asset.IsValid)
                 {
@@ -106,14 +250,10 @@ public static partial class RetinarBatchModelBuilder
 
         if (generated.Count == 0)
         {
-            ShowDialogDeferred("Retinar Batch Builder", "No valid prefabs were generated. AssetBundles were not built.", "OK");
+            ShowDialogDeferred("Retinar 导出", "没有有效的 Art 预制体，未构建 AssetBundle。", "OK");
             return;
         }
 
-        // 逐个资产做校验，只把没通过的那几个排除掉，其余照常出包。
-        // 原来的做法是"三道校验对整批一起做，任何一条不通过就 return"，
-        // 于是一个模型有问题会把已经生成好的其它模型全部拖下水——这正是
-        // "打包出现终止，还要再去生成目录里选中预设体重新打一次"这个手动补救流程的来源。
         var excludedReports = new List<string>();
         List<GeneratedAsset> buildable = PartitionAssetsThatPassValidation(generated, excludedReports);
         string excludedReportPath = excludedReports.Count > 0 ? WriteValidationFailureReport(excludedReports) : null;
@@ -121,10 +261,10 @@ public static partial class RetinarBatchModelBuilder
         if (buildable.Count == 0)
         {
             ShowDialogDeferred(
-                "Retinar Batch Builder",
-                "Packaging stopped: 选中的 " + generated.Count + " 个资产全部没通过校验。\n\n" +
+                "Retinar 导出",
+                "导出中止：选中的 " + generated.Count + " 个资产全部未通过校验。\n\n" +
                 BuildDialogPreview(string.Join("\n", excludedReports.ToArray()), 10) +
-                "\n\nFull report:\n" + excludedReportPath,
+                "\n\n完整报告:\n" + excludedReportPath,
                 "OK");
             return;
         }
@@ -147,8 +287,8 @@ public static partial class RetinarBatchModelBuilder
               "\n完整清单:\n" + excludedReportPath;
 
         ShowDialogDeferred(
-            "Retinar Batch Builder",
-            "Done. Processed " + buildable.Count + " / " + generated.Count + " asset(s).\n\nUnity prefabs: " + ArtRoot +
+            "Retinar 导出",
+            "完成。已导出 " + buildable.Count + " / " + generated.Count + " 个资产。\n\nUnity prefabs: " + ArtRoot +
             "\nAssetBundles: " + AssetBundleRoot +
             "\nDeliverables: " + GetDeliverablesAbsolutePath() +
             warningText +
@@ -156,89 +296,7 @@ public static partial class RetinarBatchModelBuilder
             "OK");
     }
 
-    /// <summary>
-    /// 弹窗里塞不下太长的文本，超过 maxLines 行就截断并说明还有多少条。
-    /// 完整内容一律写进报告文件，弹窗只负责让人第一眼知道"大概是什么问题"。
-    /// </summary>
-    private static string BuildDialogPreview(string text, int maxLines)
-    {
-        if (string.IsNullOrEmpty(text))
-        {
-            return string.Empty;
-        }
-
-        string[] lines = text.Split(new[] { '\r', '\n' }, System.StringSplitOptions.RemoveEmptyEntries);
-        string preview = string.Join("\n", lines.Take(maxLines).ToArray());
-        if (lines.Length > maxLines)
-        {
-            preview += "\n... 还有 " + (lines.Length - maxLines) + " 行，见完整报告。";
-        }
-
-        return preview;
-    }
-
-    [MenuItem("Tools/Retinar/Normalize Selected Models Only")]
-    public static void NormalizeSelectedModelsOnly()
-    {
-        if (StopIfEditorIsPlaying())
-        {
-            return;
-        }
-
-        List<string> sourcePaths = GetSelectedModelPaths();
-        if (sourcePaths.Count == 0)
-        {
-            ShowDialogDeferred("Retinar Batch Builder", "Select one or more FBX or Prefab assets.", "OK");
-            return;
-        }
-
-        EnsureAssetFolder(ArtRoot);
-
-        int generatedCount = 0;
-        try
-        {
-            for (int i = 0; i < sourcePaths.Count; i++)
-            {
-                string sourcePath = sourcePaths[i];
-                EditorUtility.DisplayProgressBar(
-                    "Retinar Batch Builder",
-                    "Normalizing prefab: " + sourcePath,
-                    (float)i / sourcePaths.Count);
-
-                GeneratedAsset asset = CreateNormalizedPrefab(sourcePath);
-                if (asset.IsValid)
-                {
-                    generatedCount++;
-                }
-            }
-        }
-        finally
-        {
-            EditorUtility.ClearProgressBar();
-        }
-
-        AssetDatabase.SaveAssets();
-        AssetDatabase.Refresh();
-
-        ShowDialogDeferred(
-            "Retinar Batch Builder",
-            "Done. Normalized " + generatedCount + " asset(s).\n\nUnity prefabs: " + ArtRoot,
-            "OK");
-    }
-
-    [MenuItem("Tools/Retinar/Batch Build Selected Models", true)]
-    private static bool ValidateBatchBuildSelectedModels()
-    {
-        return !EditorApplication.isCompiling;
-    }
-
-    [MenuItem("Tools/Retinar/Normalize Selected Models Only", true)]
-    private static bool ValidateNormalizeSelectedModelsOnly()
-    {
-        return !EditorApplication.isCompiling;
-    }
-
-    [MenuItem("Tools/Retinar/Open Deliverables Folder")]
+    [MenuItem("Tools/Retinar/打开交付文件夹")]
     public static void OpenDeliverablesFolder()
     {
         string path = GetDeliverablesAbsolutePath();
@@ -264,8 +322,8 @@ public static partial class RetinarBatchModelBuilder
         }
 
         ShowDialogDeferred(
-            "Retinar Batch Builder",
-            "Unity is in Play Mode. The builder stopped Play Mode first. Please run the tool again after Unity returns to Edit Mode.",
+            "Retinar",
+            "当前处于 Play Mode，已先退出。请回到 Edit Mode 后再执行菜单。",
             "OK");
         return true;
     }
@@ -289,6 +347,121 @@ public static partial class RetinarBatchModelBuilder
         }
 
         return paths;
+    }
+
+    /// <summary>
+    /// 收集 Assets/Art/&lt;名&gt;/Prefab/*.prefab 规范交付预制体。
+    /// </summary>
+    private static List<string> CollectAllArtDeliveryPrefabPaths()
+    {
+        var result = new List<string>();
+        if (!AssetDatabase.IsValidFolder(ArtRoot))
+        {
+            return result;
+        }
+
+        foreach (string guid in AssetDatabase.FindAssets("t:Prefab", new[] { ArtRoot }))
+        {
+            string path = AssetDatabase.GUIDToAssetPath(guid).Replace("\\", "/");
+            if (IsArtDeliveryPrefabPath(path) && !result.Contains(path))
+            {
+                result.Add(path);
+            }
+        }
+
+        result.Sort();
+        return result;
+    }
+
+    /// <summary>
+    /// 从 Project 选中收集 Art 交付 Prefab；非 Art / 非 Prefab 写入 skipped（含说明）。
+    /// </summary>
+    private static List<string> CollectSelectedArtPrefabPaths(out List<string> skipped)
+    {
+        var result = new List<string>();
+        skipped = new List<string>();
+        string artPrefix = ArtRoot + "/";
+
+        foreach (Object selected in Selection.objects)
+        {
+            string path = AssetDatabase.GetAssetPath(selected);
+            if (string.IsNullOrEmpty(path))
+            {
+                continue;
+            }
+
+            path = path.Replace("\\", "/");
+            if (AssetDatabase.IsValidFolder(path))
+            {
+                skipped.Add(path + "  （文件夹：本菜单只接受 Prefab 文件；全部导出请用「导出 Art 全部」）");
+                continue;
+            }
+
+            if (!string.Equals(Path.GetExtension(path), ".prefab", System.StringComparison.OrdinalIgnoreCase))
+            {
+                skipped.Add(path + "  （不是 Prefab）");
+                continue;
+            }
+
+            if (!path.StartsWith(artPrefix, System.StringComparison.OrdinalIgnoreCase))
+            {
+                skipped.Add(path + "  （不在 " + ArtRoot + " 下，请先平铺）");
+                continue;
+            }
+
+            if (!result.Contains(path))
+            {
+                result.Add(path);
+            }
+        }
+
+        return result;
+    }
+
+    private static bool IsArtDeliveryPrefabPath(string assetPath)
+    {
+        if (string.IsNullOrEmpty(assetPath))
+        {
+            return false;
+        }
+
+        assetPath = assetPath.Replace("\\", "/");
+        string artPrefix = ArtRoot + "/";
+        if (!assetPath.StartsWith(artPrefix, System.StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        if (!string.Equals(Path.GetExtension(assetPath), ".prefab", System.StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        // 规范：Assets/Art/<名>/Prefab/<file>.prefab
+        string relative = assetPath.Substring(artPrefix.Length);
+        string[] parts = relative.Split('/');
+        return parts.Length == 3 &&
+               string.Equals(parts[1], "Prefab", System.StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// 弹窗里塞不下太长的文本，超过 maxLines 行就截断并说明还有多少条。
+    /// </summary>
+    private static string BuildDialogPreview(string text, int maxLines)
+    {
+        if (string.IsNullOrEmpty(text))
+        {
+            return string.Empty;
+        }
+
+        string[] lines = text.Split(new[] { '\r', '\n' }, System.StringSplitOptions.RemoveEmptyEntries);
+        string preview = string.Join("\n", lines.Take(maxLines).ToArray());
+        if (lines.Length > maxLines)
+        {
+            preview += "\n... 还有 " + (lines.Length - maxLines) + " 行，见完整报告。";
+        }
+
+        return preview;
     }
 
     private static void ApplyModelImportSettings(string sourcePath)

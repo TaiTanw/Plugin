@@ -2,6 +2,33 @@
 
 记录规则：最新版本写在最上方；每次修改必须填写“原因、改动、影响、验证、回退”。
 
+## 2026-08-05 — v1.3.1 导出拆成「Art 全部 / 选中 Art Prefab」子菜单
+
+- 原因：平铺后 Prefab 分散在 `Art/<名>/Prefab/`，多选手找麻烦；需要固定 Art 根上一键全量导出，同时保留选中导出并对非 Art 选中警告。
+- 改动：
+  1. `从 Art 导出交付物` 改为子菜单：`导出 Art 全部`、`导出选中的 Art 预制体`。
+  2. 全部：扫描 `Assets/Art/*/Prefab/*.prefab`，确认数量后走原导出管线。
+  3. 选中：仅 Art 下 Prefab；非 Art / 非 Prefab / 文件夹写入跳过警告（Console + 弹窗）；合格项为 0 则中止。
+  4. 抽出共用 `ExportArtPrefabPaths`。
+- 影响：无需再逐个点进 Prefab 目录即可全量导出；选中导出对导入区误选有明确警告。
+- 验证：无选中点「全部」应列出 Art 内交付 Prefab；选导入区 Prefab 点「选中」应警告跳过。
+- 回退：恢复单一导出 MenuItem 即可。
+- 关联问题：导出批量、非 Art 警告。
+
+## 2026-08-05 — v1.3.0 菜单拆成平铺 / 导出，移除一键 Batch Build
+
+- 原因：交付需在 Art 平铺与出包之间插入插件 2 手动（压贴图、刷顶点色）。一键 `Batch Build` 把平铺与导出绑死，易跳过中间步骤；另需与插件 2「后处理自动不保证交付」的流程对齐。
+- 改动：
+  1. **移除** `Tools > Retinar > Batch Build Selected Models` 与 `Normalize Selected Models Only`。
+  2. 新增 `平铺到 Art（选中）`：Project 多选 Prefab/FBX → 只写 `Assets/Art/<名>/`，不出 AB/Deliverables。
+  3. 新增 `从 Art 导出交付物（选中 Prefab）`：只接受 `Assets/Art/` 下 Prefab（可多选）→ 校验 + AB + UnityPackage + 交付归档。
+  4. `Open Deliverables Folder` 改名为 `打开交付文件夹`。
+  5. **文档**：本 CHANGELOG、`PACKAGING_RULES`（两遍流程菜单名）、分享说明 §3/§5、回归检查表菜单名。
+- 影响：操作变为两步；导入区资源必须先平铺再导出。可多选；不支持选中文件夹递归（后续可加，非框架改动）。
+- 验证：选导入区 Prefab 平铺 → Art 出现目录；选 Art Prefab 导出 → Deliverables 有产物；选导入区 Prefab 点导出应提示先平铺。
+- 回退：恢复旧 MenuItem 与 `BatchBuildSelectedModels` / `NormalizeSelectedModelsOnly` 即可。
+- 关联问题：平铺与导出分离；插件 2 交付须手动。
+
 ## 2026-07-31 — v1.2.9 打包重导 FBX 时保留已写入的 Mesh 顶点色
 
 - 原因：用户在 `Assets/Art/<模型>/Model` 上手动「顶点色设为全白」后，再选 Prefab Batch Build，Model 里顶点色又变回源数据。根因与贴图覆盖同类：打包链路 `ApplyModelImportSettings` / `ExtractAndBind` / 材质 remap / Local 校正会对交付区 FBX 多次 `SaveAndReimport`，Unity 从 FBX 二进制重建 Mesh 子资产，导入后改过的 `mesh.colors` 全部丢失。日志上贴图保护已生效（`保留已压缩 Art 贴图`），但顶点色此前无快照。

@@ -3,29 +3,31 @@ using UnityEditor;
 using UnityEngine;
 
 // =====================================================================================
-// 职责边界：
-//   只负责"这次要处理哪些贴图资产"，返回一串资产路径。
-//   不判断该不该处理（那是各操作的 CanProcess），也不执行任何处理。
-//
-// 从窗口里拆出来的原因：窗口只该管 GUI。范围收集涉及 Selection、文件夹递归、
-//   全工程搜索三套逻辑，混在 OnGUI 里会让"为什么这次少处理了一个文件"这种问题
-//   很难定位。
+// 职责边界：只负责"这次要处理哪些贴图资产"，返回资产路径列表。
 // =====================================================================================
 public static class TextureTargetCollector
 {
     public enum Scope
     {
-        /// <summary>Project 面板里当前选中的资产；选中文件夹时递归其下所有贴图。</summary>
+        /// <summary>Project 面板当前选中；选中文件夹时递归其下贴图。</summary>
         Selection,
 
-        /// <summary>指定一个文件夹，递归其下所有贴图。</summary>
+        /// <summary>窗口临时指定的单个文件夹。</summary>
         Folder,
 
-        /// <summary>整个工程的所有贴图。</summary>
-        WholeProject
+        /// <summary>子面板持久化的批量文件夹路径列表（总面板也只用这份）。</summary>
+        BatchByPath
     }
 
-    public static List<string> Collect(Scope scope, string folderAssetPath)
+    /// <summary>中文标签，供 EnumPopup 以外的下拉使用。</summary>
+    public static readonly string[] ScopeLabels =
+    {
+        "当前选中",
+        "指定文件夹",
+        "依据文件路径批量"
+    };
+
+    public static List<string> Collect(Scope scope, string folderAssetPath, IList<string> batchFolders)
     {
         if (scope == Scope.Selection)
         {
@@ -39,7 +41,14 @@ public static class TextureTargetCollector
                 : CollectFromFolders(new[] { folderAssetPath });
         }
 
-        return CollectFromFolders(new[] { "Assets" });
+        List<string> valid = ResourceBatchFolderStore.GetValidFolders(batchFolders);
+        return valid.Count == 0 ? new List<string>() : CollectFromFolders(valid.ToArray());
+    }
+
+    /// <summary>总面板：始终按批量路径收集，忽略子面板当前范围。</summary>
+    public static List<string> CollectFromBatchFolders()
+    {
+        return Collect(Scope.BatchByPath, null, ResourceBatchFolderStore.GetTextureFolders());
     }
 
     private static List<string> CollectFromSelection()
@@ -82,9 +91,11 @@ public static class TextureTargetCollector
     private static List<string> CollectFromFolders(string[] folderAssetPaths)
     {
         var result = new List<string>();
+        if (folderAssetPaths == null || folderAssetPaths.Length == 0)
+        {
+            return result;
+        }
 
-        // 用 t:Texture2D 过一遍，再按扩展名筛。只按扩展名遍历全工程文件会慢得多，
-        // 而只信 t:Texture2D 又会漏掉导入失败的文件——两个条件一起用最稳。
         foreach (string guid in AssetDatabase.FindAssets("t:Texture2D", folderAssetPaths))
         {
             string path = AssetDatabase.GUIDToAssetPath(guid);
