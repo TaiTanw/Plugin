@@ -1,12 +1,43 @@
 using System.Collections.Generic;
 using UnityEditor;
+using UnityEngine;
 
 // =====================================================================================
-// 模型后处理流程控制：只收集路径并交给 ImportPostProcessScheduler。
-// 真正执行在 Shared 调度器里（固定阶段：模型 → 贴图）。
+// 模型后处理流程控制：
+//   1) OnPostprocessAllAssets → 入队 ImportPostProcessScheduler（delayCall，模型→贴图）
+//   2) OnPostprocessModel → 在「每一次」模型导入结束时立刻跑 importAuto 操作
+//
+// 为何要有 (2)：
+//   顶点色改的是 Mesh 子资产。若同一次导入还触发了贴图后处理里的 Refresh，
+//   或其它原因导致 FBX 再导入，Mesh 会被源数据重建。仅靠 delayCall 一轮时，
+//   再导入往往落在 Scheduler.IsRunning==true 窗口内，入队被跳过，颜色就丢了。
+//   OnPostprocessModel 在每次（含重导）导入末尾执行，才能稳定留下全白顶点色。
 // =====================================================================================
 public class ModelSourceFileProcessor : AssetPostprocessor
 {
+    private void OnPostprocessModel(GameObject root)
+    {
+        if (!ResourceProcessSwitches.IsModelPostProcessEffective)
+        {
+            return;
+        }
+
+        ModelProcessSettings settings = ModelProcessSettings.Current;
+        if (!settings.IsSupportedModelExtension(assetPath) || settings.IsExcludedPath(assetPath))
+        {
+            return;
+        }
+
+        List<IModelAssetOperation> operations = ModelOperationRegistry.GetImportAutoOperations(settings);
+        if (operations.Count == 0)
+        {
+            return;
+        }
+
+        // 传入 root：OnPostprocessModel 时 LoadAllAssetsAtPath 常为空，必须从层级取 Mesh。
+        ModelOperationRunner.Run(operations, new[] { assetPath }, settings, true, root);
+    }
+
     private static void OnPostprocessAllAssets(
         string[] importedAssets,
         string[] deletedAssets,

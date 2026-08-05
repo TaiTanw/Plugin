@@ -86,11 +86,15 @@ TOol/
 **阶段顺序固定：模型 → 贴图**（为以后「材质驱动贴图派生」预留；v1 不做拖拽排序）。
 
 ```text
-OnPostprocessAllAssets
-  └─ *SourceFileProcessor 把路径 Enqueue（先看 Is*PostProcessEffective）
-        └─ delayCall → ImportPostProcessScheduler.RunPendingWork
-              ├─ RunModelPhase  → ModelOperationRunner
-              └─ RunTexturePhase → TextureOperationRunner
+模型导入结束（时序）
+  ├─ OnPreprocessModel          设置自动（External / 剔灯等）
+  ├─ OnPostprocessModel         后处理：用 ImportRoot 层级 Mesh 写顶点色
+  │                             （此时 LoadAllAssetsAtPath 常为空，不能只用库路径）
+  ├─ 抽出 .fbm 贴图 → OnPreprocessTexture …
+  └─ OnPostprocessAllAssets → delayCall
+        ├─ RunModelPhase   LoadAllAssetsAtPath 再刷一遍（补全未挂到 Renderer 的 Mesh）
+        │                  只 SaveAssets，不 Refresh
+        └─ RunTexturePhase 若 Refresh 导致 FBX 重导 → 再进 OnPostprocessModel 补刷
 ```
 
 ---
@@ -201,7 +205,7 @@ OnPostprocessAllAssets
 | 类 | 职能 |
 |----|------|
 | `ModelImportSettingsProcessor` | 设置自动：`materialLocation=External`、`materialName=BasedOnMaterialName`、剔灯光摄像机等；**跳过 Art**。 |
-| `ModelSourceFileProcessor` | 导入后把模型路径交给 Scheduler。 |
+| `ModelSourceFileProcessor` | `OnPostprocessModel` 立刻跑 importAuto；`OnPostprocessAllAssets` 入队 Scheduler。 |
 
 ### 7.4 Window
 

@@ -12,6 +12,19 @@ public static class ModelOperationRunner
         ModelProcessSettings settings,
         bool triggeredByImport)
     {
+        return Run(operations, assetPaths, settings, triggeredByImport, null);
+    }
+
+    /// <param name="importRoot">
+    /// OnPostprocessModel 传入的根节点；非 null 时写入 Context.ImportRoot，供顶点色等操作在库未就绪时从层级取 Mesh。
+    /// </param>
+    public static ModelOperationRunSummary Run(
+        IList<IModelAssetOperation> operations,
+        IList<string> assetPaths,
+        ModelProcessSettings settings,
+        bool triggeredByImport,
+        GameObject importRoot)
+    {
         var summary = new ModelOperationRunSummary();
         List<PendingWork> pendingWork = CollectPendingWork(operations, assetPaths, settings);
         if (pendingWork.Count == 0)
@@ -26,7 +39,7 @@ public static class ModelOperationRunner
 
         try
         {
-            ExecuteAll(pendingWork, settings, triggeredByImport, summary);
+            ExecuteAll(pendingWork, settings, triggeredByImport, summary, importRoot);
         }
         finally
         {
@@ -35,8 +48,11 @@ public static class ModelOperationRunner
 
         if (summary.ChangedCount > 0)
         {
+            // 只 Save，不要 Refresh。
+            // Refresh 会让 ModelImporter 从 FBX 二进制重建 Mesh，刚写入的顶点色被清掉；
+            // 且此时若处在 ImportPostProcessScheduler.IsRunning 中，OnPostprocessAllAssets
+            // 会拒收入队，无法再跑第二遍——表现为「导入自动顶点色完全没生效」。
             AssetDatabase.SaveAssets();
-            AssetDatabase.Refresh();
         }
 
         LogSummary(summary, triggeredByImport);
@@ -79,7 +95,8 @@ public static class ModelOperationRunner
         List<PendingWork> pendingWork,
         ModelProcessSettings settings,
         bool triggeredByImport,
-        ModelOperationRunSummary summary)
+        ModelOperationRunSummary summary,
+        GameObject importRoot)
     {
         for (int i = 0; i < pendingWork.Count; i++)
         {
@@ -104,7 +121,8 @@ public static class ModelOperationRunner
                 return;
             }
 
-            var context = new ModelOperationContext(work.AssetPath, settings, triggeredByImport, subProgress);
+            var context = new ModelOperationContext(
+                work.AssetPath, settings, triggeredByImport, subProgress, importRoot);
             ModelOperationResult result;
             try
             {
