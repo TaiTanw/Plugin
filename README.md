@@ -4,7 +4,8 @@ Unity Editor 插件集合，用于模型/贴图的**导入期处理**与**交付
 适用环境：Unity 2020.3（Built-in RP）、Windows Editor。
 
 远程仓库：`http://swm-server.local:3000/Hanson/asset-bundle.git`  
-当前稳定版：**v1.3.2**（`other` 分支 / 标签 `v1.3.2`）
+当前完全版：**v1.3.5**（`other` 分支 / 标签 `v1.3.5`，全流程支持）  
+历史测试版标签：`v1.3.2-test`（不推荐新交付）
 
 ---
 
@@ -12,7 +13,7 @@ Unity Editor 插件集合，用于模型/贴图的**导入期处理**与**交付
 
 | 目录 | 定位 | 菜单入口 |
 |------|------|----------|
-| [`TOol/`](./TOol/) | 导入期设置 + 源文件/模型后处理（压缩贴图、顶点色等） | `Tools > 资源处理总面板` |
+| [`TOol/`](./TOol/) | 批量 FBX 入库；导入期设置 + 源文件/模型后处理 | `Tools > 批量FBX导入`；`Tools > 资源处理总面板` |
 | [`RetinarBatchBuilder_Share/`](./RetinarBatchBuilder_Share/) | 交付打包：平铺 Art → 手动处理 → 导出 | `Tools > Retinar > 平铺到 Art` / `从 Art 导出交付物` / `打开交付文件夹` |
 
 **目录边界：** 自动处理流默认不碰 `Assets/Art/**`（交付产物区由打包工具管理）。两边不得同时改同一 Importer 属性。详见 [`RetinarBatchBuilder_Share/PACKAGING_RULES.md`](./RetinarBatchBuilder_Share/PACKAGING_RULES.md) 规则 33。
@@ -21,12 +22,12 @@ Unity Editor 插件集合，用于模型/贴图的**导入期处理**与**交付
 
 ## 快速使用
 
-### TOol（资源处理）
+### TOol（资源处理，v1.3.5）
 
 1. 将本仓库置于 Unity 工程的 `Assets/Plugin`（或保持现有工程路径）。
-2. 等待编译通过，打开 **`Tools > 资源处理总面板`**。
-3. 用总开关 / 设置自动 / 后处理自动控制导入行为；也可在贴图/模型子面板手动执行。
-4. 配置资产：`TOol/ConfigData/TextureProcessSettings.asset`、`ModelProcessSettings.asset`。
+2. （可选）**`Tools > 批量FBX导入`**：外部目录批量入库导入区（不建 Prefab）。
+3. 打开 **`Tools > 资源处理总面板`**：总开关 / 设置自动 / 后处理自动，或手动/总批量执行。
+4. 配置资产：`TextureProcessSettings`、`ModelProcessSettings`、`BatchFbxImportSettings`。
 
 说明文档：
 
@@ -52,11 +53,11 @@ Unity Editor 插件集合，用于模型/贴图的**导入期处理**与**交付
 ## 推荐工作流（两端配合）
 
 ```text
-导入 FBX / 贴图
-    → TOol：设置自动（导入区）；交付相关处理建议手动
-    → 场景中人工调材质 / Prefab
+外部 FBX → Tools > 批量FBX导入（入库导入区）
+    → TOol：设置自动（导入区）
+    → 场景中人工调材质 / 保存 Prefab（交付名以此为准）
     → Retinar：平铺到 Art
-    → TOol：平铺后手动总批量（贴图→模型）或分项执行（压 Art 贴图、刷顶点色）
+    → TOol：总批量或分项（压 Art 贴图、刷顶点色）
     → Retinar：从 Art 导出交付物（全部或选中）
     → 空工程或真机验收
 ```
