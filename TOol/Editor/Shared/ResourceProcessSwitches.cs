@@ -26,6 +26,8 @@ public static class ResourceProcessSwitches
     private const string TexturePostProcessKey = "TOol.Switch.Texture.PostProcessAuto";
     private const string ModelSettingsKey = "TOol.Switch.Model.SettingsAuto";
     private const string ModelPostProcessKey = "TOol.Switch.Model.PostProcessAuto";
+    private const string MasterBatchIncludeTextureKey = "TOol.Switch.MasterBatch.IncludeTexture";
+    private const string MasterBatchIncludeModelKey = "TOol.Switch.MasterBatch.IncludeModel";
     private const string MigratedKey = "TOol.Switch.MigratedFromLegacy";
 
     private static bool? masterEnabled;
@@ -33,6 +35,8 @@ public static class ResourceProcessSwitches
     private static bool? texturePostProcessAuto;
     private static bool? modelSettingsAuto;
     private static bool? modelPostProcessAuto;
+    private static bool? masterBatchIncludeTexture;
+    private static bool? masterBatchIncludeModel;
 
     /// <summary>总开关。默认 true。关闭后所有导入设置自动与后处理自动均不执行。</summary>
     public static bool MasterEnabled
@@ -63,6 +67,20 @@ public static class ResourceProcessSwitches
     {
         get { return Get(ref modelPostProcessAuto, ModelPostProcessKey, false); }
         set { Set(ref modelPostProcessAuto, ModelPostProcessKey, value); }
+    }
+
+    /// <summary>总面板「执行全部」是否跑贴图批量。默认 true；不影响分项按钮。</summary>
+    public static bool MasterBatchIncludeTexture
+    {
+        get { return Get(ref masterBatchIncludeTexture, MasterBatchIncludeTextureKey, true); }
+        set { Set(ref masterBatchIncludeTexture, MasterBatchIncludeTextureKey, value); }
+    }
+
+    /// <summary>总面板「执行全部」是否跑模型批量。默认 true；不影响分项按钮。</summary>
+    public static bool MasterBatchIncludeModel
+    {
+        get { return Get(ref masterBatchIncludeModel, MasterBatchIncludeModelKey, true); }
+        set { Set(ref masterBatchIncludeModel, MasterBatchIncludeModelKey, value); }
     }
 
     public static bool IsTextureSettingsEffective

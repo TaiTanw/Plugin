@@ -45,7 +45,13 @@ public static class TextureOperationRunner
             // 留一条可诊断信息，让人知道是"操作不适用"而不是"没点到"。
             if (operations != null && operations.Count > 0 && assetPaths != null && assetPaths.Count > 0)
             {
-                Debug.LogWarning("[贴图处理] 命中 " + assetPaths.Count + " 张贴图，但对当前勾选的操作都不适用（CanProcess 全否），未执行任何处理。");
+                // 导入自动：重开工程常入队大量已达标贴图，CanProcess 全否属预期，勿 Warning 刷屏。
+                // 手动执行仍提示，避免误以为点了却没反应。
+                if (!triggeredByImport)
+                {
+                    Debug.LogWarning("[贴图处理] 命中 " + assetPaths.Count +
+                        " 张贴图，但对当前勾选的操作都不适用（CanProcess 全否），未执行任何处理。");
+                }
             }
 
             return summary;

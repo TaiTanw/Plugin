@@ -29,9 +29,12 @@ public static class ModelOperationRunner
         List<PendingWork> pendingWork = CollectPendingWork(operations, assetPaths, settings);
         if (pendingWork.Count == 0)
         {
-            if (assetPaths != null && assetPaths.Count > 0)
+            if (!triggeredByImport &&
+                operations != null && operations.Count > 0 &&
+                assetPaths != null && assetPaths.Count > 0)
             {
-                Debug.LogWarning("[模型处理] 命中 " + assetPaths.Count + " 个模型，但对当前勾选的操作都不适用，未执行。");
+                Debug.LogWarning("[模型处理] 命中 " + assetPaths.Count +
+                    " 个模型，但对当前勾选的操作都不适用，未执行。");
             }
 
             return summary;

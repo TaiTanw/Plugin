@@ -18,6 +18,8 @@
 - [ ] 含内嵌大贴图的模型（如曾超标的 `Plane_Jian31` / `Plane_WuZhi10w`）：验证「平铺 → 压 Art 贴图 → 导出」两遍流程。
 - [ ] 导入区仍残留同名 `.fbm` 的模型：验证第二遍打包后 Prefab 依赖不再指向导入区 `.fbm`。
 
+
+
 ## 二、自动阻断项
 
 - [ ] Unity 正在编译或存在红色编译错误时不得打包。
@@ -38,6 +40,8 @@
 - [ ] 导入插件（`TOol`）的总开关处于开启状态时**平铺/导出**，`Assets/Art/<模型>/Model` 下仍不得出现 `Materials/` 或 `<FBX名>.fbm`。
 - [ ] 交付区 Model 的 `materialSearch` 为 Local；`GetDependencies(Prefab)` 不得再出现 `Assets/` 下 Art 以外的 `*.fbm/*` 贴图路径。
 
+
+
 ## 三、贴图回归
 
 - [ ] Unity TextureImporter `Max Size/Compression` 与原 PNG/JPG 文件体积分开报告。
@@ -54,7 +58,7 @@
 - [ ] **两遍流程（内嵌贴图）**：
   1. 第一遍打包后 Art/Texture 可暂时超标；
   2. 只压 `Assets/Art/<模型>/Texture/` 下超标文件（确认结果区路径，且不得选 `.fbm`）；
-  3. 不删 Art，第二遍打包后磁盘体积与报告均保持 &lt; 5MB OK。
+  3. 不删 Art，第二遍打包后磁盘体积与报告均保持 < 5MB OK。
 - [ ] 第二遍打包 Console 允许出现「恢复 N 张更小的 Art 贴图」或「SyncNewer 跳过（保留更小的 Art 贴图）」；**不得**在无恢复日志的情况下体积又回到超标。
 - [ ] 开着导入插件拖入含内嵌贴图的 FBX：`<FBX名>.fbm` 里的贴图必须保持原始尺寸不被改写，且模型材质不得丢失；手动压 `.fbm` 应被 Skip 并提示改压 Art。
 - [ ] 导入插件生成的外部 `.mat` 数量必须等于 FBX 里的材质数量；模型在 Scene/Inspector 中不得出现紫色材质槽。
@@ -62,6 +66,8 @@
 - [ ] Extract/remap 自愈开启时，压缩后再打包仍不得把 Art 贴图盖回大图（与外部 `.fbm` 切断可同时成立）。
 - [ ] **顶点色**：对 `Art/Model` FBX 手动「顶点色设为全白」后，不删 Art、选 Prefab 再**导出**；Model 子 Mesh 顶点色须仍为白。Console 可出现「SaveAndReimport 后已恢复 Mesh 顶点色」，或因无外部 `.fbm` 而跳过 Extract。
 - [ ] **菜单拆分**：`Tools/Retinar` 见「平铺到 Art」「从 Art 导出交付物」子菜单（全部 / 选中）、「打开交付文件夹」；无 Batch Build。选导入区 Prefab 点「导出选中」应警告跳过；「导出 Art 全部」不依赖选中。
+
+
 
 ## 四、动画与交互回归
 
@@ -71,6 +77,8 @@
 - [ ] Lua `OnClick` 等函数必须有平台事件或 C# 显式调用，不得只因函数存在就宣称可触发。
 - [ ] 带 XLua/DOTween/RichWidget 的包必须生成 `runtime_requirements.txt`。
 - [ ] AB 显示模型不代表交互已验收，必须在匹配 Runtime 中实际触发。
+
+
 
 ## 五、输出与回归验收
 
@@ -83,31 +91,10 @@
 - [ ] 发布分享包前必须更新 `CHANGELOG.md`、`PACKAGING_RULES.md` 和本检查表。
 - [ ] `RetinarBatchBuilder_Share.zip` 必须在最后一次代码/文档修改后重新生成。
 
+
+
 ## 六、GLB 边界
 
 - [ ] GLB 不得直接并入当前核心打包工具。
 - [ ] GLB 必须在独立转换工程中，从已验收 UnityPackage 的最终 Prefab 导出。
 - [ ] GLB 只是派生交换文件，不得替代原 FBX、UnityPackage 或 AB。
-
-## 七、问题回溯要求
-
-每次发现新问题必须记录：
-
-- 发现日期与 Unity 版本。
-- 模型类型，不得将通用问题记为某个机型特例。
-- 用户操作步骤、实际结果和期望结果。
-- 根因、修复位置、影响范围和回退方式。
-- 自动阻断条件与人工回归步骤。
-- 首次打包、重复打包、UnityPackage 导入、AB 加载和手机端结果。
-
-没有回归记录和检查结果的修改，不得发布为正式分享版。
-
-## 八、近期贴图相关问题速查（操作 ↔ 期望）
-
-| 步骤 | 错误做法 | 正确做法 / 期望 |
-|------|----------|-----------------|
-| 压缩对象 | 选中 `Assets/**/xxx.fbm/*.tga` | 选中 `Assets/Art/<模型>/Texture/` 下同名文件 |
-| 看是否超标 | 只看分辨率或 Inspector | 看磁盘 MB 与 `texture_size_report.txt` 的 Source File Size |
-| 第二遍打包前 | 删除整个 `Assets/Art/<模型>/` | 保留 Art，直接再打（否则等于从头抽大图） |
-| 第二遍后体积又大 | 以为工具没压上 | v1.2.8 前是 Extract/SyncNewer 覆盖；现应有恢复/跳过日志且体积保持小 |
-| 弹窗 Texture issue | 以为扫错路径 | 打开报告看具体文件名；常见是单张略超 5MB |

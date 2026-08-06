@@ -1,12 +1,13 @@
 using System.Collections.Generic;
+using System.Text;
 using UnityEditor;
 using UnityEngine;
 
 // =====================================================================================
 // 资源处理总面板：唯一菜单入口。
-//   - 总开关 + 贴图/模型【设置自动】【后处理自动】（本机 EditorPrefs）
-//   - 按子面板批量路径手动执行（与子面板当前范围下拉无关）
-//   - 打开贴图 / 模型子面板
+//   - 总开关 + 贴图/模型【设置自动】【后处理自动】
+//   - 总批量执行（模型→贴图）+ 各类「是否纳入总批量」开关
+//   - 分项按批量路径执行；打开子面板
 // =====================================================================================
 public class ResourceProcessWindow : EditorWindow
 {
@@ -16,7 +17,7 @@ public class ResourceProcessWindow : EditorWindow
     [MenuItem("Tools/资源处理总面板")]
     public static void ShowWindow()
     {
-        GetWindow<ResourceProcessWindow>("资源处理").minSize = new Vector2(460f, 420f);
+        GetWindow<ResourceProcessWindow>("资源处理").minSize = new Vector2(460f, 460f);
     }
 
     private void OnGUI()
@@ -48,6 +49,8 @@ public class ResourceProcessWindow : EditorWindow
                 }
             }
 
+            DrawMasterBatchSection();
+
             DrawResourceBlock(
                 "贴图",
                 () => ResourceProcessSwitches.TextureSettingsAuto,
@@ -55,7 +58,11 @@ public class ResourceProcessWindow : EditorWindow
                 () => ResourceProcessSwitches.TexturePostProcessAuto,
                 v => ResourceProcessSwitches.TexturePostProcessAuto = v,
                 TextureToolWindow.ShowWindow,
-                RunTextureBatch,
+                () =>
+                {
+                    lastBatchMessage = RunTextureBatchCore();
+                    Repaint();
+                },
                 ResourceBatchFolderStore.GetTextureFolders());
 
             DrawResourceBlock(
@@ -65,7 +72,11 @@ public class ResourceProcessWindow : EditorWindow
                 () => ResourceProcessSwitches.ModelPostProcessAuto,
                 v => ResourceProcessSwitches.ModelPostProcessAuto = v,
                 ModelToolWindow.ShowWindow,
-                RunModelBatch,
+                () =>
+                {
+                    lastBatchMessage = RunModelBatchCore();
+                    Repaint();
+                },
                 ResourceBatchFolderStore.GetModelFolders());
 
             if (!string.IsNullOrEmpty(lastBatchMessage))
@@ -93,7 +104,98 @@ public class ResourceProcessWindow : EditorWindow
         }
     }
 
-    private void DrawResourceBlock(
+    private void DrawMasterBatchSection()
+    {
+        EditorGUILayout.Space(8f);
+        EditorGUILayout.LabelField("手动总批量（用子面板批量路径）", EditorStyles.boldLabel);
+        using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
+        {
+            EditorGUILayout.HelpBox(
+                "顺序固定：模型 → 贴图。下方「纳入总批量」只影响本按钮，不影响各资源块的分项执行。\n" +
+                "某类已纳入但批量路径为空时会 Warning 并跳过该类。",
+                MessageType.None);
+
+            bool includeModel = EditorGUILayout.ToggleLeft(
+                "总批量纳入模型", ResourceProcessSwitches.MasterBatchIncludeModel);
+            if (includeModel != ResourceProcessSwitches.MasterBatchIncludeModel)
+            {
+                ResourceProcessSwitches.MasterBatchIncludeModel = includeModel;
+            }
+
+            bool includeTexture = EditorGUILayout.ToggleLeft(
+                "总批量纳入贴图", ResourceProcessSwitches.MasterBatchIncludeTexture);
+            if (includeTexture != ResourceProcessSwitches.MasterBatchIncludeTexture)
+            {
+                ResourceProcessSwitches.MasterBatchIncludeTexture = includeTexture;
+            }
+
+            bool anyIncluded = ResourceProcessSwitches.MasterBatchIncludeModel ||
+                               ResourceProcessSwitches.MasterBatchIncludeTexture;
+            using (new EditorGUI.DisabledScope(!anyIncluded))
+            {
+                if (GUILayout.Button("按批量路径执行全部（模型→贴图）", GUILayout.Height(30f)))
+                {
+                    RunMasterBatch();
+                }
+            }
+
+            if (!anyIncluded)
+            {
+                EditorGUILayout.HelpBox("两类均未纳入总批量，按钮已禁用。", MessageType.Info);
+            }
+        }
+    }
+
+    private void RunMasterBatch()
+    {
+        var report = new StringBuilder();
+        report.AppendLine("[总批量] 开始（模型→贴图）");
+
+        if (ResourceProcessSwitches.MasterBatchIncludeModel)
+        {
+            List<string> modelFolders = ResourceBatchFolderStore.GetValidFolders(
+                ResourceBatchFolderStore.GetModelFolders());
+            if (modelFolders.Count == 0)
+            {
+                string warn = "[总批量] 模型已纳入，但批量路径为空，已跳过。请在模型子面板配置「依据文件路径批量」。";
+                Debug.LogWarning(warn);
+                report.AppendLine(warn);
+            }
+            else
+            {
+                report.AppendLine(RunModelBatchCore());
+            }
+        }
+        else
+        {
+            report.AppendLine("[总批量] 已跳过模型（未纳入）。");
+        }
+
+        if (ResourceProcessSwitches.MasterBatchIncludeTexture)
+        {
+            List<string> textureFolders = ResourceBatchFolderStore.GetValidFolders(
+                ResourceBatchFolderStore.GetTextureFolders());
+            if (textureFolders.Count == 0)
+            {
+                string warn = "[总批量] 贴图已纳入，但批量路径为空，已跳过。请在贴图子面板配置「依据文件路径批量」。";
+                Debug.LogWarning(warn);
+                report.AppendLine(warn);
+            }
+            else
+            {
+                report.AppendLine(RunTextureBatchCore());
+            }
+        }
+        else
+        {
+            report.AppendLine("[总批量] 已跳过贴图（未纳入）。");
+        }
+
+        lastBatchMessage = report.ToString().TrimEnd();
+        Repaint();
+    }
+
+    private static void DrawResourceBlock(
         string title,
         System.Func<bool> getSettings,
         System.Action<bool> setSettings,
@@ -157,57 +259,54 @@ public class ResourceProcessWindow : EditorWindow
         }
     }
 
-    private void RunTextureBatch()
+    private static string RunTextureBatchCore()
     {
         List<string> targets = TextureTargetCollector.CollectFromBatchFolders();
         List<ITextureAssetOperation> operations = ResourceManualOperationStore.CollectSelectedTextureOperations();
         if (operations.Count == 0)
         {
-            lastBatchMessage = "[贴图] 没有勾选任何手动操作（请在贴图子面板勾选）。";
-            Debug.LogWarning(lastBatchMessage);
-            return;
+            string msg = "[贴图] 没有勾选任何手动操作（请在贴图子面板勾选）。";
+            Debug.LogWarning(msg);
+            return msg;
         }
 
         if (targets.Count == 0)
         {
-            lastBatchMessage = "[贴图] 批量路径下没有命中贴图。";
-            Debug.LogWarning(lastBatchMessage);
-            return;
+            string msg = "[贴图] 批量路径下没有命中贴图。";
+            Debug.LogWarning(msg);
+            return msg;
         }
 
         TextureProcessSettings settings = TextureProcessSettings.GetOrCreateAsset();
         TextureOperationRunSummary summary = TextureOperationRunner.Run(operations, targets, settings, false);
-        lastBatchMessage = FormatTextureSummary(summary, targets.Count);
-        Repaint();
+        return FormatTextureSummary(summary, targets.Count);
     }
 
-    private void RunModelBatch()
+    private static string RunModelBatchCore()
     {
         List<string> targets = ModelTargetCollector.CollectFromBatchFolders();
         List<IModelAssetOperation> operations = ResourceManualOperationStore.CollectSelectedModelOperations();
         if (operations.Count == 0)
         {
-            lastBatchMessage = "[模型] 没有勾选任何手动操作（请在模型子面板勾选）。";
-            Debug.LogWarning(lastBatchMessage);
-            return;
+            string msg = "[模型] 没有勾选任何手动操作（请在模型子面板勾选）。";
+            Debug.LogWarning(msg);
+            return msg;
         }
 
         if (targets.Count == 0)
         {
-            lastBatchMessage = "[模型] 批量路径下没有命中模型。";
-            Debug.LogWarning(lastBatchMessage);
-            return;
+            string msg = "[模型] 批量路径下没有命中模型。";
+            Debug.LogWarning(msg);
+            return msg;
         }
 
         ModelProcessSettings settings = ModelProcessSettings.GetOrCreateAsset();
         ModelOperationRunSummary summary = ModelOperationRunner.Run(operations, targets, settings, false);
-        lastBatchMessage =
-            "[模型] 批量完成：目标 " + targets.Count +
-            "，改动 " + summary.ChangedCount +
-            "，跳过 " + summary.SkippedCount +
-            "，失败 " + summary.FailedCount +
-            (summary.Canceled ? "（已取消）" : string.Empty);
-        Repaint();
+        return "[模型] 批量完成：目标 " + targets.Count +
+               "，改动 " + summary.ChangedCount +
+               "，跳过 " + summary.SkippedCount +
+               "，失败 " + summary.FailedCount +
+               (summary.Canceled ? "（已取消）" : string.Empty);
     }
 
     private static string FormatTextureSummary(TextureOperationRunSummary summary, int targetCount)
