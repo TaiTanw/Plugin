@@ -9,7 +9,7 @@ using UnityEngine;
 public class ModelToolWindow : EditorWindow
 {
     private ModelProcessSettings settings;
-    private Editor settingsInspector;
+    private SerializedObject settingsSerialized;
     private ModelTargetCollector.Scope scope = ModelTargetCollector.Scope.Selection;
     private DefaultAsset targetFolder;
     private List<string> batchFolders = new List<string>();
@@ -44,11 +44,7 @@ public class ModelToolWindow : EditorWindow
     private void OnDisable()
     {
         ResourceBatchFolderStore.SetModelFolders(batchFolders);
-        if (settingsInspector != null)
-        {
-            DestroyImmediate(settingsInspector);
-            settingsInspector = null;
-        }
+        settingsSerialized = null;
     }
 
     private void OnGUI()
@@ -80,17 +76,7 @@ public class ModelToolWindow : EditorWindow
         using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
         {
             EditorGUILayout.ObjectField(settings, typeof(ModelProcessSettings), false);
-            if (settingsInspector == null || settingsInspector.target != settings)
-            {
-                if (settingsInspector != null)
-                {
-                    DestroyImmediate(settingsInspector);
-                }
-
-                settingsInspector = Editor.CreateEditor(settings);
-            }
-
-            settingsInspector.OnInspectorGUI();
+            ScriptableObjectSettingsGui.Draw(settings, ref settingsSerialized);
             if (GUI.changed)
             {
                 EditorUtility.SetDirty(settings);

@@ -6,7 +6,7 @@ using UnityEngine;
 // =====================================================================================
 // 资源处理总面板：自动化与后处理批量入口。
 //   - 总开关 + 贴图/模型【设置自动】【后处理自动】
-//   - 总批量执行（模型→贴图）+ 各类「是否纳入总批量」开关
+//   - 总批量执行（贴图→模型，平铺后手动）+ 各类「是否纳入总批量」开关
 //   - 分项按批量路径执行；打开子面板；可跳转批量 FBX 入库
 // =====================================================================================
 public class ResourceProcessWindow : EditorWindow
@@ -32,7 +32,8 @@ public class ResourceProcessWindow : EditorWindow
                 "设置自动：导入前改 Importer（导入区建议按需开启）。\n" +
                 "后处理自动：导入后跑 Operation——不保证交付生效（Art 被排除；" +
                 "内嵌贴图/顶点色须平铺后再到贴图·模型面板或总面板批量路径手动处理）。默认请保持关闭。\n" +
-                "后处理阶段顺序：模型 → 贴图。",
+                "导入后处理自动阶段：模型 → 贴图。\n" +
+                "平铺后手动总批量：贴图 → 模型（避免贴图收尾冲掉顶点色）。",
                 MessageType.Info);
 
             using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
@@ -130,7 +131,8 @@ public class ResourceProcessWindow : EditorWindow
         using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
         {
             EditorGUILayout.HelpBox(
-                "顺序固定：模型 → 贴图。下方「纳入总批量」只影响本按钮，不影响各资源块的分项执行。\n" +
+                "平铺后手动总批量，顺序固定：贴图 → 模型。\n" +
+                "下方「纳入总批量」只影响本按钮，不影响各资源块的分项执行。\n" +
                 "某类已纳入但批量路径为空时会 Warning 并跳过该类。",
                 MessageType.None);
 
@@ -152,7 +154,7 @@ public class ResourceProcessWindow : EditorWindow
                                ResourceProcessSwitches.MasterBatchIncludeTexture;
             using (new EditorGUI.DisabledScope(!anyIncluded))
             {
-                if (GUILayout.Button("按批量路径执行全部（模型→贴图）", GUILayout.Height(30f)))
+                if (GUILayout.Button("按批量路径执行全部（贴图→模型）", GUILayout.Height(30f)))
                 {
                     RunMasterBatch();
                 }
@@ -168,7 +170,28 @@ public class ResourceProcessWindow : EditorWindow
     private void RunMasterBatch()
     {
         var report = new StringBuilder();
-        report.AppendLine("[总批量] 开始（模型→贴图）");
+        report.AppendLine("[总批量] 开始（贴图→模型，平铺后手动）");
+
+        // 平铺后：先贴图后模型。贴图若 Refresh/重导会冲 Mesh 顶点色；模型放最后写入更稳。
+        if (ResourceProcessSwitches.MasterBatchIncludeTexture)
+        {
+            List<string> textureFolders = ResourceBatchFolderStore.GetValidFolders(
+                ResourceBatchFolderStore.GetTextureFolders());
+            if (textureFolders.Count == 0)
+            {
+                string warn = "[总批量] 贴图已纳入，但批量路径为空，已跳过。请在贴图子面板配置「依据文件路径批量」。";
+                Debug.LogWarning(warn);
+                report.AppendLine(warn);
+            }
+            else
+            {
+                report.AppendLine(RunTextureBatchCore());
+            }
+        }
+        else
+        {
+            report.AppendLine("[总批量] 已跳过贴图（未纳入）。");
+        }
 
         if (ResourceProcessSwitches.MasterBatchIncludeModel)
         {
@@ -188,26 +211,6 @@ public class ResourceProcessWindow : EditorWindow
         else
         {
             report.AppendLine("[总批量] 已跳过模型（未纳入）。");
-        }
-
-        if (ResourceProcessSwitches.MasterBatchIncludeTexture)
-        {
-            List<string> textureFolders = ResourceBatchFolderStore.GetValidFolders(
-                ResourceBatchFolderStore.GetTextureFolders());
-            if (textureFolders.Count == 0)
-            {
-                string warn = "[总批量] 贴图已纳入，但批量路径为空，已跳过。请在贴图子面板配置「依据文件路径批量」。";
-                Debug.LogWarning(warn);
-                report.AppendLine(warn);
-            }
-            else
-            {
-                report.AppendLine(RunTextureBatchCore());
-            }
-        }
-        else
-        {
-            report.AppendLine("[总批量] 已跳过贴图（未纳入）。");
         }
 
         lastBatchMessage = report.ToString().TrimEnd();

@@ -1,7 +1,7 @@
 # TOol（插件 2）结构说明
 
 版本：1.3  
-最近同步：2026-08-06（批量 FBX 导入面板：入库-only，交付名仍以 Prefab 为准）  
+最近同步：2026-08-06（总批量贴图→模型；贴图 Runner 禁止 Refresh 冲顶点色）  
 适用：Unity 2020.3 Editor；与 `RetinarBatchBuilder_Share`（插件 1）配合使用。
 
 本文说明目录层级、类职责、自动化两层语义，以及和打包工具的边界。便于扩展新 Operation / 新资源类型时对照。
@@ -116,10 +116,11 @@ TOol/
 4. 路径 **不在** `excludedPathPrefixes`（默认 `Assets/Art/`）；
 5. 对贴图：还不在 `.fbm` 内（压缩会 Skip）。
 
-**阶段顺序固定：模型 → 贴图**（为以后「材质驱动贴图派生」预留；v1 不做拖拽排序）。
+**导入后处理自动阶段顺序：模型 → 贴图**（为以后「材质驱动贴图派生」预留；v1 不做拖拽排序）。  
+**平铺后手动总批量顺序：贴图 → 模型**（先压 Art 贴图，再写顶点色；避免贴图收尾冲掉 Mesh）。
 
 ```text
-模型导入结束（时序）
+模型导入结束（时序，导入区自动）
   ├─ OnPreprocessModel          设置自动（External / 剔灯等）
   ├─ OnPostprocessModel         后处理：用 ImportRoot 层级 Mesh 写顶点色
   │                             （此时 LoadAllAssetsAtPath 常为空，不能只用库路径）
@@ -127,7 +128,14 @@ TOol/
   └─ OnPostprocessAllAssets → delayCall
         ├─ RunModelPhase   LoadAllAssetsAtPath 再刷一遍（补全未挂到 Renderer 的 Mesh）
         │                  只 SaveAssets，不 Refresh
-        └─ RunTexturePhase 若 Refresh 导致 FBX 重导 → 再进 OnPostprocessModel 补刷
+        └─ RunTexturePhase 只 SaveAssets，不 Refresh（Refresh 会重导 FBX 冲顶点色）
+```
+
+平铺后手动（总面板「按批量路径执行全部」）：
+
+```text
+贴图批量（压 Art/Texture 等）→ 只 SaveAssets
+  → 模型批量（顶点色全白等）→ 只 SaveAssets
 ```
 
 ---
@@ -166,7 +174,7 @@ TOol/
 | 类                              | 职能                                                                   |
 | ------------------------------ | -------------------------------------------------------------------- |
 | `ResourceProcessSwitches`      | **总开关** + 四路分项（EditorPrefs）。提供 `Is*Effective` 供 Import/Scheduler 门控。 |
-| `ImportPostProcessScheduler`   | 后处理唯一调度：入队、delayCall、防重入 `IsRunning`、模型→贴图两阶段。                       |
+| `ImportPostProcessScheduler`   | 导入区后处理调度：入队、delayCall、防重入 `IsRunning`、**模型→贴图**两阶段（与平铺后总批量顺序不同）。 |
 | `ResourceBatchFolderStore`     | 贴图/模型「批量文件夹路径」列表（EditorPrefs）；总面板批量执行只读这份。                         |
 | `ResourceManualOperationStore` | 手动勾选哪些 Operation（子面板与总面板共用，默认勾选）。                                   |
 | `ResourceBatchFolderListGui`   | 批量路径列表增减 GUI。                                                        |
@@ -214,7 +222,7 @@ TOol/
 | `TextureOperationRegistry`                              | 反射发现全部 Operation；按 Settings 筛「导入自动」集合                 |
 | `TextureOperationContext`                               | 当前资产路径、Settings、进度回调、是否导入触发                           |
 | `TextureOperationResult` / `TextureOperationRunSummary` | 成功/跳过/失败 + 批量汇总                                       |
-| `TextureOperationRunner`                                | 筛工作项、进度条、调用 Execute、打汇总日志                             |
+| `TextureOperationRunner`                                | 筛工作项、进度条、调用 Execute、打汇总日志；有改动只 **SaveAssets，禁止 Refresh**（避免冲 Mesh 顶点色） |
 | `ShrinkTextureSourceOperation`                          | **压缩超标源文件**（`shrink_source_file`）。跳过 `.fbm`。二的幂走对折阶梯。 |
 | `ConvertTgaToPngOperation`                              | TGA → PNG                                             |
 | `BakeLuminanceToAlphaOperation`                         | 亮度写入 Alpha（玻璃/裁切类需求）                                  |
@@ -301,7 +309,7 @@ TOol/
 
 | 类                       | 职能                                                                 |
 | ----------------------- | ------------------------------------------------------------------ |
-| `ResourceProcessWindow` | 总开关 + 四路分项 + **总批量（模型→贴图，可关纳入）** + 分项批量 + 打开子面板。 |
+| `ResourceProcessWindow` | 总开关 + 四路分项 + **总批量（平铺后：贴图→模型，可关纳入）** + 分项批量 + 打开子面板。 |
 
 
 旧菜单（独立「贴图处理工具」「SwitchManager」等）已移除，避免双入口行为不一致。
@@ -329,11 +337,11 @@ TOol/
 （可选）批量 FBX 导入 → 导入区（插件 2 设置/后处理自动）
   → 人工调材质并保存 Prefab（改名为交付名）
   → 插件 1「平铺到 Art」
-  → 插件 2 手动/总面板（压 Art 贴图、刷顶点色）
+  → 插件 2 手动/总面板（平铺后：先压 Art 贴图 → 再刷顶点色）
   → 插件 1「从 Art 导出交付物」（全部 / 选中 Prefab）
 ```
 
-已移除一键 Batch Build。总面板批量执行 = 子面板批量路径 + 手动勾选 Operation。
+已移除一键 Batch Build。总面板批量执行 = 子面板批量路径 + 手动勾选 Operation；**平铺后顺序为贴图→模型**。
 
 ### 9.1–9.3 摘要
 

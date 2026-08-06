@@ -226,9 +226,9 @@ public static class TextureOperationRunner
     // ---------------------------------------------------------------------------
 
     /// <summary>
-    /// 兜底的统一保存刷新。各个操作已经在自己内部对改动过的资产调过 ImportAsset，
-    /// 这里再收一次是为了覆盖"操作里新建/删除了资产"这类需要整体刷新的情况。
-    /// 没有任何改动时不刷新，避免白白触发一次全工程的导入检查。
+    /// 兜底统一落盘。各操作已对改动贴图调过 ImportAsset；此处只 SaveAssets。
+    /// 禁止 AssetDatabase.Refresh()：会触发 FBX 重导、冲掉同批（或总批量里）刚写入的 Mesh 顶点色。
+    /// 无改动时不 Save，避免空跑。
     /// </summary>
     private static void FlushAssetDatabase(TextureOperationRunSummary summary)
     {
@@ -238,7 +238,6 @@ public static class TextureOperationRunner
         }
 
         AssetDatabase.SaveAssets();
-        AssetDatabase.Refresh();
     }
 
     /// <summary>

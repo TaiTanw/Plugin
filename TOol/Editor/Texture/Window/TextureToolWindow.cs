@@ -14,7 +14,7 @@ public class TextureToolWindow : EditorWindow
     private const string PrefFoldResult = "Retinar.TextureTool.Fold.Result";
 
     private TextureProcessSettings settings;
-    private Editor settingsInspector;
+    private SerializedObject settingsSerialized;
 
     private TextureTargetCollector.Scope scope = TextureTargetCollector.Scope.Selection;
     private DefaultAsset targetFolder;
@@ -65,12 +65,7 @@ public class TextureToolWindow : EditorWindow
         EditorPrefs.SetBool(PrefFoldOperations, foldOperations);
         EditorPrefs.SetBool(PrefFoldResult, foldResult);
         ResourceBatchFolderStore.SetTextureFolders(batchFolders);
-
-        if (settingsInspector != null)
-        {
-            DestroyImmediate(settingsInspector);
-            settingsInspector = null;
-        }
+        settingsSerialized = null;
     }
 
     private void OnGUI()
@@ -117,17 +112,7 @@ public class TextureToolWindow : EditorWindow
                 }
             }
 
-            if (settingsInspector == null || settingsInspector.target != settings)
-            {
-                if (settingsInspector != null)
-                {
-                    DestroyImmediate(settingsInspector);
-                }
-
-                settingsInspector = Editor.CreateEditor(settings);
-            }
-
-            settingsInspector.OnInspectorGUI();
+            ScriptableObjectSettingsGui.Draw(settings, ref settingsSerialized);
         }
     }
 

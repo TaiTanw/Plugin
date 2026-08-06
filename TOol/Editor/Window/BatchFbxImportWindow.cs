@@ -10,7 +10,7 @@ using UnityEngine;
 public class BatchFbxImportWindow : EditorWindow
 {
     private BatchFbxImportSettings settings;
-    private Editor settingsInspector;
+    private SerializedObject settingsSerialized;
     private readonly List<BatchFbxImportService.ImportItem> items =
         new List<BatchFbxImportService.ImportItem>();
     private Vector2 mainScroll;
@@ -31,11 +31,7 @@ public class BatchFbxImportWindow : EditorWindow
 
     private void OnDisable()
     {
-        if (settingsInspector != null)
-        {
-            DestroyImmediate(settingsInspector);
-            settingsInspector = null;
-        }
+        settingsSerialized = null;
     }
 
     private void OnGUI()
@@ -77,17 +73,7 @@ public class BatchFbxImportWindow : EditorWindow
         using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
         {
             EditorGUI.BeginChangeCheck();
-            if (settingsInspector == null || settingsInspector.target != settings)
-            {
-                if (settingsInspector != null)
-                {
-                    DestroyImmediate(settingsInspector);
-                }
-
-                settingsInspector = Editor.CreateEditor(settings);
-            }
-
-            settingsInspector.OnInspectorGUI();
+            ScriptableObjectSettingsGui.Draw(settings, ref settingsSerialized);
             if (EditorGUI.EndChangeCheck())
             {
                 EditorUtility.SetDirty(settings);
