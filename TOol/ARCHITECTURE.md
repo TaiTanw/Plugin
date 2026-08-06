@@ -1,7 +1,7 @@
 # TOol（插件 2）结构说明
 
-版本：1.2  
-最近同步：2026-08-05（批量路径手动执行；后处理自动文案退化）  
+版本：1.3  
+最近同步：2026-08-06（批量 FBX 导入面板：入库-only，交付名仍以 Prefab 为准）  
 适用：Unity 2020.3 Editor；与 `RetinarBatchBuilder_Share`（插件 1）配合使用。
 
 本文说明目录层级、类职责、自动化两层语义，以及和打包工具的边界。便于扩展新 Operation / 新资源类型时对照。
@@ -33,10 +33,14 @@
 TOol/
 ├─ ConfigData/                          # ScriptableObject 实例（进版本库）
 │  ├─ TextureProcessSettings.asset
-│  └─ ModelProcessSettings.asset
+│  ├─ ModelProcessSettings.asset
+│  └─ BatchFbxImportSettings.asset      # 导入根 / 交付区警报路径
 └─ Editor/
    ├─ Window/
-   │  └─ ResourceProcessWindow.cs       # 总面板（菜单唯一入口）
+   │  ├─ ResourceProcessWindow.cs       # 总面板（自动化与批量后处理入口）
+   │  ├─ BatchFbxImportWindow.cs        # 批量 FBX 入库（独立菜单）
+   │  ├─ BatchFbxImportSettings.cs
+   │  └─ BatchFbxImportService.cs       # 夹名解析、冲突、单 FBX 拷贝+Import
    ├─ Shared/                           # 跨贴图/模型共用
    │  ├─ ResourceProcessSwitches.cs
    │  ├─ ResourceBatchFolderStore.cs      # 批量文件夹路径
@@ -59,6 +63,20 @@ TOol/
 ```
 
 设计原则：**按资源类型纵向切开（Texture / Model），横切能力放 Shared；配置与代码分离（ConfigData 资产 vs Config 类）。**
+
+### 2.1 批量 FBX 导入（入库边界）
+
+菜单：`Tools > 批量FBX导入`（总面板也可打开）。
+
+| 做 | 不做 |
+|----|------|
+| 拖外部文件夹递归找 `.fbx`；面板标重名/已存在/交付区冲突 | 自动建 Prefab / 改交付名 |
+| 夹名 = 自身向上 3 层目录名用 `_` 拼接；不足 3 层 → 全路径消毒名（Warning，不拦执行） | 平铺 Art / 导出交付物 |
+| 无冲突时统一执行；每条 = 建夹→拷 FBX→Import | 拷外置旁路贴图（v1） |
+| 单条移除 / 移除全部冲突；标题标注 FBX 文件名 | 把导入夹名当成交付 `asset_id` |
+| 取消：当前 FBX 整段完成后再停 | |
+
+交付文件名仍以人工改好的 Prefab 名为准（插件 1 规则 12）。
 
 ---
 
@@ -308,7 +326,9 @@ TOol/
 **不要**把平铺并进插件 2。**不要**指望导入区自动顶点色随 `CopyAsset(FBX)` 进入 Art。
 
 ```text
-导入区（插件 2）→ Prefab → 插件 1「平铺到 Art」
+（可选）批量 FBX 导入 → 导入区（插件 2 设置/后处理自动）
+  → 人工调材质并保存 Prefab（改名为交付名）
+  → 插件 1「平铺到 Art」
   → 插件 2 手动/总面板（压 Art 贴图、刷顶点色）
   → 插件 1「从 Art 导出交付物」（全部 / 选中 Prefab）
 ```

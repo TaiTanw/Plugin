@@ -4,10 +4,10 @@ using UnityEditor;
 using UnityEngine;
 
 // =====================================================================================
-// 资源处理总面板：唯一菜单入口。
+// 资源处理总面板：自动化与后处理批量入口。
 //   - 总开关 + 贴图/模型【设置自动】【后处理自动】
 //   - 总批量执行（模型→贴图）+ 各类「是否纳入总批量」开关
-//   - 分项按批量路径执行；打开子面板
+//   - 分项按批量路径执行；打开子面板；可跳转批量 FBX 入库
 // =====================================================================================
 public class ResourceProcessWindow : EditorWindow
 {
@@ -86,6 +86,19 @@ public class ResourceProcessWindow : EditorWindow
             }
 
             EditorGUILayout.Space(10f);
+            EditorGUILayout.LabelField("入库", EditorStyles.boldLabel);
+            using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
+            {
+                EditorGUILayout.HelpBox(
+                    "批量 FBX 导入只把外部 FBX 送进导入区；交付名仍以人工 Prefab 名为准。",
+                    MessageType.None);
+                if (GUILayout.Button("打开批量FBX导入"))
+                {
+                    BatchFbxImportWindow.ShowWindow();
+                }
+            }
+
+            EditorGUILayout.Space(10f);
             EditorGUILayout.LabelField("配置资产", EditorStyles.boldLabel);
             using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
             {
@@ -98,6 +111,12 @@ public class ResourceProcessWindow : EditorWindow
                 if (GUILayout.Button("确保模型配置资产存在"))
                 {
                     Selection.activeObject = ModelProcessSettings.GetOrCreateAsset();
+                    EditorGUIUtility.PingObject(Selection.activeObject);
+                }
+
+                if (GUILayout.Button("确保批量FBX导入配置资产存在"))
+                {
+                    Selection.activeObject = BatchFbxImportSettings.GetOrCreateAsset();
                     EditorGUIUtility.PingObject(Selection.activeObject);
                 }
             }
