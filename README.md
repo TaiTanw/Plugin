@@ -4,7 +4,7 @@ Unity Editor 插件集合，用于模型/贴图的**导入期处理**与**交付
 适用环境：Unity 2020.3（Built-in RP）、Windows Editor。
 
 远程仓库：`http://swm-server.local:3000/Hanson/asset-bundle.git`  
-当前稳定版：**v1.3.1**（`other` 分支 / 标签 `v1.3.1`）
+当前稳定版：**v1.3.2**（`other` 分支 / 标签 `v1.3.2`）
 
 ---
 

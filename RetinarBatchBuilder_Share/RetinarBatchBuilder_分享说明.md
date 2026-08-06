@@ -1,6 +1,6 @@
 # Retinar Unity 模型打包工具使用手册
 
-版本：v1.3.1  
+版本：v1.3.2  
 更新日期：2026-08-05  
 适用环境：Unity 2020.3.49f1c1、Built-in Render Pipeline、Windows Editor
 
