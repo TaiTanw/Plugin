@@ -4,8 +4,8 @@ Unity Editor 插件集合，用于模型/贴图的**导入期处理**与**交付
 适用环境：Unity 2020.3（Built-in RP）、Windows Editor。
 
 远程仓库：`http://swm-server.local:3000/Hanson/asset-bundle.git`  
-当前完全版：**v1.3.5**（`other` 分支 / 标签 `v1.3.5`，全流程支持）  
-历史测试版标签：`v1.3.2-test`（不推荐新交付）
+当前版本：**v1.3.6**（`other` / `main` 分支 / 标签 `v1.3.6`）  
+历史：`v1.3.5` 完全版基线；`v1.3.2-test` 测试版（不推荐新交付）
 
 ---
 
@@ -22,7 +22,7 @@ Unity Editor 插件集合，用于模型/贴图的**导入期处理**与**交付
 
 ## 快速使用
 
-### TOol（资源处理，v1.3.5）
+### TOol（资源处理，v1.3.6）
 
 1. 将本仓库置于 Unity 工程的 `Assets/Plugin`（或保持现有工程路径）。
 2. （可选）**`Tools > 批量FBX导入`**：外部目录批量入库导入区（不建 Prefab）。

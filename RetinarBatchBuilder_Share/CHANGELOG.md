@@ -8,7 +8,7 @@
 - 改动：
   1. **插件 1**：`ExportArtPrefabPaths` 在 `BuildAssetBundles` 前对已过门禁资产做贴图 5MB/POT 预检（Console `[Retinar] 贴图预检`）；校验失败与贴图报告行增加类别码（`MODEL_FOLDER_DIRTY` / `SAFEZONE` / `EXTERNAL_DEP` / `TEXTURE_POT` / `TEXTURE_SIZE` / `TEXTURE_LOAD`）。
   2. **插件 2**：`Evaluate` + `AssetOperationEvaluation`；Runner `Scan` dry-run；子面板/总面板「仅扫描」；批量路径空列表默认含 `Assets/Art`（一次性补种）。
-- 影响：导出仍先自愈再门禁；贴图预检不阻断出包。插件 2 不调用插件 1。
+- 影响：当前**推荐使用**标签为 `v1.3.6`。导出仍先自愈再门禁；贴图预检不阻断出包。插件 2 不调用插件 1。
 - 验证：导出超标 Art 贴图应在打 AB 前打出预检 Warning；子面板勾选压图后「仅扫描」应只列超标项；顶点色仅扫描应只列非全白模型。
 - 回退：去掉预检调用与类别码前缀；插件 2 回退 Evaluate/Scan 相关改动。
 - 关联问题：检测/扫描分层；交付预检与后处理候选分离。
@@ -20,7 +20,7 @@
   1. **插件 2**：新增 `Tools > 批量FBX导入`（拖入外部目录、重名检测、统一入库导入区）；配置 `BatchFbxImportSettings`；**不**自动建 Prefab / 不平铺 / 不导出。
   2. 总面板与 Runner 修复优化（含总批量顺序、导入告警策略、设置 GUI 抽取等，见近期提交「批量FBX导入开发」「修复与优化」）。
   3. 文档：README / TOol README / ARCHITECTURE 同步全流程入口；本 CHANGELOG 标注版本角色。
-- 影响：当前**完全版 / 推荐使用**标签为 `v1.3.5`。旧标签 `v1.3.2` 删除并改挂 `v1.3.2-test`（测试版，不推荐新交付）。
+- 影响：当时标注为完全版基线；**现由 v1.3.6 接替为当前推荐标签**。旧标签 `v1.3.2` 已改为 `v1.3.2-test`。
 - 验证：批量导入若干外部 FBX 无冲突入库；再走人工 Prefab → 平铺 → 总面板处理 → 导出 Art 全部/选中，Deliverables 正常。
 - 回退：回退至 `v1.3.2-test` 指向提交，并去掉批量 FBX 相关菜单与资产即可。
 - 关联问题：全流程支持；批量入库与 Issue #2（Prefab 是否自动化）边界——本版仍要求人工 Prefab。
