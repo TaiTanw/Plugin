@@ -52,10 +52,26 @@ public class BakeLuminanceToAlphaOperation : ITextureAssetOperation
         get { return 150; }
     }
 
+    public AssetOperationEvaluation Evaluate(string assetPath, TextureProcessSettings settings)
+    {
+        if (!TextureCodecRegistry.IsSupported(assetPath) ||
+            AssetPathUtility.GetFileLength(assetPath) <= 0)
+        {
+            return AssetOperationEvaluation.NotApplicable("不支持的贴图或不存在");
+        }
+
+        if (AssetPathUtility.IsInsideEmbeddedMediaFolder(assetPath))
+        {
+            return AssetOperationEvaluation.Skip("位于 .fbm 内嵌缓存，不处理");
+        }
+
+        // 不做像素探测：误用成本高，靠手动勾选范围约束；扫描命中=范围内适用文件。
+        return AssetOperationEvaluation.NeedsWorkResult("适用亮度→Alpha（请确认是旋翼/光晕类贴图）");
+    }
+
     public bool CanProcess(string assetPath, TextureProcessSettings settings)
     {
-        return TextureCodecRegistry.IsSupported(assetPath) &&
-               AssetPathUtility.GetFileLength(assetPath) > 0;
+        return Evaluate(assetPath, settings).NeedsWork;
     }
 
     public TextureOperationResult Execute(TextureOperationContext context)

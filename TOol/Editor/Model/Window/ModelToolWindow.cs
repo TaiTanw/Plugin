@@ -220,6 +220,15 @@ public class ModelToolWindow : EditorWindow
 
             using (new EditorGUI.DisabledScope(targets == null || targets.Count == 0 || selectedCount == 0))
             {
+                if (GUILayout.Button("仅扫描勾选的手动操作（不改文件）", GUILayout.Height(26f)))
+                {
+                    ModelOperationRunner.Scan(
+                        ResourceManualOperationStore.CollectSelectedModelOperations(),
+                        targets,
+                        settings,
+                        true);
+                }
+
                 if (GUILayout.Button("执行勾选的手动操作", GUILayout.Height(28f)))
                 {
                     lastSummary = ModelOperationRunner.Run(

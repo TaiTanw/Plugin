@@ -314,17 +314,17 @@ public static partial class RetinarBatchModelBuilder
 
         if (!ValidateModelFoldersAreClean(single, out error))
         {
-            reasons.Add("  [Model 目录不纯净] Model 目录只允许放模型文件、不允许有子文件夹\n" + Indent(error));
+            reasons.Add("  [MODEL_FOLDER_DIRTY] Model 目录只允许放模型文件、不允许有子文件夹\n" + Indent(error));
         }
 
         if (!ValidatePrefabSpatialPlacement(single, out error))
         {
-            reasons.Add("  [SafeZone 位置校验未通过]\n" + Indent(error));
+            reasons.Add("  [SAFEZONE] SafeZone 位置校验未通过\n" + Indent(error));
         }
 
         if (!ValidateExternalDependencies(single, out error))
         {
-            reasons.Add("  [存在不支持的外部依赖] 自动自愈已经尝试过一次，下面是自愈之后仍然存在的问题\n" + Indent(error));
+            reasons.Add("  [EXTERNAL_DEP] 存在不支持的外部依赖（自动自愈已尝试过；下列为自愈后仍存在的问题）\n" + Indent(error));
         }
 
         return reasons;
@@ -360,6 +360,7 @@ public static partial class RetinarBatchModelBuilder
             "Generated: " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"),
             "",
             "说明：名单里的资产只影响自己，同一批里通过校验的资产已经正常出包。",
+            "类别码：[MODEL_FOLDER_DIRTY] / [SAFEZONE] / [EXTERNAL_DEP]；贴图告警见导出 Console 预检与 01_source 报告中的 [TEXTURE_*]。",
             "处理完下面的问题后，重新选中【原始 FBX】或【Assets/Art/<名字>/Prefab 里的预设体】再执行一次即可；",
             "重新选中生成目录里的预设体不会再新建 Assets/Art/<名字>_prefab 这类多余目录。",
             ""

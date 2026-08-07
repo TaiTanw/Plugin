@@ -269,6 +269,17 @@ public static partial class RetinarBatchModelBuilder
             return;
         }
 
+        // 打 AB 前做贴图预检（口径与 01_source/texture_size_report 相同），便于先去插件 2 压图。
+        List<string> texturePrecheckLines = new List<string>();
+        int texturePrecheckCount = CollectTextureIssuesForAssets(buildable, texturePrecheckLines);
+        if (texturePrecheckCount > 0)
+        {
+            Debug.LogWarning(
+                "[Retinar] 贴图预检（打 AB 前）：发现 " + texturePrecheckCount +
+                " 个问题项。请用 Tools > 资源处理总面板 对 Assets/Art/.../Texture 执行压缩后再导出。\n" +
+                string.Join("\n", texturePrecheckLines.ToArray()));
+        }
+
         BuildAssetBundles(BuildTarget.Android);
         BuildAssetBundles(BuildTarget.iOS);
         int textureWarningCount = CopySourceFilesToDeliverables(buildable);
@@ -277,7 +288,10 @@ public static partial class RetinarBatchModelBuilder
         WriteDocsFiles(buildable);
 
         string warningText = textureWarningCount > 0
-            ? "\n\nTexture check: " + textureWarningCount + " texture issue(s). See 01_source/texture_size_report.txt."
+            ? "\n\nTexture check: " + textureWarningCount + " texture issue(s). See 01_source/texture_size_report.txt." +
+              (texturePrecheckCount > 0
+                  ? "\n（打 AB 前预检已提示 " + texturePrecheckCount + " 项，详见 Console [Retinar] 贴图预检）"
+                  : string.Empty)
             : "\n\nTexture check: all copied textures are power-of-two and <= 5 MB.";
 
         string excludedText = excludedReports.Count == 0
@@ -1967,7 +1981,7 @@ public static partial class RetinarBatchModelBuilder
         Texture2D texture = AssetDatabase.LoadAssetAtPath<Texture2D>(texturePath);
         if (texture == null)
         {
-            return texturePath + "\tUnknown size\tWARN: texture could not be loaded";
+            return texturePath + "\tUnknown size\t[TEXTURE_LOAD] WARN: texture could not be loaded";
         }
 
         bool widthOk = IsPowerOfTwo(texture.width);
@@ -1983,9 +1997,6 @@ public static partial class RetinarBatchModelBuilder
 
         if (!fileSizeOk)
         {
-            // 本工具不改写贴图像素（规则 28/34），所以这里只能告警并指出该去哪里处理。
-            // 最常见的成因是 FBX 内嵌贴图：Unity 每次导入模型工作副本都会从 FBX 二进制里
-            // 重新抽取一份原始大图，艺术家在导入区压过的那一份帮不上忙。
             Debug.LogWarning("Texture source file is larger than 5 MB and should be optimized: " + line +
                 "\n处理方式：打开 Tools > 资源处理总面板 / 贴图子面板，选中 Assets/Art/<模型>/Texture/ 下该贴图，" +
                 "执行\"压缩超标的贴图源文件\"，确认体积 < 5 MB 后再重新打包。" +
@@ -1993,6 +2004,66 @@ public static partial class RetinarBatchModelBuilder
         }
 
         return line;
+    }
+
+    /// <summary>
+    /// 打 AB 前贴图预检：对已过门禁资产的 Prefab 依赖贴图做与报告相同的 5MB / POT 检查。
+    /// </summary>
+    private static int CollectTextureIssuesForAssets(List<GeneratedAsset> assets, List<string> issueLines)
+    {
+        int issueCount = 0;
+        if (assets == null || issueLines == null)
+        {
+            return 0;
+        }
+
+        var seen = new HashSet<string>();
+        foreach (GeneratedAsset asset in assets)
+        {
+            if (!asset.IsValid || string.IsNullOrEmpty(asset.PrefabPath))
+            {
+                continue;
+            }
+
+            foreach (string dependency in AssetDatabase.GetDependencies(asset.PrefabPath, true))
+            {
+                string path = dependency.Replace("\\", "/");
+                if (!IsTextureAsset(path) || !seen.Add(path))
+                {
+                    continue;
+                }
+
+                issueCount += AppendTextureIssueCodes(path, issueLines);
+            }
+        }
+
+        return issueCount;
+    }
+
+    private static int AppendTextureIssueCodes(string texturePath, List<string> issueLines)
+    {
+        int count = 0;
+        Texture2D texture = AssetDatabase.LoadAssetAtPath<Texture2D>(texturePath);
+        if (texture == null)
+        {
+            issueLines.Add("[TEXTURE_LOAD] " + texturePath);
+            return 1;
+        }
+
+        if (!IsPowerOfTwo(texture.width) || !IsPowerOfTwo(texture.height))
+        {
+            issueLines.Add("[TEXTURE_POT] " + texturePath + " " + texture.width + "x" + texture.height);
+            count++;
+        }
+
+        long fileSize = GetAssetFileSize(texturePath);
+        if (fileSize > MaxTextureSourceBytes)
+        {
+            issueLines.Add("[TEXTURE_SIZE] " + texturePath + " " + FormatBytes(fileSize));
+            count++;
+        }
+
+        return count;
     }
 
     private static int GetTextureIssueCount(string texturePath)
@@ -2017,12 +2088,12 @@ public static partial class RetinarBatchModelBuilder
         var warnings = new List<string>();
         if (!widthOk || !heightOk)
         {
-            warnings.Add("WARN: size is not power of two");
+            warnings.Add("[TEXTURE_POT] WARN: size is not power of two");
         }
 
         if (!fileSizeOk)
         {
-            warnings.Add("WARN: source file > 5 MB");
+            warnings.Add("[TEXTURE_SIZE] WARN: source file > 5 MB");
         }
 
         return string.Join("; ", warnings.ToArray());

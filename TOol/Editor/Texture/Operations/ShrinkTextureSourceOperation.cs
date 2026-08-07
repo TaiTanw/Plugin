@@ -60,17 +60,43 @@ public class ShrinkTextureSourceOperation : ITextureAssetOperation
         get { return 100; }
     }
 
-    public bool CanProcess(string assetPath, TextureProcessSettings settings)
+    public AssetOperationEvaluation Evaluate(string assetPath, TextureProcessSettings settings)
     {
-        // 这里必须足够便宜：只看扩展名和文件长度，不解码。
-        // 导入回调会对一整批（可能上千个）资产逐个调用它。
+        // 便宜：扩展名、.fbm、文件长度；不解码。
         if (!TextureCodecRegistry.IsSupported(assetPath))
         {
-            return false;
+            return AssetOperationEvaluation.NotApplicable("不支持的贴图扩展名");
+        }
+
+        if (AssetPathUtility.IsInsideEmbeddedMediaFolder(assetPath))
+        {
+            return AssetOperationEvaluation.Skip(
+                "位于 .fbm 内嵌缓存，压了也会被模型重导覆盖");
+        }
+
+        if (settings == null)
+        {
+            return AssetOperationEvaluation.NotApplicable("缺少 TextureProcessSettings");
         }
 
         long length = AssetPathUtility.GetFileLength(assetPath);
-        return length > 0 && settings != null && length > settings.MaxSourceBytes;
+        if (length <= 0)
+        {
+            return AssetOperationEvaluation.NotApplicable("磁盘上找不到文件或长度为 0");
+        }
+
+        if (length <= settings.MaxSourceBytes)
+        {
+            return AssetOperationEvaluation.Skip("体积已在阈值以内");
+        }
+
+        return AssetOperationEvaluation.NeedsWorkResult(
+            "源文件 " + length + " 字节，超过阈值 " + settings.MaxSourceBytes);
+    }
+
+    public bool CanProcess(string assetPath, TextureProcessSettings settings)
+    {
+        return Evaluate(assetPath, settings).NeedsWork;
     }
 
     /// <summary>

@@ -50,15 +50,31 @@ public class ConvertTgaToPngOperation : ITextureAssetOperation
         get { return 200; }
     }
 
-    public bool CanProcess(string assetPath, TextureProcessSettings settings)
+    public AssetOperationEvaluation Evaluate(string assetPath, TextureProcessSettings settings)
     {
         if (string.IsNullOrEmpty(assetPath) ||
             Path.GetExtension(assetPath).ToLowerInvariant() != ".tga")
         {
-            return false;
+            return AssetOperationEvaluation.NotApplicable("不是 .tga");
         }
 
-        return AssetPathUtility.GetFileLength(assetPath) >= 0;
+        if (AssetPathUtility.GetFileLength(assetPath) < 0)
+        {
+            return AssetOperationEvaluation.NotApplicable("磁盘上找不到文件");
+        }
+
+        string pngFullPath = Path.ChangeExtension(AssetPathUtility.ToFullPath(assetPath), ".png");
+        if (!string.IsNullOrEmpty(pngFullPath) && File.Exists(pngFullPath))
+        {
+            return AssetOperationEvaluation.Skip("同目录已存在同名 .png，为避免覆盖不转换");
+        }
+
+        return AssetOperationEvaluation.NeedsWorkResult("可将 TGA 转为 PNG（保留 GUID）");
+    }
+
+    public bool CanProcess(string assetPath, TextureProcessSettings settings)
+    {
+        return Evaluate(assetPath, settings).NeedsWork;
     }
 
     /// <summary>

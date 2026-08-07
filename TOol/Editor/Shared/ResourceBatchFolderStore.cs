@@ -12,6 +12,8 @@ public static class ResourceBatchFolderStore
 {
     private const string TextureFoldersKey = "TOol.BatchFolders.Texture";
     private const string ModelFoldersKey = "TOol.BatchFolders.Model";
+    private const string ArtDefaultSeededKey = "TOol.BatchFolders.ArtDefaultSeeded";
+    private const string DefaultArtFolder = "Assets/Art";
 
     private static List<string> textureFolders;
     private static List<string> modelFolders;
@@ -77,22 +79,51 @@ public static class ResourceBatchFolderStore
 
         cache = new List<string>();
         string raw = EditorPrefs.GetString(key, string.Empty);
-        if (string.IsNullOrEmpty(raw))
+        if (!string.IsNullOrEmpty(raw))
         {
-            return cache;
-        }
-
-        string[] parts = raw.Split(new[] { '|' }, StringSplitOptions.RemoveEmptyEntries);
-        for (int i = 0; i < parts.Length; i++)
-        {
-            string path = Normalize(parts[i]);
-            if (!string.IsNullOrEmpty(path) && !cache.Contains(path))
+            string[] parts = raw.Split(new[] { '|' }, StringSplitOptions.RemoveEmptyEntries);
+            for (int i = 0; i < parts.Length; i++)
             {
-                cache.Add(path);
+                string path = Normalize(parts[i]);
+                if (!string.IsNullOrEmpty(path) && !cache.Contains(path))
+                {
+                    cache.Add(path);
+                }
             }
         }
 
+        // 空列表默认含 Art；已有列表仅在首次升级时补一次 Art（之后用户删掉不再强行加回）。
+        MaybeSeedDefaultArtFolder(ref cache, key);
         return cache;
+    }
+
+    private static void MaybeSeedDefaultArtFolder(ref List<string> cache, string key)
+    {
+        if (!AssetDatabase.IsValidFolder(DefaultArtFolder))
+        {
+            return;
+        }
+
+        if (cache.Count == 0)
+        {
+            cache.Add(DefaultArtFolder);
+            Save(ref cache, key, cache);
+            EditorPrefs.SetBool(ArtDefaultSeededKey, true);
+            return;
+        }
+
+        if (EditorPrefs.GetBool(ArtDefaultSeededKey, false))
+        {
+            return;
+        }
+
+        if (!cache.Contains(DefaultArtFolder))
+        {
+            cache.Insert(0, DefaultArtFolder);
+            Save(ref cache, key, cache);
+        }
+
+        EditorPrefs.SetBool(ArtDefaultSeededKey, true);
     }
 
     private static void Save(ref List<string> cache, string key, IList<string> folders)

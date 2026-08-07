@@ -1,10 +1,12 @@
 using System.Collections.Generic;
+using System.Text;
 using UnityEditor;
 using UnityEngine;
 
 public static class ModelOperationRunner
 {
     private const string ProgressBarTitle = "模型处理";
+    private const string ScanProgressBarTitle = "模型扫描";
 
     public static ModelOperationRunSummary Run(
         IList<IModelAssetOperation> operations,
@@ -16,7 +18,7 @@ public static class ModelOperationRunner
     }
 
     /// <param name="importRoot">
-    /// OnPostprocessModel 传入的根节点；非 null 时写入 Context.ImportRoot，供顶点色等操作在库未就绪时从层级取 Mesh。
+    /// OnPostprocessModel 传入的根节点；非 null 时写入 Context.ImportRoot，并参与 Evaluate 探测。
     /// </param>
     public static ModelOperationRunSummary Run(
         IList<IModelAssetOperation> operations,
@@ -26,7 +28,7 @@ public static class ModelOperationRunner
         GameObject importRoot)
     {
         var summary = new ModelOperationRunSummary();
-        List<PendingWork> pendingWork = CollectPendingWork(operations, assetPaths, settings);
+        List<PendingWork> pendingWork = CollectPendingWork(operations, assetPaths, settings, importRoot);
         if (pendingWork.Count == 0)
         {
             if (!triggeredByImport &&
@@ -34,7 +36,7 @@ public static class ModelOperationRunner
                 assetPaths != null && assetPaths.Count > 0)
             {
                 Debug.LogWarning("[模型处理] 命中 " + assetPaths.Count +
-                    " 个模型，但对当前勾选的操作都不适用，未执行。");
+                    " 个模型，但对当前勾选的操作 Evaluate 均为无需处理，未执行。");
             }
 
             return summary;
@@ -51,10 +53,6 @@ public static class ModelOperationRunner
 
         if (summary.ChangedCount > 0)
         {
-            // 只 Save，不要 Refresh。
-            // Refresh 会让 ModelImporter 从 FBX 二进制重建 Mesh，刚写入的顶点色被清掉；
-            // 且此时若处在 ImportPostProcessScheduler.IsRunning 中，OnPostprocessAllAssets
-            // 会拒收入队，无法再跑第二遍——表现为「导入自动顶点色完全没生效」。
             AssetDatabase.SaveAssets();
         }
 
@@ -62,10 +60,93 @@ public static class ModelOperationRunner
         return summary;
     }
 
+    /// <summary>仅扫描：Evaluate dry-run，不改文件。</summary>
+    public static AssetOperationScanSummary Scan(
+        IList<IModelAssetOperation> operations,
+        IList<string> assetPaths,
+        ModelProcessSettings settings,
+        bool showDialog)
+    {
+        var summary = new AssetOperationScanSummary();
+        if (operations == null || assetPaths == null || settings == null)
+        {
+            return summary;
+        }
+
+        try
+        {
+            int total = operations.Count * Mathf.Max(assetPaths.Count, 1);
+            int done = 0;
+            foreach (IModelAssetOperation operation in operations)
+            {
+                if (operation == null)
+                {
+                    continue;
+                }
+
+                foreach (string assetPath in assetPaths)
+                {
+                    if (EditorUtility.DisplayCancelableProgressBar(
+                            ScanProgressBarTitle,
+                            operation.DisplayName + "：" + assetPath,
+                            total > 0 ? (float)done / total : 0f))
+                    {
+                        summary.Canceled = true;
+                        break;
+                    }
+
+                    done++;
+                    if (string.IsNullOrEmpty(assetPath))
+                    {
+                        continue;
+                    }
+
+                    AssetOperationEvaluation evaluation = operation.Evaluate(assetPath, settings, null);
+                    string line = operation.DisplayName + " | " + assetPath + " | " + evaluation.Reason;
+                    if (evaluation.NeedsWork)
+                    {
+                        summary.NeedsWorkCount++;
+                        summary.NeedsWorkLines.Add(line);
+                    }
+                    else if (evaluation.Eligibility == AssetOperationEligibility.Skip)
+                    {
+                        summary.SkippedCount++;
+                        if (summary.SkippedLines.Count < 40)
+                        {
+                            summary.SkippedLines.Add(line);
+                        }
+                    }
+                    else
+                    {
+                        summary.NotApplicableCount++;
+                    }
+                }
+
+                if (summary.Canceled)
+                {
+                    break;
+                }
+            }
+        }
+        finally
+        {
+            EditorUtility.ClearProgressBar();
+        }
+
+        LogScanSummary(summary);
+        if (showDialog)
+        {
+            ShowScanDialog(summary);
+        }
+
+        return summary;
+    }
+
     private static List<PendingWork> CollectPendingWork(
         IList<IModelAssetOperation> operations,
         IList<string> assetPaths,
-        ModelProcessSettings settings)
+        ModelProcessSettings settings,
+        GameObject importRoot)
     {
         var pendingWork = new List<PendingWork>();
         if (operations == null || assetPaths == null)
@@ -82,7 +163,12 @@ public static class ModelOperationRunner
 
             foreach (string assetPath in assetPaths)
             {
-                if (string.IsNullOrEmpty(assetPath) || !operation.CanProcess(assetPath, settings))
+                if (string.IsNullOrEmpty(assetPath))
+                {
+                    continue;
+                }
+
+                if (!operation.Evaluate(assetPath, settings, importRoot).NeedsWork)
                 {
                     continue;
                 }
@@ -183,6 +269,55 @@ public static class ModelOperationRunner
             Debug.LogError("[模型处理] 有 " + summary.FailedCount + " 项失败:\n" +
                 string.Join("\n", summary.FailedLines.ToArray()));
         }
+    }
+
+    private static void LogScanSummary(AssetOperationScanSummary summary)
+    {
+        var report = new List<string>
+        {
+            "[模型扫描] 需处理 " + summary.NeedsWorkCount +
+            " 项，已达标/策略跳过 " + summary.SkippedCount +
+            " 项，不适用 " + summary.NotApplicableCount + " 项" +
+            (summary.Canceled ? "（已取消）" : string.Empty)
+        };
+
+        if (summary.NeedsWorkLines.Count > 0)
+        {
+            report.Add("");
+            report.Add("需处理:");
+            report.AddRange(summary.NeedsWorkLines);
+        }
+
+        Debug.Log(string.Join("\n", report.ToArray()));
+    }
+
+    private static void ShowScanDialog(AssetOperationScanSummary summary)
+    {
+        var builder = new StringBuilder();
+        builder.Append("需处理 ").Append(summary.NeedsWorkCount).Append(" 项");
+        if (summary.Canceled)
+        {
+            builder.Append("（扫描已取消）");
+        }
+
+        builder.Append("。\n\n");
+        int preview = Mathf.Min(summary.NeedsWorkLines.Count, 25);
+        for (int i = 0; i < preview; i++)
+        {
+            builder.AppendLine(summary.NeedsWorkLines[i]);
+        }
+
+        if (summary.NeedsWorkLines.Count > preview)
+        {
+            builder.AppendLine("…其余见 Console");
+        }
+
+        if (summary.NeedsWorkCount == 0)
+        {
+            builder.Append("当前勾选操作下没有需要处理的模型。");
+        }
+
+        EditorUtility.DisplayDialog("模型仅扫描", builder.ToString(), "OK");
     }
 
     private struct PendingWork

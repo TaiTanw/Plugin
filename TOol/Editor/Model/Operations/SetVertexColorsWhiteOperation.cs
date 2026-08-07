@@ -43,9 +43,51 @@ public class SetVertexColorsWhiteOperation : IModelAssetOperation
         get { return 10; }
     }
 
+    public AssetOperationEvaluation Evaluate(
+        string assetPath,
+        ModelProcessSettings settings,
+        GameObject importRoot)
+    {
+        if (settings == null || !settings.IsSupportedModelExtension(assetPath))
+        {
+            return AssetOperationEvaluation.NotApplicable("不支持的模型扩展名");
+        }
+
+        List<Mesh> meshes = CollectMeshesForEvaluate(assetPath, importRoot);
+        if (meshes.Count == 0)
+        {
+            // 导入首帧库可能未就绪：若带 ImportRoot 仍无 Mesh，交给 delayCall；无根则标跳过。
+            if (importRoot != null)
+            {
+                return AssetOperationEvaluation.Skip("层级暂无 Mesh，将由 delayCall 再评估");
+            }
+
+            return AssetOperationEvaluation.Skip("无法加载模型 Mesh（LoadAllAssetsAtPath 为空）");
+        }
+
+        Color white = Color.white;
+        int nonWhite = 0;
+        for (int i = 0; i < meshes.Count; i++)
+        {
+            if (!IsAllWhite(meshes[i], white))
+            {
+                nonWhite++;
+            }
+        }
+
+        if (nonWhite == 0)
+        {
+            return AssetOperationEvaluation.Skip(
+                "全部 " + meshes.Count + " 个 Mesh 顶点色已是 (1,1,1,1)");
+        }
+
+        return AssetOperationEvaluation.NeedsWorkResult(
+            nonWhite + "/" + meshes.Count + " 个 Mesh 顶点色非全白");
+    }
+
     public bool CanProcess(string assetPath, ModelProcessSettings settings)
     {
-        return settings != null && settings.IsSupportedModelExtension(assetPath);
+        return Evaluate(assetPath, settings, null).NeedsWork;
     }
 
     public ModelOperationResult Execute(ModelOperationContext context)
@@ -171,18 +213,22 @@ public class SetVertexColorsWhiteOperation : IModelAssetOperation
         return true;
     }
 
-    private static List<Mesh> CollectMeshes(ModelOperationContext context)
+    private static List<Mesh> CollectMeshesForEvaluate(string assetPath, GameObject importRoot)
     {
         var meshes = new List<Mesh>();
         var seen = new HashSet<Mesh>();
-
-        if (context.ImportRoot != null)
+        if (importRoot != null)
         {
-            CollectFromHierarchy(context.ImportRoot, meshes, seen);
+            CollectFromHierarchy(importRoot, meshes, seen);
         }
 
-        CollectFromAssetPath(context.AssetPath, meshes, seen);
+        CollectFromAssetPath(assetPath, meshes, seen);
         return meshes;
+    }
+
+    private static List<Mesh> CollectMeshes(ModelOperationContext context)
+    {
+        return CollectMeshesForEvaluate(context.AssetPath, context.ImportRoot);
     }
 
     private static void CollectFromHierarchy(GameObject root, List<Mesh> meshes, HashSet<Mesh> seen)

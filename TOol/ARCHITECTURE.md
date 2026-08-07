@@ -1,7 +1,7 @@
 # TOol（插件 2）结构说明
 
-版本：1.3.5  
-最近同步：2026-08-06（完全版：批量 FBX 入库 + 全流程；总批量贴图→模型）  
+版本：1.3.6  
+最近同步：2026-08-07（Evaluate 统一评估 + 仅扫描 dry-run；批量默认含 Art）  
 适用：Unity 2020.3 Editor；与 `RetinarBatchBuilder_Share`（插件 1）配合使用。
 
 本文说明目录层级、类职责、自动化两层语义，以及和打包工具的边界。便于扩展新 Operation / 新资源类型时对照。
@@ -175,7 +175,9 @@ TOol/
 | ------------------------------ | -------------------------------------------------------------------- |
 | `ResourceProcessSwitches`      | **总开关** + 四路分项（EditorPrefs）。提供 `Is*Effective` 供 Import/Scheduler 门控。 |
 | `ImportPostProcessScheduler`   | 导入区后处理调度：入队、delayCall、防重入 `IsRunning`、**模型→贴图**两阶段（与平铺后总批量顺序不同）。 |
-| `ResourceBatchFolderStore`     | 贴图/模型「批量文件夹路径」列表（EditorPrefs）；总面板批量执行只读这份。                         |
+| `ResourceBatchFolderStore`     | 贴图/模型「批量文件夹路径」列表（EditorPrefs）；总面板批量执行只读这份。空列表默认含 `Assets/Art`；升级时一次性补种 Art。 |
+| `AssetOperationEvaluation`     | Op 统一评估结果：`NotApplicable` / `Skip` / `NeedsWork` + Reason。 |
+| `AssetOperationScanSummary`    | 「仅扫描」汇总（需处理行列表）。 |
 | `ResourceManualOperationStore` | 手动勾选哪些 Operation（子面板与总面板共用，默认勾选）。                                   |
 | `ResourceBatchFolderListGui`   | 批量路径列表增减 GUI。                                                        |
 | `ResourceExcludeUtility`       | 根据 Settings 里的前缀列表判断路径是否排除。                                          |
@@ -218,12 +220,12 @@ TOol/
 
 | 类                                                       | 职能                                                    |
 | ------------------------------------------------------- | ----------------------------------------------------- |
-| `ITextureAssetOperation`                                | 扩展接口：`Id` / `DisplayName` / `CanProcess` / `Execute`  |
+| `ITextureAssetOperation`                                | 扩展接口：`Id` / `DisplayName` / **`Evaluate`** / `CanProcess`(=NeedsWork) / `Execute`  |
 | `TextureOperationRegistry`                              | 反射发现全部 Operation；按 Settings 筛「导入自动」集合                 |
 | `TextureOperationContext`                               | 当前资产路径、Settings、进度回调、是否导入触发                           |
 | `TextureOperationResult` / `TextureOperationRunSummary` | 成功/跳过/失败 + 批量汇总                                       |
-| `TextureOperationRunner`                                | 筛工作项、进度条、调用 Execute、打汇总日志；有改动只 **SaveAssets，禁止 Refresh**（避免冲 Mesh 顶点色） |
-| `ShrinkTextureSourceOperation`                          | **压缩超标源文件**（`shrink_source_file`）。跳过 `.fbm`。二的幂走对折阶梯。 |
+| `TextureOperationRunner`                                | **Evaluate** 筛工作项、进度条、Execute；**`Scan` dry-run**；有改动只 **SaveAssets，禁止 Refresh** |
+| `ShrinkTextureSourceOperation`                          | **压缩超标源文件**（`shrink_source_file`）。Evaluate 跳过 `.fbm`/已达标。二的幂走对折阶梯。 |
 | `ConvertTgaToPngOperation`                              | TGA → PNG                                             |
 | `BakeLuminanceToAlphaOperation`                         | 亮度写入 Alpha（玻璃/裁切类需求）                                  |
 
@@ -246,7 +248,7 @@ TOol/
 
 | 类                        | 职能                                    |
 | ------------------------ | ------------------------------------- |
-| `TextureToolWindow`      | 贴图子面板：配置、范围（选中 / 单文件夹 / 路径批量）、执行。 |
+| `TextureToolWindow`      | 贴图子面板：配置、范围、**仅扫描**、执行。 |
 | `TextureTargetCollector` | 按 Scope 收集贴图；无 WholeProject；`CollectFromBatchFolders` 供总面板。 |
 
 
@@ -273,9 +275,9 @@ TOol/
 
 | 类                                                                              | 职能                                                                                                                  |
 | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------- |
-| `IModelAssetOperation`                                                         | 模型扩展接口（对称于贴图）                                                                                                       |
-| `ModelOperationRegistry` / `ModelOperationRunner` / Context / Result / Summary | 与贴图侧同构                                                                                                              |
-| `SetVertexColorsWhiteOperation`                                                | **顶点色全白**（`set_vertex_colors_white`）。改的是导入后 Mesh 子资产，不是 FBX 二进制。Art 自动流不进；手动对 Art/Model 执行后，打包工具 v1.2.9+ 重导时会保留顶点色。 |
+| `IModelAssetOperation`                                                         | 模型扩展接口；**`Evaluate(path, settings, importRoot)`** 与扫描/Runner 共用                                                                                                       |
+| `ModelOperationRegistry` / `ModelOperationRunner` / Context / Result / Summary | 与贴图侧同构；Runner 含 **`Scan`**                                                                                                              |
+| `SetVertexColorsWhiteOperation`                                                | **顶点色全白**。Evaluate 探测非全白 Mesh；Art 自动流不进；手动对 Art/Model 执行后，打包工具重导时会保留顶点色。 |
 
 
 **新增模型操作：** 同贴图——实现接口即可被反射发现。
@@ -371,7 +373,8 @@ TOol/
 
 1. `Operations/XxxOperation.cs` 实现 `ITextureAssetOperation`。
 2. 需要自动：Id 写入 `TextureProcessSettings.importAutoOperationIds`。
-3. 需要排除 Art/`.fbm`：在 `CanProcess`/`Execute` 里用 Settings / `AssetPathUtility`。
+3. 需要排除 Art/`.fbm`：在 **`Evaluate`**/`Execute` 里用 Settings / `AssetPathUtility`（扫描与执行同口径）。
+4. 新增判断条件时优先写进该 Op 的 `Evaluate`，不要只写在 `Execute` 里，否则「仅扫描」会漏报。
 
 
 

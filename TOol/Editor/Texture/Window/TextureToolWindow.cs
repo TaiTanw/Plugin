@@ -232,6 +232,15 @@ public class TextureToolWindow : EditorWindow
             EditorGUILayout.Space(4f);
             using (new EditorGUI.DisabledScope(targets.Count == 0 || selectedCount == 0))
             {
+                if (GUILayout.Button("仅扫描勾选的操作（不改文件）", GUILayout.Height(26f)))
+                {
+                    TextureOperationRunner.Scan(
+                        CollectManuallySelectedOperations(operations),
+                        targets,
+                        TextureProcessSettings.GetOrCreateAsset(),
+                        true);
+                }
+
                 if (GUILayout.Button("执行勾选的操作", GUILayout.Height(28f)))
                 {
                     RunOperations(CollectManuallySelectedOperations(operations), targets);

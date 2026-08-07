@@ -64,6 +64,11 @@ public class ResourceProcessWindow : EditorWindow
                     lastBatchMessage = RunTextureBatchCore();
                     Repaint();
                 },
+                () =>
+                {
+                    lastBatchMessage = ScanTextureBatchCore();
+                    Repaint();
+                },
                 ResourceBatchFolderStore.GetTextureFolders());
 
             DrawResourceBlock(
@@ -76,6 +81,11 @@ public class ResourceProcessWindow : EditorWindow
                 () =>
                 {
                     lastBatchMessage = RunModelBatchCore();
+                    Repaint();
+                },
+                () =>
+                {
+                    lastBatchMessage = ScanModelBatchCore();
                     Repaint();
                 },
                 ResourceBatchFolderStore.GetModelFolders());
@@ -225,6 +235,7 @@ public class ResourceProcessWindow : EditorWindow
         System.Action<bool> setPost,
         System.Action openPanel,
         System.Action runBatch,
+        System.Action scanBatch,
         List<string> batchFolders)
     {
         EditorGUILayout.Space(8f);
@@ -268,6 +279,11 @@ public class ResourceProcessWindow : EditorWindow
 
             using (new EditorGUI.DisabledScope(valid.Count == 0))
             {
+                if (GUILayout.Button("按批量路径仅扫描" + title + "（不改文件）", GUILayout.Height(26f)))
+                {
+                    scanBatch();
+                }
+
                 if (GUILayout.Button("按批量路径执行勾选的" + title + "操作", GUILayout.Height(28f)))
                 {
                     runBatch();
@@ -304,6 +320,31 @@ public class ResourceProcessWindow : EditorWindow
         return FormatTextureSummary(summary, targets.Count);
     }
 
+    private static string ScanTextureBatchCore()
+    {
+        List<string> targets = TextureTargetCollector.CollectFromBatchFolders();
+        List<ITextureAssetOperation> operations = ResourceManualOperationStore.CollectSelectedTextureOperations();
+        if (operations.Count == 0)
+        {
+            string msg = "[贴图扫描] 没有勾选任何手动操作。";
+            Debug.LogWarning(msg);
+            return msg;
+        }
+
+        if (targets.Count == 0)
+        {
+            string msg = "[贴图扫描] 批量路径下没有命中贴图。";
+            Debug.LogWarning(msg);
+            return msg;
+        }
+
+        AssetOperationScanSummary summary = TextureOperationRunner.Scan(
+            operations, targets, TextureProcessSettings.GetOrCreateAsset(), true);
+        return "[贴图扫描] 目标 " + targets.Count + "，需处理 " + summary.NeedsWorkCount +
+               "，跳过 " + summary.SkippedCount +
+               (summary.Canceled ? "（已取消）" : string.Empty);
+    }
+
     private static string RunModelBatchCore()
     {
         List<string> targets = ModelTargetCollector.CollectFromBatchFolders();
@@ -328,6 +369,31 @@ public class ResourceProcessWindow : EditorWindow
                "，改动 " + summary.ChangedCount +
                "，跳过 " + summary.SkippedCount +
                "，失败 " + summary.FailedCount +
+               (summary.Canceled ? "（已取消）" : string.Empty);
+    }
+
+    private static string ScanModelBatchCore()
+    {
+        List<string> targets = ModelTargetCollector.CollectFromBatchFolders();
+        List<IModelAssetOperation> operations = ResourceManualOperationStore.CollectSelectedModelOperations();
+        if (operations.Count == 0)
+        {
+            string msg = "[模型扫描] 没有勾选任何手动操作。";
+            Debug.LogWarning(msg);
+            return msg;
+        }
+
+        if (targets.Count == 0)
+        {
+            string msg = "[模型扫描] 批量路径下没有命中模型。";
+            Debug.LogWarning(msg);
+            return msg;
+        }
+
+        AssetOperationScanSummary summary = ModelOperationRunner.Scan(
+            operations, targets, ModelProcessSettings.GetOrCreateAsset(), true);
+        return "[模型扫描] 目标 " + targets.Count + "，需处理 " + summary.NeedsWorkCount +
+               "，跳过 " + summary.SkippedCount +
                (summary.Canceled ? "（已取消）" : string.Empty);
     }
 

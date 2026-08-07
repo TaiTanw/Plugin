@@ -15,6 +15,7 @@
 //   - 不要在操作里弹窗、不要在操作里刷进度条（进度交给 context.ReportSubProgress，
 //     弹窗和汇总交给 TextureOperationRunner），这样同一个操作既能被窗口调用，
 //     也能被导入回调调用，行为完全一致。
+//   - Evaluate：扫描与 Runner 筛选用；CanProcess 应委托 Evaluate.NeedsWork，保持单一口径。
 // =====================================================================================
 /// <summary>
 /// 图片处理器行为
@@ -37,8 +38,13 @@ public interface ITextureAssetOperation
     int Order { get; }
 
     /// <summary>
-    /// 快速判断这个资产要不要处理。必须足够便宜——导入回调会对一整批资产逐个调用它，
-    /// 所以这里只允许看扩展名、看文件体积这类不需要解码的信息。
+    /// 统一评估：是否适用、是否需要改。扫描 dry-run 与 Runner 收集待处理项都走这里。
+    /// 预筛应尽量便宜；需要读像素/解码的探测也写在本方法内（由实现决定深度）。
+    /// </summary>
+    AssetOperationEvaluation Evaluate(string assetPath, TextureProcessSettings settings);
+
+    /// <summary>
+    /// 兼容旧调用：等价于 Evaluate(...).NeedsWork。
     /// </summary>
     bool CanProcess(string assetPath, TextureProcessSettings settings);
 
