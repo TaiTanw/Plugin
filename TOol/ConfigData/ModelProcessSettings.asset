@@ -16,7 +16,8 @@ MonoBehaviour:
   modelStripLightsAndCameras: 1
   supportedExtensions:
   - .fbx
-  importAutoOperationIds:
+  importAutoOperationIds: []
+  masterBatchOperationIds:
   - set_vertex_colors_white
   excludedPathPrefixes:
   - Assets/Art/

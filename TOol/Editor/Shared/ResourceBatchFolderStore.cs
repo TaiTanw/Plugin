@@ -5,37 +5,49 @@ using UnityEditor;
 using UnityEngine;
 
 // =====================================================================================
-// 子面板「依据文件路径批量」的文件夹列表，以及总面板批量执行的唯一起点。
-// 与子面板当前范围下拉（选中 / 单文件夹）无关；本机 EditorPrefs，不进版本库。
+// L1 主面板共用批量路径（贴图/模型总批量同一份）。本机 EditorPrefs，不进版本库。
+// L2「使用主面板批量路径」只读本 Store；不再维护贴图/模型两套列表。
 // =====================================================================================
 public static class ResourceBatchFolderStore
 {
-    private const string TextureFoldersKey = "TOol.BatchFolders.Texture";
-    private const string ModelFoldersKey = "TOol.BatchFolders.Model";
+    private const string MasterFoldersKey = "TOol.BatchFolders.Master";
+    private const string LegacyTextureFoldersKey = "TOol.BatchFolders.Texture";
+    private const string LegacyModelFoldersKey = "TOol.BatchFolders.Model";
+    private const string MergedToMasterKey = "TOol.BatchFolders.MergedToMaster";
     private const string ArtDefaultSeededKey = "TOol.BatchFolders.ArtDefaultSeeded";
     private const string DefaultArtFolder = "Assets/Art";
 
-    private static List<string> textureFolders;
-    private static List<string> modelFolders;
+    private static List<string> masterFolders;
 
+    public static List<string> GetMasterFolders()
+    {
+        return new List<string>(LoadMaster());
+    }
+
+    public static void SetMasterFolders(IList<string> folders)
+    {
+        Save(ref masterFolders, MasterFoldersKey, folders);
+    }
+
+    /// <summary>兼容旧调用：已与主路径合并，读写同一份。</summary>
     public static List<string> GetTextureFolders()
     {
-        return new List<string>(Load(ref textureFolders, TextureFoldersKey));
+        return GetMasterFolders();
     }
 
     public static List<string> GetModelFolders()
     {
-        return new List<string>(Load(ref modelFolders, ModelFoldersKey));
+        return GetMasterFolders();
     }
 
     public static void SetTextureFolders(IList<string> folders)
     {
-        Save(ref textureFolders, TextureFoldersKey, folders);
+        SetMasterFolders(folders);
     }
 
     public static void SetModelFolders(IList<string> folders)
     {
-        Save(ref modelFolders, ModelFoldersKey, folders);
+        SetMasterFolders(folders);
     }
 
     /// <summary>过滤掉空路径、非文件夹；不修改存储。</summary>
@@ -70,31 +82,106 @@ public static class ResourceBatchFolderStore
         return result;
     }
 
-    private static List<string> Load(ref List<string> cache, string key)
+    public static List<string> GetValidMasterFolders()
     {
-        if (cache != null)
+        return GetValidFolders(GetMasterFolders());
+    }
+
+    /// <summary>供 L2 标题显示，例如「Assets/Art | Assets/Incoming（共 2）」。</summary>
+    public static string FormatMasterPathsTitle(int maxShow = 2)
+    {
+        List<string> valid = GetValidMasterFolders();
+        if (valid.Count == 0)
         {
-            return cache;
+            return "（主面板尚未配置有效路径）";
         }
 
-        cache = new List<string>();
-        string raw = EditorPrefs.GetString(key, string.Empty);
+        var builder = new StringBuilder();
+        int show = Mathf.Min(maxShow, valid.Count);
+        for (int i = 0; i < show; i++)
+        {
+            if (i > 0)
+            {
+                builder.Append(" | ");
+            }
+
+            builder.Append(valid[i]);
+        }
+
+        if (valid.Count > show)
+        {
+            builder.Append("（共 ").Append(valid.Count).Append("）");
+        }
+
+        return builder.ToString();
+    }
+
+    private static List<string> LoadMaster()
+    {
+        if (masterFolders != null)
+        {
+            return masterFolders;
+        }
+
+        EnsureMergedFromLegacy();
+
+        masterFolders = new List<string>();
+        string raw = EditorPrefs.GetString(MasterFoldersKey, string.Empty);
         if (!string.IsNullOrEmpty(raw))
         {
             string[] parts = raw.Split(new[] { '|' }, StringSplitOptions.RemoveEmptyEntries);
             for (int i = 0; i < parts.Length; i++)
             {
                 string path = Normalize(parts[i]);
-                if (!string.IsNullOrEmpty(path) && !cache.Contains(path))
+                if (!string.IsNullOrEmpty(path) && !masterFolders.Contains(path))
                 {
-                    cache.Add(path);
+                    masterFolders.Add(path);
                 }
             }
         }
 
-        // 空列表默认含 Art；已有列表仅在首次升级时补一次 Art（之后用户删掉不再强行加回）。
-        MaybeSeedDefaultArtFolder(ref cache, key);
-        return cache;
+        MaybeSeedDefaultArtFolder(ref masterFolders, MasterFoldersKey);
+        return masterFolders;
+    }
+
+    private static void EnsureMergedFromLegacy()
+    {
+        if (EditorPrefs.GetBool(MergedToMasterKey, false))
+        {
+            return;
+        }
+
+        var merged = new List<string>();
+        AppendLegacyRaw(merged, EditorPrefs.GetString(LegacyTextureFoldersKey, string.Empty));
+        AppendLegacyRaw(merged, EditorPrefs.GetString(LegacyModelFoldersKey, string.Empty));
+        AppendLegacyRaw(merged, EditorPrefs.GetString(MasterFoldersKey, string.Empty));
+
+        if (merged.Count == 0 && AssetDatabase.IsValidFolder(DefaultArtFolder))
+        {
+            merged.Add(DefaultArtFolder);
+        }
+
+        Save(ref masterFolders, MasterFoldersKey, merged);
+        EditorPrefs.SetBool(MergedToMasterKey, true);
+        EditorPrefs.SetBool(ArtDefaultSeededKey, true);
+    }
+
+    private static void AppendLegacyRaw(List<string> target, string raw)
+    {
+        if (string.IsNullOrEmpty(raw))
+        {
+            return;
+        }
+
+        string[] parts = raw.Split(new[] { '|' }, StringSplitOptions.RemoveEmptyEntries);
+        for (int i = 0; i < parts.Length; i++)
+        {
+            string path = Normalize(parts[i]);
+            if (!string.IsNullOrEmpty(path) && !target.Contains(path))
+            {
+                target.Add(path);
+            }
+        }
     }
 
     private static void MaybeSeedDefaultArtFolder(ref List<string> cache, string key)

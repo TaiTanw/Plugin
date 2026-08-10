@@ -2,8 +2,8 @@ using System.Collections.Generic;
 using UnityEditor;
 
 // =====================================================================================
-// 子面板与总面板共用的「手动执行时包含哪些 Operation」勾选状态。
-// 按资源域 + operation Id 存 EditorPrefs；缺省为勾选（与原先窗口默认 true 对齐）。
+// L2 精准面板：手动执行时包含哪些 Operation（本机 EditorPrefs）。
+// 主面板批量不读本 Store，改读 Settings.masterBatchOperationIds（L3 / SO）。
 // =====================================================================================
 public static class ResourceManualOperationStore
 {

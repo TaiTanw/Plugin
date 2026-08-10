@@ -66,6 +66,43 @@ public static class ModelOperationRegistry
         return result.OrderBy(operation => operation.Order).ToList();
     }
 
+    public static List<IModelAssetOperation> GetMasterBatchOperations(ModelProcessSettings settings)
+    {
+        var result = new List<IModelAssetOperation>();
+        if (settings == null)
+        {
+            return result;
+        }
+
+        settings.EnsureMasterBatchDefaults();
+        if (settings.masterBatchOperationIds == null)
+        {
+            return result;
+        }
+
+        foreach (string id in settings.masterBatchOperationIds)
+        {
+            if (string.IsNullOrEmpty(id))
+            {
+                continue;
+            }
+
+            IModelAssetOperation operation = FindById(id);
+            if (operation == null)
+            {
+                Debug.LogWarning("[ModelOperationRegistry] 主批量操作 Id 找不到实现: " + id);
+                continue;
+            }
+
+            if (!result.Contains(operation))
+            {
+                result.Add(operation);
+            }
+        }
+
+        return result.OrderBy(operation => operation.Order).ToList();
+    }
+
     private static void EnsureDiscovered()
     {
         if (operations != null)

@@ -86,6 +86,45 @@ public static class TextureOperationRegistry
 
         return result.OrderBy(operation => operation.Order).ToList();
     }
+
+    /// <summary>主面板批量：读取 Settings.masterBatchOperationIds。</summary>
+    public static List<ITextureAssetOperation> GetMasterBatchOperations(TextureProcessSettings settings)
+    {
+        var result = new List<ITextureAssetOperation>();
+        if (settings == null)
+        {
+            return result;
+        }
+
+        settings.EnsureMasterBatchDefaults();
+        if (settings.masterBatchOperationIds == null)
+        {
+            return result;
+        }
+
+        foreach (string id in settings.masterBatchOperationIds)
+        {
+            if (string.IsNullOrEmpty(id))
+            {
+                continue;
+            }
+
+            ITextureAssetOperation operation = FindById(id);
+            if (operation == null)
+            {
+                Debug.LogWarning("[TextureOperationRegistry] 主批量操作 Id 找不到实现: " + id);
+                continue;
+            }
+
+            if (!result.Contains(operation))
+            {
+                result.Add(operation);
+            }
+        }
+
+        return result.OrderBy(operation => operation.Order).ToList();
+    }
+
     /// <summary>
     /// 确保存在（反射获得拓展的关键部分）
     /// </summary>

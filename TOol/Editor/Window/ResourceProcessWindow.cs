@@ -4,20 +4,32 @@ using UnityEditor;
 using UnityEngine;
 
 // =====================================================================================
-// 资源处理总面板：自动化与后处理批量入口。
-//   - 总开关 + 贴图/模型【设置自动】【后处理自动】
-//   - 总批量执行（贴图→模型，平铺后手动）+ 各类「是否纳入总批量」开关
-//   - 分项按批量路径执行；打开子面板；可跳转批量 FBX 入库
+// L1 资源处理总面板：自动化开关 + 共用批量路径 + 总/分项批量（路径×L3 Op）。
 // =====================================================================================
 public class ResourceProcessWindow : EditorWindow
 {
+    private const string PrefFoldAdvanced = "TOol.Master.Fold.AdvancedOps";
+
     private Vector2 scroll;
     private string lastBatchMessage;
+    private List<string> masterFolders = new List<string>();
+    private bool foldAdvancedOps;
 
     [MenuItem("Tools/资源处理总面板")]
     public static void ShowWindow()
     {
-        GetWindow<ResourceProcessWindow>("资源处理").minSize = new Vector2(460f, 460f);
+        GetWindow<ResourceProcessWindow>("资源处理").minSize = new Vector2(460f, 520f);
+    }
+
+    private void OnEnable()
+    {
+        masterFolders = ResourceBatchFolderStore.GetMasterFolders();
+        foldAdvancedOps = EditorPrefs.GetBool(PrefFoldAdvanced, false);
+    }
+
+    private void OnDisable()
+    {
+        EditorPrefs.SetBool(PrefFoldAdvanced, foldAdvancedOps);
     }
 
     private void OnGUI()
@@ -31,9 +43,8 @@ public class ResourceProcessWindow : EditorWindow
                 "总开关：关掉后设置自动/后处理自动都不跑；手动执行不受影响。\n" +
                 "设置自动：导入前改 Importer（导入区建议按需开启）。\n" +
                 "后处理自动：导入后跑 Operation——不保证交付生效（Art 被排除；" +
-                "内嵌贴图/顶点色须平铺后再到贴图·模型面板或总面板批量路径手动处理）。默认请保持关闭。\n" +
-                "导入后处理自动阶段：模型 → 贴图。\n" +
-                "平铺后手动总批量：贴图 → 模型（避免贴图收尾冲掉顶点色）。",
+                "内嵌贴图/顶点色须平铺后再手动处理）。默认请保持关闭。\n" +
+                "日常：配路径 → 执行全部。分项开关/精准面板/入库等在「高级操作」。",
                 MessageType.Info);
 
             using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
@@ -50,45 +61,8 @@ public class ResourceProcessWindow : EditorWindow
                 }
             }
 
+            DrawMasterPathSection();
             DrawMasterBatchSection();
-
-            DrawResourceBlock(
-                "贴图",
-                () => ResourceProcessSwitches.TextureSettingsAuto,
-                v => ResourceProcessSwitches.TextureSettingsAuto = v,
-                () => ResourceProcessSwitches.TexturePostProcessAuto,
-                v => ResourceProcessSwitches.TexturePostProcessAuto = v,
-                TextureToolWindow.ShowWindow,
-                () =>
-                {
-                    lastBatchMessage = RunTextureBatchCore();
-                    Repaint();
-                },
-                () =>
-                {
-                    lastBatchMessage = ScanTextureBatchCore();
-                    Repaint();
-                },
-                ResourceBatchFolderStore.GetTextureFolders());
-
-            DrawResourceBlock(
-                "模型",
-                () => ResourceProcessSwitches.ModelSettingsAuto,
-                v => ResourceProcessSwitches.ModelSettingsAuto = v,
-                () => ResourceProcessSwitches.ModelPostProcessAuto,
-                v => ResourceProcessSwitches.ModelPostProcessAuto = v,
-                ModelToolWindow.ShowWindow,
-                () =>
-                {
-                    lastBatchMessage = RunModelBatchCore();
-                    Repaint();
-                },
-                () =>
-                {
-                    lastBatchMessage = ScanModelBatchCore();
-                    Repaint();
-                },
-                ResourceBatchFolderStore.GetModelFolders());
 
             if (!string.IsNullOrEmpty(lastBatchMessage))
             {
@@ -96,40 +70,107 @@ public class ResourceProcessWindow : EditorWindow
                 EditorGUILayout.HelpBox(lastBatchMessage, MessageType.None);
             }
 
-            EditorGUILayout.Space(10f);
-            EditorGUILayout.LabelField("入库", EditorStyles.boldLabel);
-            using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
+            EditorGUILayout.Space(8f);
+            bool newFold = EditorGUILayout.Foldout(
+                foldAdvancedOps, "高级操作", true, EditorStyles.foldoutHeader);
+            if (newFold != foldAdvancedOps)
             {
-                EditorGUILayout.HelpBox(
-                    "批量 FBX 导入只把外部 FBX 送进导入区；交付名仍以人工 Prefab 名为准。",
-                    MessageType.None);
-                if (GUILayout.Button("打开批量FBX导入"))
-                {
-                    BatchFbxImportWindow.ShowWindow();
-                }
+                foldAdvancedOps = newFold;
+                EditorPrefs.SetBool(PrefFoldAdvanced, foldAdvancedOps);
             }
 
-            EditorGUILayout.Space(10f);
-            EditorGUILayout.LabelField("配置资产", EditorStyles.boldLabel);
-            using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
+            if (foldAdvancedOps)
             {
-                if (GUILayout.Button("确保贴图配置资产存在"))
-                {
-                    Selection.activeObject = TextureProcessSettings.GetOrCreateAsset();
-                    EditorGUIUtility.PingObject(Selection.activeObject);
-                }
+                DrawAdvancedOpsSection();
+            }
+        }
+    }
 
-                if (GUILayout.Button("确保模型配置资产存在"))
-                {
-                    Selection.activeObject = ModelProcessSettings.GetOrCreateAsset();
-                    EditorGUIUtility.PingObject(Selection.activeObject);
-                }
+    private void DrawAdvancedOpsSection()
+    {
+        DrawResourceBlock(
+            "贴图",
+            () => ResourceProcessSwitches.TextureSettingsAuto,
+            v => ResourceProcessSwitches.TextureSettingsAuto = v,
+            () => ResourceProcessSwitches.TexturePostProcessAuto,
+            v => ResourceProcessSwitches.TexturePostProcessAuto = v,
+            TextureToolWindow.ShowWindow,
+            () =>
+            {
+                lastBatchMessage = RunTextureBatchCore();
+                Repaint();
+            },
+            () =>
+            {
+                lastBatchMessage = ScanTextureBatchCore();
+                Repaint();
+            });
 
-                if (GUILayout.Button("确保批量FBX导入配置资产存在"))
-                {
-                    Selection.activeObject = BatchFbxImportSettings.GetOrCreateAsset();
-                    EditorGUIUtility.PingObject(Selection.activeObject);
-                }
+        DrawResourceBlock(
+            "模型",
+            () => ResourceProcessSwitches.ModelSettingsAuto,
+            v => ResourceProcessSwitches.ModelSettingsAuto = v,
+            () => ResourceProcessSwitches.ModelPostProcessAuto,
+            v => ResourceProcessSwitches.ModelPostProcessAuto = v,
+            ModelToolWindow.ShowWindow,
+            () =>
+            {
+                lastBatchMessage = RunModelBatchCore();
+                Repaint();
+            },
+            () =>
+            {
+                lastBatchMessage = ScanModelBatchCore();
+                Repaint();
+            });
+
+        EditorGUILayout.Space(10f);
+        EditorGUILayout.LabelField("入库", EditorStyles.boldLabel);
+        using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
+        {
+            EditorGUILayout.HelpBox(
+                "批量 FBX 导入只把外部 FBX 送进导入区；交付名仍以人工 Prefab 名为准。",
+                MessageType.None);
+            if (GUILayout.Button("打开批量FBX导入"))
+            {
+                BatchFbxImportWindow.ShowWindow();
+            }
+        }
+
+        EditorGUILayout.Space(10f);
+        EditorGUILayout.LabelField("配置资产", EditorStyles.boldLabel);
+        using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
+        {
+            if (GUILayout.Button("确保贴图配置资产存在"))
+            {
+                Selection.activeObject = TextureProcessSettings.GetOrCreateAsset();
+                EditorGUIUtility.PingObject(Selection.activeObject);
+            }
+
+            if (GUILayout.Button("确保模型配置资产存在"))
+            {
+                Selection.activeObject = ModelProcessSettings.GetOrCreateAsset();
+                EditorGUIUtility.PingObject(Selection.activeObject);
+            }
+
+            if (GUILayout.Button("确保批量FBX导入配置资产存在"))
+            {
+                Selection.activeObject = BatchFbxImportSettings.GetOrCreateAsset();
+                EditorGUIUtility.PingObject(Selection.activeObject);
+            }
+        }
+    }
+
+    private void DrawMasterPathSection()
+    {
+        EditorGUILayout.Space(8f);
+        EditorGUILayout.LabelField("主面板批量路径（贴图/模型共用，本机）", EditorStyles.boldLabel);
+        using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
+        {
+            if (ResourceBatchFolderListGui.DrawEditableList("文件夹列表", masterFolders))
+            {
+                ResourceBatchFolderStore.SetMasterFolders(masterFolders);
+                masterFolders = ResourceBatchFolderStore.GetMasterFolders();
             }
         }
     }
@@ -137,13 +178,13 @@ public class ResourceProcessWindow : EditorWindow
     private void DrawMasterBatchSection()
     {
         EditorGUILayout.Space(8f);
-        EditorGUILayout.LabelField("手动总批量（用子面板批量路径）", EditorStyles.boldLabel);
+        EditorGUILayout.LabelField("手动总批量", EditorStyles.boldLabel);
         using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
         {
             EditorGUILayout.HelpBox(
                 "平铺后手动总批量，顺序固定：贴图 → 模型。\n" +
-                "下方「纳入总批量」只影响本按钮，不影响各资源块的分项执行。\n" +
-                "某类已纳入但批量路径为空时会 Warning 并跳过该类。",
+                "路径用上方共用列表；操作集合在贴图/模型「高级设置」。\n" +
+                "「纳入总批量」只影响本按钮。",
                 MessageType.None);
 
             bool includeModel = EditorGUILayout.ToggleLeft(
@@ -162,7 +203,8 @@ public class ResourceProcessWindow : EditorWindow
 
             bool anyIncluded = ResourceProcessSwitches.MasterBatchIncludeModel ||
                                ResourceProcessSwitches.MasterBatchIncludeTexture;
-            using (new EditorGUI.DisabledScope(!anyIncluded))
+            List<string> valid = ResourceBatchFolderStore.GetValidMasterFolders();
+            using (new EditorGUI.DisabledScope(!anyIncluded || valid.Count == 0))
             {
                 if (GUILayout.Button("按批量路径执行全部（贴图→模型）", GUILayout.Height(30f)))
                 {
@@ -174,6 +216,10 @@ public class ResourceProcessWindow : EditorWindow
             {
                 EditorGUILayout.HelpBox("两类均未纳入总批量，按钮已禁用。", MessageType.Info);
             }
+            else if (valid.Count == 0)
+            {
+                EditorGUILayout.HelpBox("主面板批量路径为空或无效。", MessageType.Warning);
+            }
         }
     }
 
@@ -182,14 +228,11 @@ public class ResourceProcessWindow : EditorWindow
         var report = new StringBuilder();
         report.AppendLine("[总批量] 开始（贴图→模型，平铺后手动）");
 
-        // 平铺后：先贴图后模型。贴图若 Refresh/重导会冲 Mesh 顶点色；模型放最后写入更稳。
         if (ResourceProcessSwitches.MasterBatchIncludeTexture)
         {
-            List<string> textureFolders = ResourceBatchFolderStore.GetValidFolders(
-                ResourceBatchFolderStore.GetTextureFolders());
-            if (textureFolders.Count == 0)
+            if (ResourceBatchFolderStore.GetValidMasterFolders().Count == 0)
             {
-                string warn = "[总批量] 贴图已纳入，但批量路径为空，已跳过。请在贴图子面板配置「依据文件路径批量」。";
+                string warn = "[总批量] 贴图已纳入，但主面板批量路径为空，已跳过。";
                 Debug.LogWarning(warn);
                 report.AppendLine(warn);
             }
@@ -205,11 +248,9 @@ public class ResourceProcessWindow : EditorWindow
 
         if (ResourceProcessSwitches.MasterBatchIncludeModel)
         {
-            List<string> modelFolders = ResourceBatchFolderStore.GetValidFolders(
-                ResourceBatchFolderStore.GetModelFolders());
-            if (modelFolders.Count == 0)
+            if (ResourceBatchFolderStore.GetValidMasterFolders().Count == 0)
             {
-                string warn = "[总批量] 模型已纳入，但批量路径为空，已跳过。请在模型子面板配置「依据文件路径批量」。";
+                string warn = "[总批量] 模型已纳入，但主面板批量路径为空，已跳过。";
                 Debug.LogWarning(warn);
                 report.AppendLine(warn);
             }
@@ -235,8 +276,7 @@ public class ResourceProcessWindow : EditorWindow
         System.Action<bool> setPost,
         System.Action openPanel,
         System.Action runBatch,
-        System.Action scanBatch,
-        List<string> batchFolders)
+        System.Action scanBatch)
     {
         EditorGUILayout.Space(8f);
         using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
@@ -260,21 +300,17 @@ public class ResourceProcessWindow : EditorWindow
             }
 
             EditorGUILayout.Space(4f);
-            EditorGUILayout.LabelField("手动批量（用子面板批量路径）", EditorStyles.miniBoldLabel);
-            List<string> valid = ResourceBatchFolderStore.GetValidFolders(batchFolders);
+            EditorGUILayout.LabelField("手动批量（主路径 + 高级设置 Op）", EditorStyles.miniBoldLabel);
+            List<string> valid = ResourceBatchFolderStore.GetValidMasterFolders();
             if (valid.Count == 0)
             {
-                EditorGUILayout.HelpBox(
-                    "尚未配置批量文件夹。请打开" + title + "处理面板 → 范围选「依据文件路径批量」→ 添加文件夹。",
-                    MessageType.Warning);
+                EditorGUILayout.HelpBox("请先在上方配置主面板批量路径。", MessageType.Warning);
             }
             else
             {
-                EditorGUILayout.LabelField("路径 " + valid.Count + " 个：", EditorStyles.miniLabel);
-                for (int i = 0; i < valid.Count; i++)
-                {
-                    EditorGUILayout.LabelField("  " + valid[i], EditorStyles.miniLabel);
-                }
+                EditorGUILayout.LabelField(
+                    "路径：" + ResourceBatchFolderStore.FormatMasterPathsTitle(2),
+                    EditorStyles.miniLabel);
             }
 
             using (new EditorGUI.DisabledScope(valid.Count == 0))
@@ -284,13 +320,13 @@ public class ResourceProcessWindow : EditorWindow
                     scanBatch();
                 }
 
-                if (GUILayout.Button("按批量路径执行勾选的" + title + "操作", GUILayout.Height(28f)))
+                if (GUILayout.Button("按批量路径执行" + title, GUILayout.Height(28f)))
                 {
                     runBatch();
                 }
             }
 
-            if (GUILayout.Button("打开 " + title + " 处理面板", GUILayout.Height(26f)))
+            if (GUILayout.Button("打开 " + title + " 精准处理面板", GUILayout.Height(26f)))
             {
                 openPanel();
             }
@@ -300,10 +336,11 @@ public class ResourceProcessWindow : EditorWindow
     private static string RunTextureBatchCore()
     {
         List<string> targets = TextureTargetCollector.CollectFromBatchFolders();
-        List<ITextureAssetOperation> operations = ResourceManualOperationStore.CollectSelectedTextureOperations();
+        TextureProcessSettings settings = TextureProcessSettings.GetOrCreateAsset();
+        List<ITextureAssetOperation> operations = TextureOperationRegistry.GetMasterBatchOperations(settings);
         if (operations.Count == 0)
         {
-            string msg = "[贴图] 没有勾选任何手动操作（请在贴图子面板勾选）。";
+            string msg = "[贴图] 高级设置中未勾选任何「主面板批量包含」操作。";
             Debug.LogWarning(msg);
             return msg;
         }
@@ -315,7 +352,6 @@ public class ResourceProcessWindow : EditorWindow
             return msg;
         }
 
-        TextureProcessSettings settings = TextureProcessSettings.GetOrCreateAsset();
         TextureOperationRunSummary summary = TextureOperationRunner.Run(operations, targets, settings, false);
         return FormatTextureSummary(summary, targets.Count);
     }
@@ -323,10 +359,11 @@ public class ResourceProcessWindow : EditorWindow
     private static string ScanTextureBatchCore()
     {
         List<string> targets = TextureTargetCollector.CollectFromBatchFolders();
-        List<ITextureAssetOperation> operations = ResourceManualOperationStore.CollectSelectedTextureOperations();
+        TextureProcessSettings settings = TextureProcessSettings.GetOrCreateAsset();
+        List<ITextureAssetOperation> operations = TextureOperationRegistry.GetMasterBatchOperations(settings);
         if (operations.Count == 0)
         {
-            string msg = "[贴图扫描] 没有勾选任何手动操作。";
+            string msg = "[贴图扫描] 高级设置中未勾选主面板批量操作。";
             Debug.LogWarning(msg);
             return msg;
         }
@@ -338,8 +375,7 @@ public class ResourceProcessWindow : EditorWindow
             return msg;
         }
 
-        AssetOperationScanSummary summary = TextureOperationRunner.Scan(
-            operations, targets, TextureProcessSettings.GetOrCreateAsset(), true);
+        AssetOperationScanSummary summary = TextureOperationRunner.Scan(operations, targets, settings, true);
         return "[贴图扫描] 目标 " + targets.Count + "，需处理 " + summary.NeedsWorkCount +
                "，跳过 " + summary.SkippedCount +
                (summary.Canceled ? "（已取消）" : string.Empty);
@@ -348,10 +384,11 @@ public class ResourceProcessWindow : EditorWindow
     private static string RunModelBatchCore()
     {
         List<string> targets = ModelTargetCollector.CollectFromBatchFolders();
-        List<IModelAssetOperation> operations = ResourceManualOperationStore.CollectSelectedModelOperations();
+        ModelProcessSettings settings = ModelProcessSettings.GetOrCreateAsset();
+        List<IModelAssetOperation> operations = ModelOperationRegistry.GetMasterBatchOperations(settings);
         if (operations.Count == 0)
         {
-            string msg = "[模型] 没有勾选任何手动操作（请在模型子面板勾选）。";
+            string msg = "[模型] 高级设置中未勾选任何「主面板批量包含」操作。";
             Debug.LogWarning(msg);
             return msg;
         }
@@ -363,7 +400,6 @@ public class ResourceProcessWindow : EditorWindow
             return msg;
         }
 
-        ModelProcessSettings settings = ModelProcessSettings.GetOrCreateAsset();
         ModelOperationRunSummary summary = ModelOperationRunner.Run(operations, targets, settings, false);
         return "[模型] 批量完成：目标 " + targets.Count +
                "，改动 " + summary.ChangedCount +
@@ -375,10 +411,11 @@ public class ResourceProcessWindow : EditorWindow
     private static string ScanModelBatchCore()
     {
         List<string> targets = ModelTargetCollector.CollectFromBatchFolders();
-        List<IModelAssetOperation> operations = ResourceManualOperationStore.CollectSelectedModelOperations();
+        ModelProcessSettings settings = ModelProcessSettings.GetOrCreateAsset();
+        List<IModelAssetOperation> operations = ModelOperationRegistry.GetMasterBatchOperations(settings);
         if (operations.Count == 0)
         {
-            string msg = "[模型扫描] 没有勾选任何手动操作。";
+            string msg = "[模型扫描] 高级设置中未勾选主面板批量操作。";
             Debug.LogWarning(msg);
             return msg;
         }
@@ -390,8 +427,7 @@ public class ResourceProcessWindow : EditorWindow
             return msg;
         }
 
-        AssetOperationScanSummary summary = ModelOperationRunner.Scan(
-            operations, targets, ModelProcessSettings.GetOrCreateAsset(), true);
+        AssetOperationScanSummary summary = ModelOperationRunner.Scan(operations, targets, settings, true);
         return "[模型扫描] 目标 " + targets.Count + "，需处理 " + summary.NeedsWorkCount +
                "，跳过 " + summary.SkippedCount +
                (summary.Canceled ? "（已取消）" : string.Empty);

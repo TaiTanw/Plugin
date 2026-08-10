@@ -3,16 +3,15 @@ using UnityEditor;
 using UnityEngine;
 
 // =====================================================================================
-// 模型处理子面板。无独立菜单——由资源处理总面板打开。
-// 手动范围：选中 / 单文件夹 / 依据文件路径批量；批量路径与总面板共用 Store。
+// L2 模型精准面板：处理范围 + 本机勾选操作 + 上次结果；高级设置进 L3。
 // =====================================================================================
 public class ModelToolWindow : EditorWindow
 {
+    private const string PrefScope = "TOol.ModelTool.Scope";
+
     private ModelProcessSettings settings;
-    private SerializedObject settingsSerialized;
     private ModelTargetCollector.Scope scope = ModelTargetCollector.Scope.Selection;
     private DefaultAsset targetFolder;
-    private List<string> batchFolders = new List<string>();
     private List<string> cachedTargets = new List<string>();
     private bool targetsDirty = true;
     private ModelOperationRunSummary lastSummary;
@@ -28,8 +27,8 @@ public class ModelToolWindow : EditorWindow
     private void OnEnable()
     {
         settings = ModelProcessSettings.GetOrCreateAsset();
-        batchFolders = ResourceBatchFolderStore.GetModelFolders();
         targetsDirty = true;
+        scope = (ModelTargetCollector.Scope)EditorPrefs.GetInt(PrefScope, (int)ModelTargetCollector.Scope.Selection);
     }
 
     private void OnSelectionChange()
@@ -43,8 +42,7 @@ public class ModelToolWindow : EditorWindow
 
     private void OnDisable()
     {
-        ResourceBatchFolderStore.SetModelFolders(batchFolders);
-        settingsSerialized = null;
+        EditorPrefs.SetInt(PrefScope, (int)scope);
     }
 
     private void OnGUI()
@@ -58,36 +56,31 @@ public class ModelToolWindow : EditorWindow
         {
             mainScroll = scroll.scrollPosition;
             EditorGUILayout.HelpBox(
-                "导入自动开关在「资源处理总面板」。本面板只负责配置与手动执行。\n" +
-                "自动流跳过 Assets/Art/；导 GLB 前请用批量路径或选中 Art Model/Prefab 手动刷顶点色。\n" +
-                "「导入后处理自动」仅导入区；不代表 Art 交付已处理。",
+                "精准处理：选范围 → 勾选手动操作 → 扫描/执行（勾选为本机 EditorPrefs）。\n" +
+                "主面板批量路径/操作集合在总面板与「高级设置」。自动流跳过 Art。",
                 MessageType.Info);
 
-            DrawSettings();
             List<string> targets = DrawTargets();
             DrawOperations(targets);
             DrawResult();
-        }
-    }
 
-    private void DrawSettings()
-    {
-        EditorGUILayout.LabelField("配置", EditorStyles.boldLabel);
-        using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
-        {
-            EditorGUILayout.ObjectField(settings, typeof(ModelProcessSettings), false);
-            ScriptableObjectSettingsGui.Draw(settings, ref settingsSerialized);
-            if (GUI.changed)
+            EditorGUILayout.Space(10f);
+            if (GUILayout.Button("高级设置（子处理配置 / 操作集合）…", GUILayout.Height(28f)))
             {
-                EditorUtility.SetDirty(settings);
+                ModelAdvancedSettingsWindow.ShowWindow();
             }
         }
     }
 
     private List<string> DrawTargets()
     {
+        string pathHint = scope == ModelTargetCollector.Scope.BatchByPath
+            ? " · " + ResourceBatchFolderStore.FormatMasterPathsTitle(2)
+            : string.Empty;
         EditorGUILayout.Space(6f);
-        EditorGUILayout.LabelField("处理范围（命中 " + cachedTargets.Count + "）", EditorStyles.boldLabel);
+        EditorGUILayout.LabelField(
+            "处理范围（命中 " + cachedTargets.Count + "）" + pathHint,
+            EditorStyles.boldLabel);
         using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
         {
             int scopeIndex = (int)scope;
@@ -110,17 +103,7 @@ public class ModelToolWindow : EditorWindow
 
             if (scope == ModelTargetCollector.Scope.BatchByPath)
             {
-                if (ResourceBatchFolderListGui.DrawEditableList("批量文件夹路径", batchFolders))
-                {
-                    ResourceBatchFolderStore.SetModelFolders(batchFolders);
-                    targetsDirty = true;
-                }
-            }
-            else
-            {
-                EditorGUILayout.HelpBox(
-                    "总面板「按批量路径执行」始终使用「依据文件路径批量」里配置的路径，不受当前范围影响。",
-                    MessageType.None);
+                ResourceBatchFolderListGui.DrawReadOnlyMasterPaths("主面板批量路径");
             }
 
             if (GUILayout.Button("重新扫描", GUILayout.Width(100f)))
@@ -130,7 +113,8 @@ public class ModelToolWindow : EditorWindow
 
             if (targetsDirty)
             {
-                cachedTargets = ModelTargetCollector.Collect(scope, targetFolder, batchFolders);
+                cachedTargets = ModelTargetCollector.Collect(
+                    scope, targetFolder, ResourceBatchFolderStore.GetMasterFolders());
                 targetsDirty = false;
             }
 
@@ -155,7 +139,7 @@ public class ModelToolWindow : EditorWindow
     private void DrawOperations(List<string> targets)
     {
         EditorGUILayout.Space(6f);
-        EditorGUILayout.LabelField("操作", EditorStyles.boldLabel);
+        EditorGUILayout.LabelField("可执行操作（本机勾选）", EditorStyles.boldLabel);
         using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
         {
             foreach (IModelAssetOperation operation in ModelOperationRegistry.All)
@@ -164,29 +148,6 @@ public class ModelToolWindow : EditorWindow
                 {
                     EditorGUILayout.LabelField(operation.DisplayName + "  [" + operation.Id + "]", EditorStyles.boldLabel);
                     EditorGUILayout.HelpBox(operation.Description, MessageType.None);
-
-                    bool isAuto = settings.importAutoOperationIds != null &&
-                                  settings.importAutoOperationIds.Contains(operation.Id);
-                    bool newAuto = EditorGUILayout.ToggleLeft(
-                        "导入后处理自动执行（仅导入区；Art 仍须手动；需总面板后处理开关）", isAuto);
-                    if (newAuto != isAuto)
-                    {
-                        if (settings.importAutoOperationIds == null)
-                        {
-                            settings.importAutoOperationIds = new List<string>();
-                        }
-
-                        if (newAuto)
-                        {
-                            settings.importAutoOperationIds.Add(operation.Id);
-                        }
-                        else
-                        {
-                            settings.importAutoOperationIds.Remove(operation.Id);
-                        }
-
-                        EditorUtility.SetDirty(settings);
-                    }
 
                     bool selected = ResourceManualOperationStore.IsSelected(
                         ResourceManualOperationStore.DomainModel, operation.Id);
@@ -244,29 +205,33 @@ public class ModelToolWindow : EditorWindow
 
     private void DrawResult()
     {
-        if (lastSummary == null)
-        {
-            return;
-        }
-
         EditorGUILayout.Space(6f);
-        EditorGUILayout.LabelField("上次结果", EditorStyles.boldLabel);
-        using (var scroll = new EditorGUILayout.ScrollViewScope(resultScroll, GUILayout.Height(120f)))
+        EditorGUILayout.LabelField("上次执行结果", EditorStyles.boldLabel);
+        using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
         {
-            resultScroll = scroll.scrollPosition;
-            EditorGUILayout.LabelField(
-                "改动 " + lastSummary.ChangedCount +
-                " / 跳过 " + lastSummary.SkippedCount +
-                " / 失败 " + lastSummary.FailedCount +
-                (lastSummary.Canceled ? " / 已取消" : string.Empty));
-            foreach (string line in lastSummary.ChangedLines)
+            if (lastSummary == null)
             {
-                EditorGUILayout.LabelField(line, EditorStyles.wordWrappedMiniLabel);
+                EditorGUILayout.HelpBox("还没有在这个窗口里执行过操作。", MessageType.None);
+                return;
             }
 
-            foreach (string line in lastSummary.FailedLines)
+            using (var scroll = new EditorGUILayout.ScrollViewScope(resultScroll, GUILayout.Height(120f)))
             {
-                EditorGUILayout.HelpBox(line, MessageType.Error);
+                resultScroll = scroll.scrollPosition;
+                EditorGUILayout.LabelField(
+                    "改动 " + lastSummary.ChangedCount +
+                    " / 跳过 " + lastSummary.SkippedCount +
+                    " / 失败 " + lastSummary.FailedCount +
+                    (lastSummary.Canceled ? " / 已取消" : string.Empty));
+                foreach (string line in lastSummary.ChangedLines)
+                {
+                    EditorGUILayout.LabelField(line, EditorStyles.wordWrappedMiniLabel);
+                }
+
+                foreach (string line in lastSummary.FailedLines)
+                {
+                    EditorGUILayout.HelpBox(line, MessageType.Error);
+                }
             }
         }
     }

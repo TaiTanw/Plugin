@@ -48,11 +48,13 @@ public class TextureProcessSettings : ScriptableObject
     [Tooltip("开启后：把 RGB 写成灰度（便于预览遮罩）；关闭则保留原 RGB，只改 Alpha。")]
     public bool luminanceAlphaWriteGrayscaleRgb = false;
 
-    [Header("导入期自动执行的后处理操作")]
-    [Tooltip("填写操作 Id（与贴图子面板列表一致）。总开关 +「贴图·后处理自动」开启时，导入后 delayCall 只跑这里列出的操作。" +
-             "常用 Id：shrink_source_file（压缩）、convert_tga_to_png、bake_luminance_to_alpha。" +
-             "留空 = 后处理自动打开也不会跑任何贴图操作。手动执行不受此列表限制（面板勾选即可）。")]
+    // 在 L3「操作集合配置」里勾选；HideInInspector 避免子处理配置重复画出列表。
+    [HideInInspector]
     public List<string> importAutoOperationIds = new List<string> { "shrink_source_file" };
+
+    /// <summary>主面板总批量 / 分项批量执行的 Operation Id（SO，团队约定）。</summary>
+    [HideInInspector]
+    public List<string> masterBatchOperationIds = new List<string> { "shrink_source_file" };
 
     [Header("导入期 Importer 参数（设置自动）")]
     [Tooltip("总开关 +「贴图·设置自动」开启时：导入前关闭 TextureImporter 的 Read/Write。" +
@@ -76,6 +78,42 @@ public class TextureProcessSettings : ScriptableObject
     public bool IsExcludedPath(string assetPath)
     {
         return ResourceExcludeUtility.IsExcludedPath(assetPath, excludedPathPrefixes);
+    }
+
+    /// <summary>旧资产缺字段时补默认主批量 Op（只种一次，之后允许清空）。</summary>
+    public void EnsureMasterBatchDefaults()
+    {
+        const string seededKey = "TOol.MasterBatchOps.TextureSeeded";
+        if (EditorPrefs.GetBool(seededKey, false))
+        {
+            if (masterBatchOperationIds == null)
+            {
+                masterBatchOperationIds = new List<string>();
+            }
+
+            return;
+        }
+
+        if (masterBatchOperationIds == null)
+        {
+            masterBatchOperationIds = new List<string>();
+        }
+
+        if (masterBatchOperationIds.Count == 0)
+        {
+            if (importAutoOperationIds != null && importAutoOperationIds.Count > 0)
+            {
+                masterBatchOperationIds.AddRange(importAutoOperationIds);
+            }
+            else
+            {
+                masterBatchOperationIds.Add("shrink_source_file");
+            }
+
+            EditorUtility.SetDirty(this);
+        }
+
+        EditorPrefs.SetBool(seededKey, true);
     }
 
     public static TextureProcessSettings Current
@@ -118,6 +156,7 @@ public class TextureProcessSettings : ScriptableObject
         AssetDatabase.SaveAssets();
         assetInstance = created;
         fallbackWarningLogged = false;
+        created.EnsureMasterBatchDefaults();
         Debug.Log("[TextureProcessSettings] 已创建配置资产: " + DefaultAssetPath);
         return created;
     }
@@ -126,12 +165,14 @@ public class TextureProcessSettings : ScriptableObject
     {
         if (assetInstance != null)
         {
+            assetInstance.EnsureMasterBatchDefaults();
             return assetInstance;
         }
 
         assetInstance = AssetDatabase.LoadAssetAtPath<TextureProcessSettings>(DefaultAssetPath);
         if (assetInstance != null)
         {
+            assetInstance.EnsureMasterBatchDefaults();
             return assetInstance;
         }
 
@@ -141,6 +182,7 @@ public class TextureProcessSettings : ScriptableObject
             assetInstance = AssetDatabase.LoadAssetAtPath<TextureProcessSettings>(path);
             if (assetInstance != null)
             {
+                assetInstance.EnsureMasterBatchDefaults();
                 return assetInstance;
             }
         }

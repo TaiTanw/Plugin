@@ -15,7 +15,7 @@ public static class TextureTargetCollector
         /// <summary>窗口临时指定的单个文件夹。</summary>
         Folder,
 
-        /// <summary>子面板持久化的批量文件夹路径列表（总面板也只用这份）。</summary>
+        /// <summary>只读使用主面板共用批量路径（多文件夹，各根递归）。</summary>
         BatchByPath
     }
 
@@ -24,7 +24,7 @@ public static class TextureTargetCollector
     {
         "当前选中",
         "指定文件夹",
-        "依据文件路径批量"
+        "使用主面板批量路径"
     };
 
     public static List<string> Collect(Scope scope, string folderAssetPath, IList<string> batchFolders)
@@ -41,14 +41,15 @@ public static class TextureTargetCollector
                 : CollectFromFolders(new[] { folderAssetPath });
         }
 
-        List<string> valid = ResourceBatchFolderStore.GetValidFolders(batchFolders);
+        List<string> valid = ResourceBatchFolderStore.GetValidFolders(
+            batchFolders ?? ResourceBatchFolderStore.GetMasterFolders());
         return valid.Count == 0 ? new List<string>() : CollectFromFolders(valid.ToArray());
     }
 
-    /// <summary>总面板：始终按批量路径收集，忽略子面板当前范围。</summary>
+    /// <summary>总面板：始终按主面板批量路径收集。</summary>
     public static List<string> CollectFromBatchFolders()
     {
-        return Collect(Scope.BatchByPath, null, ResourceBatchFolderStore.GetTextureFolders());
+        return Collect(Scope.BatchByPath, null, ResourceBatchFolderStore.GetMasterFolders());
     }
 
     private static List<string> CollectFromSelection()

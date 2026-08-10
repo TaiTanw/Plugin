@@ -3,7 +3,7 @@ using UnityEditor;
 using UnityEngine;
 
 // =====================================================================================
-// 批量路径列表的共用 GUI：增减 DefaultAsset 文件夹，写回 ResourceBatchFolderStore。
+// 批量路径列表 GUI：L1 可编辑；L2「使用主面板批量路径」只读展示。
 // =====================================================================================
 public static class ResourceBatchFolderListGui
 {
@@ -12,7 +12,7 @@ public static class ResourceBatchFolderListGui
         bool changed = false;
         EditorGUILayout.LabelField(title, EditorStyles.boldLabel);
         EditorGUILayout.HelpBox(
-            "此列表供「依据文件路径批量」与总面板批量执行共用，与当前是否选中「选中/单文件夹」无关。",
+            "主面板共用路径：贴图与模型总批量均扫描这些文件夹（递归子目录）。本机设置，不进版本库。",
             MessageType.None);
 
         if (folders == null)
@@ -58,5 +58,30 @@ public static class ResourceBatchFolderListGui
         }
 
         return changed;
+    }
+
+    public static void DrawReadOnlyMasterPaths(string titlePrefix)
+    {
+        List<string> valid = ResourceBatchFolderStore.GetValidMasterFolders();
+        string title = string.IsNullOrEmpty(titlePrefix)
+            ? "主面板批量路径"
+            : titlePrefix;
+        EditorGUILayout.LabelField(title + "：" + ResourceBatchFolderStore.FormatMasterPathsTitle(3),
+            EditorStyles.wordWrappedMiniLabel);
+
+        if (valid.Count == 0)
+        {
+            EditorGUILayout.HelpBox(
+                "主面板尚未配置有效路径。请到「资源处理总面板」添加文件夹；或改用「当前选中 / 指定文件夹」。",
+                MessageType.Warning);
+            return;
+        }
+
+        for (int i = 0; i < valid.Count; i++)
+        {
+            EditorGUILayout.LabelField("  " + valid[i], EditorStyles.miniLabel);
+        }
+
+        EditorGUILayout.HelpBox("只读：修改请回主面板。单独根目录请改用「指定文件夹」或「当前选中」。", MessageType.None);
     }
 }

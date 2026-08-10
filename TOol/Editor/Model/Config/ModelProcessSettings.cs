@@ -23,9 +23,12 @@ public class ModelProcessSettings : ScriptableObject
     [Tooltip("后处理与设置自动都只认这些扩展名。v1 默认仅 .fbx；以后要加 .obj 等在此配置即可。")]
     public List<string> supportedExtensions = new List<string> { ".fbx" };
 
-    [Header("导入期自动执行的后处理操作")]
-    [Tooltip("填写操作的 Id（见模型处理面板）。留空表示后处理自动开启时也不跑任何操作。")]
+    [HideInInspector]
     public List<string> importAutoOperationIds = new List<string> { "set_vertex_colors_white" };
+
+    /// <summary>主面板总批量 / 分项批量执行的 Operation Id（SO，团队约定）。</summary>
+    [HideInInspector]
+    public List<string> masterBatchOperationIds = new List<string> { "set_vertex_colors_white" };
 
     [Header("不介入的目录（自动流）")]
     [Tooltip("默认排除 Assets/Art/ —— 打包产物区。自动流不进；手动可在面板里对选中对象执行。")]
@@ -38,6 +41,41 @@ public class ModelProcessSettings : ScriptableObject
     public bool IsExcludedPath(string assetPath)
     {
         return ResourceExcludeUtility.IsExcludedPath(assetPath, excludedPathPrefixes);
+    }
+
+    public void EnsureMasterBatchDefaults()
+    {
+        const string seededKey = "TOol.MasterBatchOps.ModelSeeded";
+        if (EditorPrefs.GetBool(seededKey, false))
+        {
+            if (masterBatchOperationIds == null)
+            {
+                masterBatchOperationIds = new List<string>();
+            }
+
+            return;
+        }
+
+        if (masterBatchOperationIds == null)
+        {
+            masterBatchOperationIds = new List<string>();
+        }
+
+        if (masterBatchOperationIds.Count == 0)
+        {
+            if (importAutoOperationIds != null && importAutoOperationIds.Count > 0)
+            {
+                masterBatchOperationIds.AddRange(importAutoOperationIds);
+            }
+            else
+            {
+                masterBatchOperationIds.Add("set_vertex_colors_white");
+            }
+
+            EditorUtility.SetDirty(this);
+        }
+
+        EditorPrefs.SetBool(seededKey, true);
     }
 
     public bool IsSupportedModelExtension(string assetPath)
@@ -107,6 +145,7 @@ public class ModelProcessSettings : ScriptableObject
         AssetDatabase.SaveAssets();
         assetInstance = created;
         fallbackWarningLogged = false;
+        created.EnsureMasterBatchDefaults();
         Debug.Log("[ModelProcessSettings] 已创建配置资产: " + DefaultAssetPath);
         return created;
     }
@@ -115,12 +154,14 @@ public class ModelProcessSettings : ScriptableObject
     {
         if (assetInstance != null)
         {
+            assetInstance.EnsureMasterBatchDefaults();
             return assetInstance;
         }
 
         assetInstance = AssetDatabase.LoadAssetAtPath<ModelProcessSettings>(DefaultAssetPath);
         if (assetInstance != null)
         {
+            assetInstance.EnsureMasterBatchDefaults();
             return assetInstance;
         }
 
@@ -130,6 +171,7 @@ public class ModelProcessSettings : ScriptableObject
             assetInstance = AssetDatabase.LoadAssetAtPath<ModelProcessSettings>(path);
             if (assetInstance != null)
             {
+                assetInstance.EnsureMasterBatchDefaults();
                 return assetInstance;
             }
         }

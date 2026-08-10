@@ -14,11 +14,16 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   maxSourceMegabytes: 5
   minDimension: 64
+  preservePowerOfTwo: 1
   jpgQuality: 90
   maxSearchIterations: 12
   tgaUseRunLengthEncoding: 1
   deleteTgaAfterConvert: 1
-  importAutoOperationIds:
+  luminanceAlphaCutoff: 24
+  luminanceAlphaRemapAboveCutoff: 1
+  luminanceAlphaWriteGrayscaleRgb: 0
+  importAutoOperationIds: []
+  masterBatchOperationIds:
   - shrink_source_file
   textureDisableReadWrite: 1
   excludedPathPrefixes:

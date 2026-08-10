@@ -1,10 +1,20 @@
 # TOol（插件 2）结构说明
 
-版本：1.3.6  
-最近同步：2026-08-07（Evaluate 统一评估 + 仅扫描 dry-run；批量默认含 Art）  
+版本：1.3.7  
+最近同步：2026-08-10（面板三层：L1 主批量 / L2 精准 / L3 高级 SO）  
 适用：Unity 2020.3 Editor；与 `RetinarBatchBuilder_Share`（插件 1）配合使用。
 
 本文说明目录层级、类职责、自动化两层语义，以及和打包工具的边界。便于扩展新 Operation / 新资源类型时对照。
+
+### 面板三层（降复杂度）
+
+| 层 | 窗口 | 内容 | 数据 |
+|----|------|------|------|
+| **L1** | `ResourceProcessWindow` | 共用批量路径 + 总/分项执行·扫描；自动化开关 | 路径：EditorPrefs；Op：`masterBatchOperationIds`（SO） |
+| **L2** | `TextureToolWindow` / `ModelToolWindow` | 范围（选中 / 指定文件夹 / **只读主路径**）+ 本机勾选 Op + 上次结果 | 全 EditorPrefs |
+| **L3** | `*AdvancedSettingsWindow` | **子处理配置** + **操作集合配置**（主批量 Op / 导入自动 Op） | SO（与 L1 共用） |
+
+主面板按钮一律 **L1 路径 × L3 Op**；L2 勾选只服务子面板。
 
 ---
 
@@ -37,14 +47,14 @@ TOol/
 │  └─ BatchFbxImportSettings.asset      # 导入根 / 交付区警报路径
 └─ Editor/
    ├─ Window/
-   │  ├─ ResourceProcessWindow.cs       # 总面板（自动化与批量后处理入口）
+   │  ├─ ResourceProcessWindow.cs       # L1 总面板（路径 + 批量 + 开关）
    │  ├─ BatchFbxImportWindow.cs        # 批量 FBX 入库（独立菜单）
    │  ├─ BatchFbxImportSettings.cs
    │  └─ BatchFbxImportService.cs       # 夹名解析、冲突、单 FBX 拷贝+Import
    ├─ Shared/                           # 跨贴图/模型共用
    │  ├─ ResourceProcessSwitches.cs
-   │  ├─ ResourceBatchFolderStore.cs      # 批量文件夹路径
-   │  ├─ ResourceManualOperationStore.cs  # 手动 Operation 勾选
+   │  ├─ ResourceBatchFolderStore.cs      # L1 共用批量路径（已合并贴图/模型）
+   │  ├─ ResourceManualOperationStore.cs  # L2 精准 Op 勾选（Prefs）
    │  ├─ ResourceBatchFolderListGui.cs
    │  ├─ ImportPostProcessScheduler.cs
    │  ├─ ResourceExcludeUtility.cs
@@ -175,11 +185,11 @@ TOol/
 | ------------------------------ | -------------------------------------------------------------------- |
 | `ResourceProcessSwitches`      | **总开关** + 四路分项（EditorPrefs）。提供 `Is*Effective` 供 Import/Scheduler 门控。 |
 | `ImportPostProcessScheduler`   | 导入区后处理调度：入队、delayCall、防重入 `IsRunning`、**模型→贴图**两阶段（与平铺后总批量顺序不同）。 |
-| `ResourceBatchFolderStore`     | 贴图/模型「批量文件夹路径」列表（EditorPrefs）；总面板批量执行只读这份。空列表默认含 `Assets/Art`；升级时一次性补种 Art。 |
+| `ResourceBatchFolderStore`     | **L1 共用**批量路径（EditorPrefs）；旧贴图/模型两套列表一次性合并。空列表默认含 `Assets/Art`。 |
 | `AssetOperationEvaluation`     | Op 统一评估结果：`NotApplicable` / `Skip` / `NeedsWork` + Reason。 |
 | `AssetOperationScanSummary`    | 「仅扫描」汇总（需处理行列表）。 |
-| `ResourceManualOperationStore` | 手动勾选哪些 Operation（子面板与总面板共用，默认勾选）。                                   |
-| `ResourceBatchFolderListGui`   | 批量路径列表增减 GUI。                                                        |
+| `ResourceManualOperationStore` | **仅 L2** 手动勾选 Operation（EditorPrefs）。主面板不读。 |
+| `ResourceBatchFolderListGui`   | L1 可编辑列表；L2 只读主路径展示。 |
 | `ResourceExcludeUtility`       | 根据 Settings 里的前缀列表判断路径是否排除。                                          |
 | `AssetPathUtility`             | 资产路径 ↔ 磁盘路径、文件长度、是否在 `.fbm` 内等。                                      |
 
@@ -197,7 +207,7 @@ TOol/
 
 | 类                        | 职能                                                                                                                                 |
 | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `TextureProcessSettings` | 阈值（默认 5MB）、POT 策略、JPG 质量、TGA/亮度→Alpha 参数、`importAutoOperationIds`、Importer 开关、排除目录。资产路径：`ConfigData/TextureProcessSettings.asset`。 |
+| `TextureProcessSettings` | 阈值、POT、JPG/TGA/亮度参数、`importAutoOperationIds`、`masterBatchOperationIds`、Importer 开关、排除目录。资产：`ConfigData/TextureProcessSettings.asset`。 |
 
 
 
@@ -248,8 +258,9 @@ TOol/
 
 | 类                        | 职能                                    |
 | ------------------------ | ------------------------------------- |
-| `TextureToolWindow`      | 贴图子面板：配置、范围、**仅扫描**、执行。 |
-| `TextureTargetCollector` | 按 Scope 收集贴图；无 WholeProject；`CollectFromBatchFolders` 供总面板。 |
+| `TextureToolWindow`      | **L2** 精准：范围 + 本机 Op + 结果；底部开 L3。 |
+| `TextureAdvancedSettingsWindow` | **L3**：子处理配置 / 操作集合（主批量·导入自动）。 |
+| `TextureTargetCollector` | 选中 / 单文件夹 / 只读主路径；`CollectFromBatchFolders` 供 L1。 |
 
 
 ---
@@ -265,7 +276,7 @@ TOol/
 
 | 类                      | 职能                                                                                                                            |
 | ---------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `ModelProcessSettings` | External 材质、剔灯剔相机、`supportedExtensions`（默认仅 `.fbx`）、`importAutoOperationIds`、排除目录。资产：`ConfigData/ModelProcessSettings.asset`。 |
+| `ModelProcessSettings` | External、剔灯、扩展名、`importAutoOperationIds`、`masterBatchOperationIds`、排除目录。资产：`ConfigData/ModelProcessSettings.asset`。 |
 
 
 
@@ -298,8 +309,9 @@ TOol/
 
 | 类                      | 职能                    |
 | ---------------------- | --------------------- |
-| `ModelToolWindow`      | 模型子面板（范围含路径批量；Prefab→FBX） |
-| `ModelTargetCollector` | 选中 / 单文件夹 / 路径批量；`CollectFromBatchFolders` 供总面板 |
+| `ModelToolWindow`      | **L2** 精准面板 |
+| `ModelAdvancedSettingsWindow` | **L3** 高级设置 |
+| `ModelTargetCollector` | 选中 / 单文件夹 / 只读主路径；Prefab→FBX |
 
 
 ---
@@ -311,12 +323,12 @@ TOol/
 
 | 类                       | 职能                                                                 |
 | ----------------------- | ------------------------------------------------------------------ |
-| `ResourceProcessWindow` | 总开关 + 四路分项 + **总批量（平铺后：贴图→模型，可关纳入）** + 分项批量 + 打开子面板。 |
+| `ResourceProcessWindow` | **L1**：总开关 + 共用批量路径 + 总批量（贴图→模型）+ 分项扫描/执行（路径×`masterBatchOperationIds`）+ 打开 L2。 |
 
 
 旧菜单（独立「贴图处理工具」「SwitchManager」等）已移除，避免双入口行为不一致。
 
-总面板批量执行：**始终**读 `ResourceBatchFolderStore` + `ResourceManualOperationStore`，与子面板当前范围下拉（选中 / 单文件夹）无关。
+总面板批量执行：**始终**读 `ResourceBatchFolderStore`（主路径）+ `*OperationRegistry.GetMasterBatchOperations`（SO），与 L2 勾选无关。
 
 ---
 
@@ -343,7 +355,7 @@ TOol/
   → 插件 1「从 Art 导出交付物」（全部 / 选中 Prefab）
 ```
 
-已移除一键 Batch Build。总面板批量执行 = 子面板批量路径 + 手动勾选 Operation；**平铺后顺序为贴图→模型**。
+已移除一键 Batch Build。总面板批量 = **L1 共用路径** + **L3 masterBatchOperationIds**；**平铺后顺序为贴图→模型**。
 
 ### 9.1–9.3 摘要
 
@@ -354,7 +366,7 @@ TOol/
 ### 9.4 批量范围
 
 子面板范围三选一：**当前选中** / **指定文件夹** / **依据文件路径批量**（多文件夹列表，EditorPrefs）。已移除 WholeProject。  
-总面板批量：只用「依据文件路径批量」那份路径，例：贴图 1、2 + 模型 3 → 分别点贴图/模型批量按钮。
+总面板批量：只用 L1 共用路径；L2 可用「使用主面板批量路径」只读同一列表，或用选中/指定文件夹做精准根。
 
 阈值：`maxSourceMegabytes` ≤ 5。
 

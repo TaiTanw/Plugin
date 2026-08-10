@@ -3,22 +3,19 @@ using UnityEditor;
 using UnityEngine;
 
 // =====================================================================================
-// 贴图处理子面板。无独立菜单——由资源处理总面板打开。
-// 手动范围：选中 / 单文件夹 / 依据文件路径批量；批量路径与总面板共用 Store。
+// L2 贴图精准面板：处理范围 + 本机勾选操作 + 上次结果；高级设置进 L3。
 // =====================================================================================
 public class TextureToolWindow : EditorWindow
 {
-    private const string PrefFoldSettings = "Retinar.TextureTool.Fold.Settings";
     private const string PrefFoldTargets = "Retinar.TextureTool.Fold.Targets";
     private const string PrefFoldOperations = "Retinar.TextureTool.Fold.Operations";
     private const string PrefFoldResult = "Retinar.TextureTool.Fold.Result";
+    private const string PrefScope = "TOol.TextureTool.Scope";
 
     private TextureProcessSettings settings;
-    private SerializedObject settingsSerialized;
 
     private TextureTargetCollector.Scope scope = TextureTargetCollector.Scope.Selection;
     private DefaultAsset targetFolder;
-    private List<string> batchFolders = new List<string>();
 
     private List<string> cachedTargets = new List<string>();
     private bool targetsDirty = true;
@@ -28,7 +25,6 @@ public class TextureToolWindow : EditorWindow
     private Vector2 resultScroll;
     private Vector2 targetListScroll;
 
-    private bool foldSettings = true;
     private bool foldTargets = true;
     private bool foldOperations = true;
     private bool foldResult = true;
@@ -41,12 +37,11 @@ public class TextureToolWindow : EditorWindow
     private void OnEnable()
     {
         settings = TextureProcessSettings.GetOrCreateAsset();
-        batchFolders = ResourceBatchFolderStore.GetTextureFolders();
         targetsDirty = true;
-        foldSettings = EditorPrefs.GetBool(PrefFoldSettings, true);
         foldTargets = EditorPrefs.GetBool(PrefFoldTargets, true);
         foldOperations = EditorPrefs.GetBool(PrefFoldOperations, true);
         foldResult = EditorPrefs.GetBool(PrefFoldResult, true);
+        scope = (TextureTargetCollector.Scope)EditorPrefs.GetInt(PrefScope, (int)TextureTargetCollector.Scope.Selection);
     }
 
     private void OnSelectionChange()
@@ -60,12 +55,10 @@ public class TextureToolWindow : EditorWindow
 
     private void OnDisable()
     {
-        EditorPrefs.SetBool(PrefFoldSettings, foldSettings);
         EditorPrefs.SetBool(PrefFoldTargets, foldTargets);
         EditorPrefs.SetBool(PrefFoldOperations, foldOperations);
         EditorPrefs.SetBool(PrefFoldResult, foldResult);
-        ResourceBatchFolderStore.SetTextureFolders(batchFolders);
-        settingsSerialized = null;
+        EditorPrefs.SetInt(PrefScope, (int)scope);
     }
 
     private void OnGUI()
@@ -80,45 +73,30 @@ public class TextureToolWindow : EditorWindow
             mainScroll = scroll.scrollPosition;
 
             EditorGUILayout.HelpBox(
-                "贴图的【设置自动 / 后处理自动】开关在「资源处理总面板」。本面板负责配置与手动执行。\n" +
-                "自动流跳过 Assets/Art/ 与 .fbm；交付区超标贴图请用「依据文件路径批量」或总面板批量执行。\n" +
-                "「导入时自动执行」仅作用于导入区预览，不代表 Art 交付已处理。",
+                "精准处理：选范围 → 勾选操作 → 扫描/执行（勾选为本机 EditorPrefs）。\n" +
+                "主面板批量路径/操作集合在总面板与「高级设置」；自动流跳过 Art 与 .fbm。",
                 MessageType.Info);
 
-            DrawSettingsSection();
             List<string> targets = DrawTargetSection();
             DrawOperationSection(targets);
             DrawResultSection();
-            EditorGUILayout.Space(8f);
-        }
-    }
 
-    private void DrawSettingsSection()
-    {
-        foldSettings = DrawFoldoutHeader(foldSettings, "配置");
-        if (!foldSettings)
-        {
-            return;
-        }
-
-        using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
-        {
-            using (new EditorGUILayout.HorizontalScope())
+            EditorGUILayout.Space(10f);
+            if (GUILayout.Button("高级设置（子处理配置 / 操作集合）…", GUILayout.Height(28f)))
             {
-                EditorGUILayout.ObjectField(settings, typeof(TextureProcessSettings), false);
-                if (GUILayout.Button("在 Project 中定位", GUILayout.Width(120f)))
-                {
-                    EditorGUIUtility.PingObject(settings);
-                }
+                TextureAdvancedSettingsWindow.ShowWindow();
             }
-
-            ScriptableObjectSettingsGui.Draw(settings, ref settingsSerialized);
         }
     }
 
     private List<string> DrawTargetSection()
     {
-        foldTargets = DrawFoldoutHeader(foldTargets, "处理范围（命中 " + cachedTargets.Count + "）");
+        string pathHint = scope == TextureTargetCollector.Scope.BatchByPath
+            ? " · " + ResourceBatchFolderStore.FormatMasterPathsTitle(2)
+            : string.Empty;
+        foldTargets = DrawFoldoutHeader(
+            foldTargets,
+            "处理范围（命中 " + cachedTargets.Count + "）" + pathHint);
         if (!foldTargets)
         {
             RefreshTargetsIfNeeded();
@@ -147,17 +125,7 @@ public class TextureToolWindow : EditorWindow
 
             if (scope == TextureTargetCollector.Scope.BatchByPath)
             {
-                if (ResourceBatchFolderListGui.DrawEditableList("批量文件夹路径", batchFolders))
-                {
-                    ResourceBatchFolderStore.SetTextureFolders(batchFolders);
-                    targetsDirty = true;
-                }
-            }
-            else
-            {
-                EditorGUILayout.HelpBox(
-                    "总面板「按批量路径执行」始终使用「依据文件路径批量」里配置的路径，不受当前范围影响。",
-                    MessageType.None);
+                ResourceBatchFolderListGui.DrawReadOnlyMasterPaths("主面板批量路径");
             }
 
             using (new EditorGUILayout.HorizontalScope())
@@ -200,7 +168,8 @@ public class TextureToolWindow : EditorWindow
         }
 
         string folderPath = targetFolder == null ? null : AssetDatabase.GetAssetPath(targetFolder);
-        cachedTargets = TextureTargetCollector.Collect(scope, folderPath, batchFolders);
+        cachedTargets = TextureTargetCollector.Collect(
+            scope, folderPath, ResourceBatchFolderStore.GetMasterFolders());
         targetsDirty = false;
     }
 
@@ -210,7 +179,7 @@ public class TextureToolWindow : EditorWindow
         int selectedCount = CountManuallySelected(operations);
         foldOperations = DrawFoldoutHeader(
             foldOperations,
-            "可用操作（已勾选 " + selectedCount + " / " + operations.Count + "）");
+            "可执行操作（已勾选 " + selectedCount + " / " + operations.Count + "，本机）");
         if (!foldOperations)
         {
             return;
@@ -284,37 +253,7 @@ public class TextureToolWindow : EditorWindow
 
             EditorGUILayout.LabelField("Id: " + operation.Id, EditorStyles.miniLabel);
             EditorGUILayout.LabelField(operation.Description, EditorStyles.wordWrappedMiniLabel);
-            DrawImportAutoToggle(operation);
         }
-    }
-
-    private void DrawImportAutoToggle(ITextureAssetOperation operation)
-    {
-        bool isAuto = settings.importAutoOperationIds != null && settings.importAutoOperationIds.Contains(operation.Id);
-        bool newIsAuto = EditorGUILayout.ToggleLeft(
-            "导入时自动执行（仅导入区；Art 交付仍须手动）", isAuto);
-        if (newIsAuto == isAuto)
-        {
-            return;
-        }
-
-        Undo.RecordObject(settings, "修改导入时自动执行的操作");
-        if (settings.importAutoOperationIds == null)
-        {
-            settings.importAutoOperationIds = new List<string>();
-        }
-
-        if (newIsAuto)
-        {
-            settings.importAutoOperationIds.Add(operation.Id);
-        }
-        else
-        {
-            settings.importAutoOperationIds.Remove(operation.Id);
-        }
-
-        EditorUtility.SetDirty(settings);
-        AssetDatabase.SaveAssets();
     }
 
     private static int CountManuallySelected(IList<ITextureAssetOperation> operations)
