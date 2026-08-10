@@ -8,6 +8,7 @@ using UnityEngine;
 // =====================================================================================
 // 批量 FBX 导入：路径命名、冲突检测、单 FBX 拷贝+Import。
 // 不建 Prefab、不平铺、不导出；交付文件名仍以人工 Prefab 名为准。
+// 同基名多 FBX：夹名追加无扩展文件名并 Warning，允许导入；目标已存在/交付区仍 Conflict。
 // =====================================================================================
 public static class BatchFbxImportService
 {
@@ -30,6 +31,8 @@ public static class BatchFbxImportService
         public ItemStatus Status;
         public string Message;
         public bool UsedFullPathFallback;
+        /// <summary>同基名多 FBX 时已追加无扩展文件名做夹名消歧。</summary>
+        public bool UsedFbxNameDisambiguation;
     }
 
     public sealed class BatchResult
@@ -217,7 +220,7 @@ public static class BatchFbxImportService
         {
             if (item != null && item.Status == ItemStatus.Conflict)
             {
-                reason = "存在重名/冲突项，请先处理列表中的警报。";
+                reason = "存在 Conflict 项（目标已存在 / 交付区 / 消歧后仍重名），请先处理列表。";
                 return true;
             }
         }
@@ -399,7 +402,7 @@ public static class BatchFbxImportService
         }
 
         string root = settings.NormalizedImportRoot;
-        var nameCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        var baseNameCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
         foreach (string fbx in fbxFiles)
         {
@@ -416,29 +419,59 @@ public static class BatchFbxImportService
                 TargetFolderAssetPath = targetFolder,
                 TargetFbxAssetPath = targetFolder + "/" + fileName,
                 UsedFullPathFallback = fallback,
+                UsedFbxNameDisambiguation = false,
                 Status = ItemStatus.Ready,
                 Message = warning
             };
 
-            if (nameCounts.ContainsKey(folderName))
+            if (baseNameCounts.ContainsKey(folderName))
             {
-                nameCounts[folderName]++;
+                baseNameCounts[folderName]++;
             }
             else
             {
-                nameCounts[folderName] = 1;
+                baseNameCounts[folderName] = 1;
             }
 
             items.Add(item);
+        }
+
+        // 同基名（典型：同文件夹多 FBX）→ 夹名追加无扩展文件名，降为 Warning，允许导入。
+        foreach (ImportItem item in items)
+        {
+            if (!baseNameCounts.TryGetValue(item.FolderName, out int baseCount) || baseCount <= 1)
+            {
+                continue;
+            }
+
+            string stem = Path.GetFileNameWithoutExtension(item.SourceFbxPath);
+            string disambiguated = SanitizeFolderName(item.FolderName + "_" + stem);
+            item.FolderName = disambiguated;
+            item.TargetFolderAssetPath = root + "/" + disambiguated;
+            item.TargetFbxAssetPath = item.TargetFolderAssetPath + "/" + Path.GetFileName(item.SourceFbxPath);
+            item.UsedFbxNameDisambiguation = true;
+        }
+
+        var finalNameCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (ImportItem item in items)
+        {
+            if (finalNameCounts.ContainsKey(item.FolderName))
+            {
+                finalNameCounts[item.FolderName]++;
+            }
+            else
+            {
+                finalNameCounts[item.FolderName] = 1;
+            }
         }
 
         foreach (ImportItem item in items)
         {
             var problems = new List<string>();
 
-            if (nameCounts.TryGetValue(item.FolderName, out int count) && count > 1)
+            if (finalNameCounts.TryGetValue(item.FolderName, out int count) && count > 1)
             {
-                problems.Add("列表内夹名重名");
+                problems.Add("列表内夹名重名（追加文件名后仍冲突）");
             }
 
             if (AssetDatabase.IsValidFolder(item.TargetFolderAssetPath) ||
@@ -460,19 +493,31 @@ public static class BatchFbxImportService
                 item.Message = string.IsNullOrEmpty(item.Message)
                     ? conflictMsg
                     : item.Message + " | " + conflictMsg;
+                continue;
             }
-            else if (item.UsedFullPathFallback)
+
+            var warnParts = new List<string>();
+            if (item.UsedFullPathFallback)
+            {
+                warnParts.Add(string.IsNullOrEmpty(item.Message)
+                    ? "路径不足 3 层，已用全路径消毒名。"
+                    : item.Message);
+            }
+
+            if (item.UsedFbxNameDisambiguation)
+            {
+                warnParts.Add("同夹多 FBX，已追加文件名消歧：" + item.FolderName);
+            }
+
+            if (warnParts.Count > 0)
             {
                 item.Status = ItemStatus.Warning;
-                if (string.IsNullOrEmpty(item.Message))
-                {
-                    item.Message = "路径不足 3 层，已用全路径消毒名。";
-                }
+                item.Message = string.Join(" | ", warnParts);
             }
             else
             {
                 item.Status = ItemStatus.Ready;
-                item.Message = string.IsNullOrEmpty(item.Message) ? "就绪" : item.Message;
+                item.Message = "就绪";
             }
         }
 

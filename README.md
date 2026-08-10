@@ -4,8 +4,8 @@ Unity Editor 插件集合，用于模型/贴图的**导入期处理**与**交付
 适用环境：Unity 2020.3（Built-in RP）、Windows Editor。
 
 远程仓库：`http://swm-server.local:3000/Hanson/asset-bundle.git`  
-当前版本：**v1.3.6**（`other` / `main` 分支 / 标签 `v1.3.6`）  
-历史：`v1.3.5` 完全版基线；`v1.3.2-test` 测试版（不推荐新交付）
+当前版本：**v1.3.7**（`other` / `main` / 标签 `v1.3.7`；面板分层、降低使用难度）  
+历史：`v1.3.6` 扫描/预检；`v1.3.5` 全流程基线；`v1.3.2-test` 测试版
 
 ---
 
@@ -22,12 +22,13 @@ Unity Editor 插件集合，用于模型/贴图的**导入期处理**与**交付
 
 ## 快速使用
 
-### TOol（资源处理，v1.3.6）
+### TOol（资源处理，v1.3.7）
 
 1. 将本仓库置于 Unity 工程的 `Assets/Plugin`（或保持现有工程路径）。
-2. （可选）**`Tools > 批量FBX导入`**：外部目录批量入库导入区（不建 Prefab）。
-3. 打开 **`Tools > 资源处理总面板`**：总开关 / 设置自动 / 后处理自动，或手动/总批量执行。
-4. 配置资产：`TextureProcessSettings`、`ModelProcessSettings`、`BatchFbxImportSettings`。
+2. （可选）**`Tools > 批量FBX导入`**：外部目录批量入库（同夹多 FBX 会自动消歧夹名）。
+3. 打开 **`Tools > 资源处理总面板`（L1）**：共用批量路径 + 总/分项执行或仅扫描；日常批量优先在此完成。
+4. 需要精准选中/单文件夹时开贴图·模型子面板（L2）；改阈值与 Op 集合进高级设置（L3）。
+5. 配置资产：`TextureProcessSettings`、`ModelProcessSettings`、`BatchFbxImportSettings`。
 
 说明文档：
 

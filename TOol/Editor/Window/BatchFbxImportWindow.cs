@@ -49,7 +49,7 @@ public class BatchFbxImportWindow : EditorWindow
                 "本面板只负责把外部 FBX 干净送进导入区（一 FBX 一夹）。\n" +
                 "夹名 = 自身向上连续 3 层目录名，斜杠位用下划线拼接（如 飞机模型待处理_模型名_fbx）；\n" +
                 "不足 3 层用全路径消毒名（Warning，不禁用执行）。\n" +
-                "同夹不同文件名仍算夹名冲突；可用单条移除或「移除全部冲突」后再执行。\n" +
+                "同夹多 FBX：夹名自动追加无扩展文件名（Warning，允许导入）；追加后仍撞名、目标已存在或落在交付区才 Conflict。\n" +
                 "交付文件名仍以人工改好的 Prefab 名为准；不自动建预设体、不平铺、不导出。\n" +
                 "取消：当前这条 FBX 整段做完后再停。",
                 MessageType.Info);
@@ -92,35 +92,62 @@ public class BatchFbxImportWindow : EditorWindow
         EditorGUILayout.Space(6f);
         EditorGUILayout.LabelField("收集", EditorStyles.boldLabel);
 
-        Rect dropRect = GUILayoutUtility.GetRect(0f, 56f, GUILayout.ExpandWidth(true));
-        GUI.Box(dropRect, "拖入外部文件夹（递归检索 .fbx）；也可拖入单个 .fbx", EditorStyles.helpBox);
+        using (new EditorGUILayout.HorizontalScope())
+        {
+            Rect dropRect = GUILayoutUtility.GetRect(0f, 56f, GUILayout.ExpandWidth(true));
+            GUI.Box(dropRect, "拖入外部文件夹（递归检索 .fbx）；也可拖入单个 .fbx", EditorStyles.helpBox);
+            HandleDropAreaEvents(dropRect);
 
+            using (new EditorGUILayout.VerticalScope(GUILayout.Width(108f)))
+            {
+                GUILayout.Space(8f);
+                using (new EditorGUI.DisabledScope(isRunning))
+                {
+                    if (GUILayout.Button("选择文件夹…", GUILayout.Height(40f)))
+                    {
+                        BrowseFolderAndAppend();
+                    }
+                }
+            }
+        }
+    }
+
+    private void HandleDropAreaEvents(Rect dropRect)
+    {
         Event evt = Event.current;
         if (!dropRect.Contains(evt.mousePosition))
         {
             return;
         }
 
-        if (evt.type == EventType.DragUpdated || evt.type == EventType.DragPerform)
+        if (evt.type != EventType.DragUpdated && evt.type != EventType.DragPerform)
         {
-            bool accept = false;
-            if (DragAndDrop.paths != null && DragAndDrop.paths.Length > 0)
-            {
-                accept = true;
-            }
-
-            DragAndDrop.visualMode = accept
-                ? DragAndDropVisualMode.Copy
-                : DragAndDropVisualMode.Rejected;
-
-            if (accept && evt.type == EventType.DragPerform)
-            {
-                DragAndDrop.AcceptDrag();
-                AppendDropped(DragAndDrop.paths);
-            }
-
-            evt.Use();
+            return;
         }
+
+        bool accept = DragAndDrop.paths != null && DragAndDrop.paths.Length > 0;
+        DragAndDrop.visualMode = accept
+            ? DragAndDropVisualMode.Copy
+            : DragAndDropVisualMode.Rejected;
+
+        if (accept && evt.type == EventType.DragPerform)
+        {
+            DragAndDrop.AcceptDrag();
+            AppendDropped(DragAndDrop.paths);
+        }
+
+        evt.Use();
+    }
+
+    private void BrowseFolderAndAppend()
+    {
+        string folder = EditorUtility.OpenFolderPanel("选择含 FBX 的文件夹", "", "");
+        if (string.IsNullOrEmpty(folder))
+        {
+            return;
+        }
+
+        AppendDropped(new[] { folder });
     }
 
     private void DrawList()
@@ -217,7 +244,7 @@ public class BatchFbxImportWindow : EditorWindow
         bool blocked = BatchFbxImportService.HasBlockingAlerts(items, settings, out string reason);
         using (new EditorGUI.DisabledScope(isRunning || blocked))
         {
-            if (GUILayout.Button("执行导入（无重名警报时可用）", GUILayout.Height(32f)))
+            if (GUILayout.Button("执行导入（无 Conflict 时可用）", GUILayout.Height(32f)))
             {
                 RunImport();
             }
@@ -232,7 +259,7 @@ public class BatchFbxImportWindow : EditorWindow
         else if (!blocked && items.Count > 0)
         {
             EditorGUILayout.HelpBox(
-                "无重名/冲突警报，可统一执行。进度条可取消：当前 FBX 完成后停止。",
+                "无 Conflict（Warning 可执行）。进度条可取消：当前 FBX 完成后停止。",
                 MessageType.Info);
         }
     }
