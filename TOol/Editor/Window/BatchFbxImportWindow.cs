@@ -50,7 +50,7 @@ public class BatchFbxImportWindow : EditorWindow
                 "夹名 = 自身向上连续 3 层目录名，斜杠位用下划线拼接（如 飞机模型待处理_模型名_fbx）；\n" +
                 "不足 3 层用全路径消毒名（Warning，不禁用执行）。\n" +
                 "同夹多 FBX：夹名自动追加无扩展文件名（Warning，允许导入）；追加后仍撞名、目标已存在或落在交付区才 Conflict。\n" +
-                "交付文件名仍以人工改好的 Prefab 名为准；不自动建预设体、不平铺、不导出。\n" +
+                "导入成功后该项会移出列表；交付文件名仍以人工改好的 Prefab 名为准；不自动建预设体、不平铺、不导出。\n" +
                 "取消：当前这条 FBX 整段做完后再停。",
                 MessageType.Info);
 
@@ -72,6 +72,11 @@ public class BatchFbxImportWindow : EditorWindow
         EditorGUILayout.LabelField("配置（ConfigData）", EditorStyles.boldLabel);
         using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
         {
+            EditorGUILayout.HelpBox(
+                "deliveryAlertPathPrefixes 只拦「FBX 入库目标」是否落在交付区；" +
+                "与贴图/模型高级设置里的 excludedPathPrefixes（跳过自动处理）是另一份列表，默认都是 Assets/Art/ 但不共享。",
+                MessageType.None);
+
             EditorGUI.BeginChangeCheck();
             ScriptableObjectSettingsGui.Draw(settings, ref settingsSerialized);
             if (EditorGUI.EndChangeCheck())
@@ -359,7 +364,14 @@ public class BatchFbxImportWindow : EditorWindow
         {
             BatchFbxImportService.BatchResult result =
                 BatchFbxImportService.ExecuteBatch(items, settings);
-            lastSummary = result.SummaryMessage;
+
+            int removedSuccess = items.RemoveAll(item =>
+                item != null && item.Status == BatchFbxImportService.ItemStatus.Success);
+
+            RefreshItemStates();
+
+            lastSummary = result.SummaryMessage + "；已移出成功 " + removedSuccess + " 条";
+
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
         }

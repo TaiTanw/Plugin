@@ -1,10 +1,32 @@
 # TOol（插件 2）结构说明
 
 版本：1.3.7  
-最近同步：2026-08-10（面板三层：L1 主批量 / L2 精准 / L3 高级 SO）  
+最近同步：2026-08-11（补充「配置归属」；导入设置自动成功日志改为静默）  
 适用：Unity 2020.3 Editor；与 `RetinarBatchBuilder_Share`（插件 1）配合使用。
 
 本文说明目录层级、类职责、自动化两层语义，以及和打包工具的边界。便于扩展新 Operation / 新资源类型时对照。
+
+### 配置归属（EditorPrefs vs 三份 SO，必读）
+
+| 数据 | 存哪 | 改哪里 | 作用 | 不做什么 |
+|------|------|--------|------|----------|
+| **L1 批量扫描路径** | **EditorPrefs**（本机） | 资源处理总面板 | 总/分项批量扫哪些夹 | 不决定能否进 Art；不拦 FBX 入库 |
+| **贴图 `excludedPathPrefixes`** | `TextureProcessSettings.asset` | **贴图高级设置 → 子处理配置** | 设置自动 / 后处理自动 **跳过**这些前缀（默认 `Assets/Art/`） | 不拦批量 FBX 拷贝目标 |
+| **模型 `excludedPathPrefixes`** | `ModelProcessSettings.asset` | **模型高级设置 → 子处理配置** | 同上（模型侧） | 同上 |
+| **`deliveryAlertPathPrefixes`** | `BatchFbxImportSettings.asset` | **批量 FBX 导入**面板 | 导入根/目标落在前缀上 → **Conflict，禁止执行** | 不参与导入后贴图/模型自动跳过 |
+
+**为何分两块（三份列表）：**  
+- 批量路径要本机可改、不进版本库 → EP。  
+- 「自动流不要碰交付区」与「入库不要写进交付区」语义不同：前者是 *skip process*，后者是 *hard block copy*；故用不同字段名，各挂在自己的 SO。  
+- 默认值都是 `Assets/Art/`，**改一处不会自动同步**。若团队改交付根目录，请在 L3 贴图/模型高级设置与批量 FBX 配置里对照改三处。
+
+导入期 Console 常见信息（可忽略与否）：
+
+| 信息 | 来源 | 是否失败 | 建议 |
+|------|------|----------|------|
+| （旧）`*ImportSettingsProcessor] 已按…自动处理` | 插件 2 Info | 否 | 已改为静默；看到残留是旧脚本域 |
+| `Can't calculate tangents… doesn't contain normals` | Unity 网格导入 | 否（警告） | 入库可忽略；若场景光照/法线贴图异常，回 DCC 补法线再导 |
+| `.fbm` 下贴图被设置自动处理 | 内嵌材质贴图抽出 | 否 | 正常；与「只拷 FBX、旁路 Textures/ 不拷」无关 |
 
 ### 面板三层（降复杂度）
 

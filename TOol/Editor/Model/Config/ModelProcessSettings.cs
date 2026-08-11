@@ -31,7 +31,10 @@ public class ModelProcessSettings : ScriptableObject
     public List<string> masterBatchOperationIds = new List<string> { "set_vertex_colors_white" };
 
     [Header("不介入的目录（自动流）")]
-    [Tooltip("默认排除 Assets/Art/ —— 打包产物区。自动流不进；手动可在面板里对选中对象执行。")]
+    [Tooltip("路径以此列表任一前缀开头时，设置自动与后处理自动都跳过。默认排除 Assets/Art/（打包产物区）。" +
+             "子面板手动处理仍可对 Art 内模型执行。" +
+             "注意：本列表与 TextureProcessSettings.excludedPathPrefixes、BatchFbxImportSettings.deliveryAlertPathPrefixes " +
+             "是三份独立配置（默认都写 Assets/Art/），改一处不会自动同步；改交付根时请三处对照。")]
     public List<string> excludedPathPrefixes = new List<string> { "Assets/Art/" };
 
     private static ModelProcessSettings assetInstance;

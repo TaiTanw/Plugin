@@ -49,7 +49,7 @@ public class ModelAdvancedSettingsWindow : EditorWindow
         {
             scroll = scrollScope.scrollPosition;
             EditorGUILayout.HelpBox(
-                "本页为团队约定（ScriptableObject）。\n" +
+                "本页为团队约定（ScriptableObject，进版本库）。\n" +
                 "「主面板批量包含」决定资源处理总面板执行/扫描跑哪些操作；\n" +
                 "「导入后处理自动」仅导入区，需总面板后处理开关。",
                 MessageType.Info);
@@ -78,6 +78,14 @@ public class ModelAdvancedSettingsWindow : EditorWindow
                     EditorGUIUtility.PingObject(settings);
                 }
             }
+
+            EditorGUILayout.HelpBox(
+                "【配置归属】勿与「批量路径」或「批量 FBX」混为一谈：\n" +
+                "· 总面板「批量路径」→ EditorPrefs（本机），只决定扫哪些夹；\n" +
+                "· 本页「不介入的目录 / excludedPathPrefixes」→ 本 SO：设置自动与后处理自动跳过这些前缀（默认 Assets/Art/）；\n" +
+                "· 批量 FBX 的 deliveryAlertPathPrefixes → 另一份 SO：禁止把 FBX 拷进交付区。\n" +
+                "三份列表默认都写 Art，但是独立的；改交付根请三处对照（见 ARCHITECTURE.md「配置归属」）。",
+                MessageType.None);
 
             ScriptableObjectSettingsGui.Draw(settings, ref settingsSerialized);
             if (GUI.changed)

@@ -169,8 +169,22 @@ public class ResourceProcessWindow : EditorWindow
         {
             if (ResourceBatchFolderListGui.DrawEditableList("文件夹列表", masterFolders))
             {
+                // Save 会丢掉空路径；空行是 UI 占位，需在写回后补回，否则「添加文件夹」像没反应。
+                int emptyPlaceholders = 0;
+                for (int i = 0; i < masterFolders.Count; i++)
+                {
+                    if (string.IsNullOrEmpty(masterFolders[i]))
+                    {
+                        emptyPlaceholders++;
+                    }
+                }
+
                 ResourceBatchFolderStore.SetMasterFolders(masterFolders);
                 masterFolders = ResourceBatchFolderStore.GetMasterFolders();
+                for (int i = 0; i < emptyPlaceholders; i++)
+                {
+                    masterFolders.Add(string.Empty);
+                }
             }
         }
     }

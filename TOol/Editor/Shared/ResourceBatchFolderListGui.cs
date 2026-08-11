@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
@@ -12,7 +13,8 @@ public static class ResourceBatchFolderListGui
         bool changed = false;
         EditorGUILayout.LabelField(title, EditorStyles.boldLabel);
         EditorGUILayout.HelpBox(
-            "主面板共用路径：贴图与模型总批量均扫描这些文件夹（递归子目录）。本机设置，不进版本库。",
+            "主面板共用路径：贴图与模型总批量均扫描这些文件夹（递归子目录）。本机设置，不进版本库。\n" +
+            "「添加文件夹」会弹出选择框（须在 Assets 下）；也可取消后用空行拖入文件夹。",
             MessageType.None);
 
         if (folders == null)
@@ -53,11 +55,63 @@ public static class ResourceBatchFolderListGui
 
         if (GUILayout.Button("添加文件夹", GUILayout.Width(100f)))
         {
-            folders.Add(string.Empty);
-            changed = true;
+            string picked = TryPickAssetsFolder();
+            if (!string.IsNullOrEmpty(picked))
+            {
+                if (!folders.Contains(picked))
+                {
+                    folders.Add(picked);
+                }
+
+                changed = true;
+            }
+            else
+            {
+                // 取消选取：留空行，便于 ObjectField 拖入（由 Window 在 Save 后保留空位）
+                folders.Add(string.Empty);
+                changed = true;
+            }
         }
 
         return changed;
+    }
+
+    /// <summary>
+    /// 弹出系统文件夹对话框，返回 Assets/… 路径；取消或不在工程内返回 null。
+    /// </summary>
+    public static string TryPickAssetsFolder()
+    {
+        string abs = EditorUtility.OpenFolderPanel(
+            "选择工程内文件夹（须在 Assets 下）",
+            Application.dataPath,
+            string.Empty);
+        if (string.IsNullOrEmpty(abs))
+        {
+            return null;
+        }
+
+        string dataPath = Application.dataPath.Replace("\\", "/");
+        string norm = abs.Replace("\\", "/");
+        if (!norm.StartsWith(dataPath, StringComparison.OrdinalIgnoreCase))
+        {
+            EditorUtility.DisplayDialog(
+                "批量路径",
+                "请选择本工程 Assets 目录下的文件夹。\n当前选择不在工程内。",
+                "OK");
+            return null;
+        }
+
+        string assetPath = "Assets" + norm.Substring(dataPath.Length);
+        if (!AssetDatabase.IsValidFolder(assetPath))
+        {
+            EditorUtility.DisplayDialog(
+                "批量路径",
+                "路径不是有效的 Assets 文件夹：\n" + assetPath,
+                "OK");
+            return null;
+        }
+
+        return assetPath;
     }
 
     public static void DrawReadOnlyMasterPaths(string titlePrefix)

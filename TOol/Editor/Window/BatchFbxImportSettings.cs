@@ -16,7 +16,10 @@ public class BatchFbxImportSettings : ScriptableObject
     public string importRootPath = "Assets/Incoming";
 
     [Header("交付区警报")]
-    [Tooltip("导入根与生成目标路径不得落在这些前缀下（默认 Assets/Art/）。面板阶段即警报并禁用执行。")]
+    [Tooltip("导入根与生成目标路径不得落在这些前缀下（默认 Assets/Art/）。面板阶段即警报并禁用执行。" +
+             "注意：本列表只服务「批量 FBX 入库」禁止写入交付区；" +
+             "与贴图/模型 SO 的 excludedPathPrefixes（跳过自动设置/后处理）是另一份配置，默认值相同但不共享。" +
+             "改交付根时请与 Texture/Model ProcessSettings 的排除前缀对照。")]
     public List<string> deliveryAlertPathPrefixes = new List<string> { "Assets/Art/" };
 
     private static BatchFbxImportSettings assetInstance;

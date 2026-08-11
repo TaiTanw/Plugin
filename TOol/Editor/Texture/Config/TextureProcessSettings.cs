@@ -63,7 +63,9 @@ public class TextureProcessSettings : ScriptableObject
 
     [Header("不介入的目录（仅自动流）")]
     [Tooltip("路径以此列表任一前缀开头时，设置自动与后处理自动都跳过。默认排除 Assets/Art/（插件 1 交付产物区）。" +
-             "子面板手动处理仍可对 Art 内贴图执行。改前缀后请与插件 1 的 Art 根目录保持一致。")]
+             "子面板手动处理仍可对 Art 内贴图执行。" +
+             "注意：本列表与 ModelProcessSettings.excludedPathPrefixes、BatchFbxImportSettings.deliveryAlertPathPrefixes " +
+             "是三份独立配置（默认都写 Assets/Art/），改一处不会自动同步；改交付根时请三处对照。")]
     public List<string> excludedPathPrefixes = new List<string> { "Assets/Art/" };
 
     private static TextureProcessSettings assetInstance;

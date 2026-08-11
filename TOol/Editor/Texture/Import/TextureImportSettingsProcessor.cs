@@ -29,7 +29,6 @@ public class TextureImportSettingsProcessor : AssetPostprocessor
         {
             importer.isReadable = false;
         }
-
-        Debug.Log("[TextureImportSettingsProcessor] 已按贴图设置自动处理: " + assetPath);
+        // 成功时不打 Log：批量入库时每贴图一条会刷屏，易被当成警告。
     }
 }

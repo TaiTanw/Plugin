@@ -34,7 +34,6 @@ public class ModelImportSettingsProcessor : AssetPostprocessor
             importer.importLights = false;
             importer.importCameras = false;
         }
-
-        Debug.Log("[ModelImportSettingsProcessor] 已按模型设置自动处理: " + assetPath);
+        // 成功时不打 Log：批量入库时每 FBX 一条会刷屏，易被当成警告。
     }
 }
