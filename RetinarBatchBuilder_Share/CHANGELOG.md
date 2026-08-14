@@ -2,6 +2,19 @@
 
 记录规则：最新版本写在最上方；每次修改必须填写“原因、改动、影响、验证、回退”。
 
+## 2026-08-13 — v1.3.8 成品直通打包 + Editor 可读分层
+
+- 原因：规范化导出会再跑 SafeZone/碰撞体等，成品（尤其含 UI）易被改坏；且需更清晰的菜单与代码阅读入口。同名 AB 曾把其它 Art 目录打进同一包。
+- 改动：
+  1. **成品直达**：`Tools > Retinar > 成品直达 > 选中预制体直通打包` — 选中 Prefab → 仅 `02_unity` + `03_assetbundles`；不改 Art / Prefab；AB 用显式 `AssetBundleBuild[]`。
+  2. **菜单重组**：批量汇总（平铺 / 从 Art 规范化导出全部|选中）+ 成品直达 + 打开交付文件夹；旧 MenuItem 从 Legacy 移除，避免双入口。
+  3. **可读分层**：`00_RetinarPaths` / `00_RetinarEditorUtil` / `01_RetinarMenu` / `10_Flatten` / `20_Package` + `README_EDITOR.md`；`CreatePackagedAdjustedPrefab` 暂不拆碎。
+  4. 批量路径仍委托 Legacy `ExportArtPrefabPaths`，全套 Deliverables 格式不变。
+- 影响：当前推荐线 **v1.3.8**。自本版起**逐步迭代插件 1（Retinar）**：菜单/调度层先可读可扩展，规范化重逻辑仍在 Legacy，后续按模块继续拆。规范化交付格式不变；直通产物更少。
+- 验证：Art 成品 Prefab 直通 → Deliverables 仅 02+03，Prefab/UI 不变；AB manifest 仅当前 Prefab；批量「导出选中」仍有 01_source / xlsx。
+- 回退：去掉 `01_RetinarMenu` 与 `20_Package/RetinarDirectPackage`，恢复 Legacy 上旧 MenuItem 即可。
+- 关联问题：成品直通；插件 1 可读分层；AB 双挂。
+
 ## 2026-08-11 — v1.3.7 补丁：配置归属说明 + 入库/批量路径易用性
 
 - 原因：批量入库时导入成功 Info 刷屏易被当成警告；「添加文件夹」无系统选框体验差；成功项仍留在列表需手清；三份 Art 前缀配置易混淆。

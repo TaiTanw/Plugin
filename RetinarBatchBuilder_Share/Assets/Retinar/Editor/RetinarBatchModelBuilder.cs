@@ -6,16 +6,21 @@ using UnityEditor;
 using UnityEditor.Animations;
 using UnityEngine;
 
-// 本文件是 RetinarBatchModelBuilder 的主体（选择模型、生成预制体、构建 AssetBundle、导出交付物）。
+// =====================================================================================
+// Legacy — 规范化平铺 / 全套 Deliverables 导出（暂不拆碎）
 //
-// 这个类被拆成三个 partial 分文件，各自职责如下：
+// 菜单入口已迁到 01_RetinarMenu.cs。请先读 Editor/README_EDITOR.md。
+//
+// 本类仍被调度器调用：
+//   RetinarFlattenScheduler  → FlattenSelectedToArt
+//   RetinarPackageScheduler  → ExportAllArtPrefabs / ExportSelectedArtPrefabs
+// 成品直达（不改 Art）在 RetinarDirectPackage，不经过本文件。
+//
+// partial 分文件：
 //   RetinarBatchModelBuilder.cs                  主流程：选模型 -> 规范化 -> 出包 -> 拷交付物
-//   RetinarBatchModelBuilder.AssetResolution.cs  源资产发现（贴图/材质在哪）+ 打包前校验与自愈
-//   RetinarBatchModelBuilder.AssetInfoWorkbook.cs 交付文档 asset_info.xlsx 的生成（手写 OOXML）
-//
-// 拆分原因：AssetResolution 那两块正是"移动文件位置导致打包终止"问题的根源所在；
-// AssetInfoWorkbook 则完全是另一件事（把统计数据渲染成 Excel），和打包流程零耦合。
-// 分开之后，排查问题时能直接定位到文件，不用在 2700 行里翻找。
+//   RetinarBatchModelBuilder.AssetResolution.cs  源资产发现 + 打包前校验与自愈
+//   RetinarBatchModelBuilder.AssetInfoWorkbook.cs asset_info.xlsx（手写 OOXML）
+// =====================================================================================
 public static partial class RetinarBatchModelBuilder
 {
     private const string ArtRoot = "Assets/Art";
@@ -59,7 +64,7 @@ public static partial class RetinarBatchModelBuilder
         EditorApplication.delayCall += () => EditorUtility.DisplayDialog(title, message, ok);
     }
 
-    [MenuItem("Tools/Retinar/平铺到 Art（选中）")]
+    /// <summary>由 RetinarFlattenScheduler / 菜单「批量汇总/平铺到 Art」调用。</summary>
     public static void FlattenSelectedToArt()
     {
         if (StopIfEditorIsPlaying())
@@ -109,11 +114,11 @@ public static partial class RetinarBatchModelBuilder
         ShowDialogDeferred(
             "Retinar 平铺到 Art",
             "完成。已平铺 " + generatedCount + " / " + sourcePaths.Count + " 个资产到 " + ArtRoot + "\n\n" +
-            "下一步：用插件 2（资源处理）对手动压 Art 贴图 / 刷顶点色，再执行「从 Art 导出交付物」。",
+            "下一步：用插件 2（资源处理）对手动压 Art 贴图 / 刷顶点色，再执行「批量汇总 > 从 Art 导出（规范化）」。",
             "OK");
     }
 
-    [MenuItem("Tools/Retinar/从 Art 导出交付物/导出 Art 全部", false, 120)]
+    /// <summary>由 RetinarPackageScheduler / 菜单「批量汇总/从 Art 导出（规范化）/导出全部」调用。</summary>
     public static void ExportAllArtPrefabs()
     {
         if (StopIfEditorIsPlaying())
@@ -127,7 +132,7 @@ public static partial class RetinarBatchModelBuilder
             ShowDialogDeferred(
                 "Retinar 导出",
                 "在 " + ArtRoot + " 下未找到规范交付预制体（期望路径：Art/<名>/Prefab/*.prefab）。\n" +
-                "请先执行「平铺到 Art」。",
+                "请先执行「批量汇总 > 平铺到 Art」。",
                 "OK");
             return;
         }
@@ -144,7 +149,7 @@ public static partial class RetinarBatchModelBuilder
         ExportArtPrefabPaths(sourcePaths);
     }
 
-    [MenuItem("Tools/Retinar/从 Art 导出交付物/导出选中的 Art 预制体", false, 121)]
+    /// <summary>由 RetinarPackageScheduler / 菜单「批量汇总/从 Art 导出（规范化）/导出选中」调用。</summary>
     public static void ExportSelectedArtPrefabs()
     {
         if (StopIfEditorIsPlaying())
@@ -168,7 +173,8 @@ public static partial class RetinarBatchModelBuilder
                   BuildDialogPreview(string.Join("\n", skipped.ToArray()), 8);
             ShowDialogDeferred(
                 "Retinar 导出",
-                skipHint + "\n\n导入区资源请先「平铺到 Art」；若要一次导出全部可用「导出 Art 全部」。",
+                skipHint + "\n\n导入区资源请先「批量汇总 > 平铺到 Art」；若要一次导出全部可用「导出全部」。\n" +
+                "已是成品、不想改 Prefab 时请用「成品直达 > 选中预制体直通打包」。",
                 "OK");
             return;
         }
@@ -189,20 +195,17 @@ public static partial class RetinarBatchModelBuilder
         ExportArtPrefabPaths(sourcePaths);
     }
 
-    [MenuItem("Tools/Retinar/平铺到 Art（选中）", true)]
-    private static bool ValidateFlattenSelectedToArt()
+    public static bool ValidateFlattenSelectedToArt()
     {
         return !EditorApplication.isCompiling;
     }
 
-    [MenuItem("Tools/Retinar/从 Art 导出交付物/导出 Art 全部", true)]
-    private static bool ValidateExportAllArtPrefabs()
+    public static bool ValidateExportAllArtPrefabs()
     {
         return !EditorApplication.isCompiling;
     }
 
-    [MenuItem("Tools/Retinar/从 Art 导出交付物/导出选中的 Art 预制体", true)]
-    private static bool ValidateExportSelectedArtPrefabs()
+    public static bool ValidateExportSelectedArtPrefabs()
     {
         return !EditorApplication.isCompiling;
     }
@@ -310,12 +313,10 @@ public static partial class RetinarBatchModelBuilder
             "OK");
     }
 
-    [MenuItem("Tools/Retinar/打开交付文件夹")]
+    /// <summary>兼容旧调用；菜单入口已迁到 RetinarMenu → RetinarEditorUtil.OpenDeliverablesFolder。</summary>
     public static void OpenDeliverablesFolder()
     {
-        string path = GetDeliverablesAbsolutePath();
-        EnsureDiskDirectory(path);
-        EditorUtility.RevealInFinder(path);
+        RetinarEditorUtil.OpenDeliverablesFolder();
     }
 
     private static string GetDeliverablesAbsolutePath()

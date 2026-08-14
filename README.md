@@ -4,8 +4,9 @@ Unity Editor 插件集合，用于模型/贴图的**导入期处理**与**交付
 适用环境：Unity 2020.3（Built-in RP）、Windows Editor。
 
 远程仓库：`http://swm-server.local:3000/Hanson/asset-bundle.git`  
-当前版本：**v1.3.7**（`other` / `main` / 标签 `v1.3.7`；面板分层、降低使用难度）  
-历史：`v1.3.6` 扫描/预检；`v1.3.5` 全流程基线；`v1.3.2-test` 测试版
+当前版本：**v1.3.8**（`other` / `main` / 标签 `v1.3.8`）  
+**迭代重点：** 自 v1.3.8 起逐步增强 **插件 1（Retinar）**——成品直通、菜单/Editor 可读分层；插件 2（TOol）维持稳定全流程。  
+历史：`v1.3.7` 面板分层；`v1.3.6` 扫描/预检；`v1.3.5` 全流程基线；`v1.3.2-test` 测试版
 
 ---
 
@@ -14,9 +15,10 @@ Unity Editor 插件集合，用于模型/贴图的**导入期处理**与**交付
 | 目录 | 定位 | 菜单入口 |
 |------|------|----------|
 | [`TOol/`](./TOol/) | 批量 FBX 入库；导入期设置 + 源文件/模型后处理 | `Tools > 批量FBX导入`；`Tools > 资源处理总面板` |
-| [`RetinarBatchBuilder_Share/`](./RetinarBatchBuilder_Share/) | 交付打包：平铺 Art → 手动处理 → 导出 | `Tools > Retinar > 平铺到 Art` / `从 Art 导出交付物` / `打开交付文件夹` |
+| [`RetinarBatchBuilder_Share/`](./RetinarBatchBuilder_Share/) | **插件 1（迭代中）**：平铺 Art、规范化导出、**成品直通** | `Tools > Retinar > 批量汇总` / `成品直达` / `打开交付文件夹` |
 
-**目录边界：** 自动处理流默认不碰 `Assets/Art/**`（交付产物区由打包工具管理）。两边不得同时改同一 Importer 属性。详见 [`RetinarBatchBuilder_Share/PACKAGING_RULES.md`](./RetinarBatchBuilder_Share/PACKAGING_RULES.md) 规则 33。
+**目录边界：** 自动处理流默认不碰 `Assets/Art/**`（交付产物区由打包工具管理）。两边不得同时改同一 Importer 属性。详见 [`RetinarBatchBuilder_Share/PACKAGING_RULES.md`](./RetinarBatchBuilder_Share/PACKAGING_RULES.md) 规则 33。  
+插件 1 Editor 阅读地图：[`RetinarBatchBuilder_Share/Assets/Retinar/Editor/README_EDITOR.md`](./RetinarBatchBuilder_Share/Assets/Retinar/Editor/README_EDITOR.md)。
 
 ---
 
@@ -35,17 +37,17 @@ Unity Editor 插件集合，用于模型/贴图的**导入期处理**与**交付
 - 简要：[TOol/README.md](./TOol/README.md)
 - 结构与扩展：[TOol/ARCHITECTURE.md](./TOol/ARCHITECTURE.md)
 
-### Retinar（批量打包，v1.3+）
+### Retinar（插件 1，v1.3.8 起迭代）
 
 1. 确认工程内存在 Retinar Editor 脚本并可编译。
-2. 选中已调好的 Prefab/FBX，执行 **`Tools > Retinar > 平铺到 Art（选中）`**。
-3. 在 Art 上按需用插件 2 压贴图 / 刷顶点色（交付不依赖后处理自动）。
-4. 执行 **`从 Art 导出交付物`**：`导出 Art 全部` 或 `导出选中的 Art 预制体`（v1.3.1）。
-5. 用 **`打开交付文件夹`** 查看输出。
+2. **批量路径（规范化）**：选中 Prefab/FBX → `批量汇总 > 平铺到 Art` →（按需插件 2 处理）→ `从 Art 规范化导出`（全部/选中）。
+3. **成品直通（不改 Art）**：Art 内已是成品 Prefab（尤其含 UI）→ `成品直达 > 选中预制体直通打包` → 仅 `02_unity` + `03_assetbundles`。
+4. 用 **`打开交付文件夹`** 查看输出。
 
 说明文档：
 
 - 使用手册：[RetinarBatchBuilder_Share/RetinarBatchBuilder_分享说明.md](./RetinarBatchBuilder_Share/RetinarBatchBuilder_分享说明.md)
+- Editor 阅读地图：[RetinarBatchBuilder_Share/Assets/Retinar/Editor/README_EDITOR.md](./RetinarBatchBuilder_Share/Assets/Retinar/Editor/README_EDITOR.md)
 - 打包规则：[RetinarBatchBuilder_Share/PACKAGING_RULES.md](./RetinarBatchBuilder_Share/PACKAGING_RULES.md)
 - 回归清单：[RetinarBatchBuilder_Share/REGRESSION_CHECKLIST.md](./RetinarBatchBuilder_Share/REGRESSION_CHECKLIST.md)
 
@@ -67,6 +69,7 @@ Unity Editor 插件集合，用于模型/贴图的**导入期处理**与**交付
 
 ## 协作说明
 
+- **迭代重心（v1.3.8+）：** 优先推进 **插件 1（Retinar）** 功能与可读分层；插件 2 以稳定维护与小补丁为主。
 - 开发在独立分支进行，通过合并请求（PR）合入；任务用平台 **工单（Issue）** 跟踪。
 - 敏感信息（账号、Token、密码）只放本地 `.env` 或环境变量，**禁止提交**。仓库已忽略 `.env`。
 - 本地可同时保留 GitHub `origin` 与团队远程 `team`（指向本仓库）。

@@ -2,7 +2,7 @@
 
 版本：1.1  
 生效日期：2026-07-24  
-最近同步：2026-08-10（v1.3.7 面板分层；v1.3.6 预检/扫描）
+最近同步：2026-08-13（v1.3.8 成品直通 + 插件1 Editor 分层；开始迭代插件1）
 
 本文是每次修改工具、更换 Unity 版本、发布分享包或正式批量打包前必须执行的回归基线。不得因为某个模型打包成功就跳过其他类型。
 
@@ -65,7 +65,8 @@
 - [ ] 搬移 `.fbm` 抽取出来的贴图时，Console 不得出现 `Assertion failed on expression: 'm_hasValue'` 或 `Asset to move is not in asset database`；`Model/` 里不得残留 `.fbm` 目录。
 - [ ] Extract/remap 自愈开启时，压缩后再打包仍不得把 Art 贴图盖回大图（与外部 `.fbm` 切断可同时成立）。
 - [ ] **顶点色**：对 `Art/Model` FBX 手动「顶点色设为全白」后，不删 Art、选 Prefab 再**导出**；Model 子 Mesh 顶点色须仍为白。Console 可出现「SaveAndReimport 后已恢复 Mesh 顶点色」，或因无外部 `.fbm` 而跳过 Extract。
-- [ ] **菜单拆分**：`Tools/Retinar` 见「平铺到 Art」「从 Art 导出交付物」子菜单（全部 / 选中）、「打开交付文件夹」；无 Batch Build。选导入区 Prefab 点「导出选中」应警告跳过；「导出 Art 全部」不依赖选中。
+- [ ] **菜单拆分**：`Tools/Retinar` 见「批量汇总」（平铺 / 从 Art 导出规范化 全部|选中）、「成品直达 > 选中预制体直通打包」、「打开交付文件夹」；无旧「从 Art 导出交付物」与 Batch Build。选导入区 Prefab 点规范化「导出选中」应警告跳过；「导出全部」不依赖选中。
+- [ ] **成品直达**：选中 Art 成品 Prefab → Deliverables 仅 `02_unity` + `03_assetbundles`；Art/Prefab 内容未变；AB manifest 的 Assets 只有该 Prefab。
 
 
 

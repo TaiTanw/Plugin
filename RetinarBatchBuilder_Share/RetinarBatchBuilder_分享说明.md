@@ -1,8 +1,8 @@
 # Retinar Unity 模型打包工具使用手册
 
-版本：v1.3.7  
-更新日期：2026-08-05  
-适用环境：Unity 2020.3.49f1c1、Built-in Render Pipeline、Windows Editor
+版本：v1.3.8  
+更新日期：2026-08-13  
+适用环境：Unity 2020.3 / 2022.3、Built-in Render Pipeline、Windows Editor
 
 ## 1. 工具用途
 
@@ -32,13 +32,19 @@
 Assets/
 └─ Retinar/
    ├─ Editor/
-   │  ├─ RetinarBatchModelBuilder.cs
-   │  └─ RetinarAssetInfoExporter.cs
+   │  ├─ 00_RetinarPaths.cs / 00_RetinarEditorUtil.cs
+   │  ├─ 01_RetinarMenu.cs          # 菜单唯一挂载点
+   │  ├─ 10_Flatten/ …              # 平铺调度
+   │  ├─ 20_Package/ …              # 规范化导出调度 + 成品直通
+   │  ├─ README_EDITOR.md           # 阅读地图
+   │  └─ RetinarBatchModelBuilder*.cs  # Legacy 规范化实现
    ├─ Templates/
    │  └─ asset_info_template.xlsx
    ├─ PACKAGING_RULES.md
    └─ CHANGELOG.md
 ```
+
+编辑器代码怎么读：见 `Assets/Retinar/Editor/README_EDITOR.md`。
 
 同仓库另有导入/后处理插件 **`Assets/Plugin/TOol`**（菜单 `Tools > 资源处理总面板`）。目录层级、类职责与扩展方式见：
 
@@ -48,18 +54,29 @@ Assets/
 
 ## 3. 推荐工作流程
 
-正式交付推荐选择“已经调整好的 Prefab”。**平铺与导出已拆成两步**（已移除一键 Batch Build）。
+正式交付推荐选择“已经调整好的 Prefab”。**平铺与导出已拆成两步**；另有「成品直达」最净打包。
+
+### 3.A 外部资源 → 批量汇总（全套 Deliverables）
 
 1. 把 FBX 导入 Unity（`Assets/Art` 之外）。
 2. 检查 FBX 的 Model、Rig、Animation、Materials 设置。
 3. 把模型拖入场景，人工检查材质、贴图、法线、朝向、缩放、层级和动画。
 4. 完成玻璃、外发光、旋转部件等实际效果调整。
 5. 保存为最终 Prefab（建议同一导入区文件夹内，便于多选）。
-6. 在 Project 中选中该 Prefab（可 Ctrl 多选），执行 `Tools > Retinar > 平铺到 Art（选中）`。
-7. （按需）打开 `Tools > 资源处理总面板`：压 Art 贴图、刷 Art 模型顶点色。导入自动**不保证**交付生效。
-8. 执行 `Tools > Retinar > 从 Art 导出交付物 > 导出选中的 Art 预制体`（或「导出 Art 全部」免手找）。
-9. 等待完成弹窗；用 `打开交付文件夹` 验收 Deliverables。
-10. 在空工程导入 UnityPackage，并在目标设备加载 AB 做最终验收。
+6. 选中 Prefab，执行 `Tools > Retinar > 批量汇总 > 平铺到 Art（选中）`。
+7. （按需）打开 `Tools > 资源处理总面板`：压 Art 贴图、刷 Art 模型顶点色。
+8. 执行 `Tools > Retinar > 批量汇总 > 从 Art 导出（规范化） > 导出选中`（或「导出全部」）。
+9. 用 `打开交付文件夹` 验收全套 Deliverables（含 00/01/02/03/06）。
+10. 空工程导入 UnityPackage，目标设备加载 AB。
+
+### 3.B 成品直达（仅 AB + UnityPackage）
+
+Prefab **已经是成品**（尤其含 World-Space UI，不想再跑 SafeZone/碰撞体/建夹）时：
+
+1. 在 Project 选中一个或多个 `.prefab`（可在 `Art` 内，也可在其它 Assets 路径）。
+2. 执行 `Tools > Retinar > 成品直达 > 选中预制体直通打包`。
+3. 产物仅 `Deliverables/<名>/02_unity` 与 `03_assetbundles/{Android,iOS}`；**不改** Art、**不改** Prefab 内容。
+4. 未整理的外部 FBX/散落资源请仍走 §3.A 平铺，不要指望直通建规范目录。
 
 ## 4. Prefab 与 FBX 应该选哪个
 
@@ -81,25 +98,38 @@ Assets/
 
 ## 5. Unity 菜单说明
 
+### 批量汇总
+
 ```text
-Tools > Retinar > 平铺到 Art（选中）
+Tools > Retinar > 批量汇总 > 平铺到 Art（选中）
 ```
 
 只把选中的 Prefab/FBX（可多选）整理进 `Assets/Art/<名>/`，**不**输出 AB / UnityPackage / Deliverables。  
 不支持选中文件夹递归；请多选文件。
 
 ```text
-Tools > Retinar > 从 Art 导出交付物 > 导出 Art 全部
+Tools > Retinar > 批量汇总 > 从 Art 导出（规范化） > 导出全部
 ```
 
-扫描 `Assets/Art/*/Prefab/*.prefab`，确认数量后全部导出。不依赖 Project 选中。
+扫描 `Assets/Art/*/Prefab/*.prefab`，确认后全部走规范化导出（全套 Deliverables）。不依赖 Project 选中。
 
 ```text
-Tools > Retinar > 从 Art 导出交付物 > 导出选中的 Art 预制体
+Tools > Retinar > 批量汇总 > 从 Art 导出（规范化） > 导出选中
 ```
 
-只接受选中的 Art 下 Prefab（可多选）。非 Art / 非 Prefab 会警告并跳过；合格项为 0 则中止。  
-导入区资源请先平铺。
+只接受选中的 Art 下 Prefab（可多选）。非 Art / 非 Prefab 会警告并跳过。导入区请先平铺。
+
+### 成品直达
+
+```text
+Tools > Retinar > 成品直达 > 选中预制体直通打包
+```
+
+选中任意 Prefab（可多选）→ 仅打 AB（Android/iOS）与 UnityPackage。  
+**不**跑 SafeZone / 碰撞体 / Extract / 动画改名 / EnsureStandardAssetFolders；**不写** `00_` / `01_source` / `06_docs`。  
+AB 用显式 `AssetBundleBuild[]`，避免工程内同名 bundle 把其它 Art 目录打进同一包。
+
+### 共用
 
 ```text
 Tools > Retinar > 打开交付文件夹
@@ -107,7 +137,9 @@ Tools > Retinar > 打开交付文件夹
 
 打开本机 `Deliverables` 绝对路径。
 
-**已移除：** `Batch Build Selected Models`、`Normalize Selected Models Only`、`Open Deliverables Folder`（英文旧名）。
+**已迁移旧路径（勿再找）：**  
+`平铺到 Art（选中）`、`从 Art 导出交付物/…` → 现位于「批量汇总」下。  
+**已移除更早入口：** `Batch Build Selected Models`、`Normalize Selected Models Only`。
 
 ## 6. UnityPackage 内部规范
 
@@ -155,7 +187,9 @@ Assets/
 
 ## 7. 外部交付目录
 
-默认位于 Unity 工程根目录：
+默认位于 Unity 工程根目录。
+
+### 7.A 批量汇总（规范化导出）— 全套
 
 ```text
 Deliverables/<模型名>/
@@ -173,6 +207,17 @@ Deliverables/<模型名>/
 │  └─ iOS/
 └─ 06_docs/
    └─ asset_info.xlsx
+```
+
+### 7.B 成品直达 — 最净
+
+```text
+Deliverables/<模型名>/
+├─ 02_unity/
+│  └─ <模型名>.unitypackage
+└─ 03_assetbundles/
+   ├─ Android/
+   └─ iOS/
 ```
 
 预览图、演示视频、DCC 源文件、版权依据和人工审核信息需要按项目要求补齐。
@@ -216,7 +261,12 @@ Deliverables/<模型名>/
 
 ### 菜单没有出现
 
-检查 `Assets/Retinar/Editor` 是否完整，并查看 Console 是否有红色编译错误。
+检查 `Assets/Retinar/Editor` 是否完整，并查看 Console 是否有红色编译错误。阅读入口见 `Editor/README_EDITOR.md`。
+
+### 成品直达和规范化导出怎么选
+
+- Prefab 已验收、含 UI、不想改内容 → **成品直达**（仅 02+03）。
+- 外部未整理 / 需要 01_source、xlsx、规范化碰撞体与 SafeZone → **批量汇总**。
 
 ### 提示 Play Mode 不能打包
 
