@@ -4,7 +4,7 @@ using UnityEditor;
 // 01 — 菜单入口（仅 MenuItem，不含业务逻辑）
 //
 // 两类入口：
-//   批量汇总 — 平铺到 Art；从 Art 规范化导出（全套 Deliverables）
+//   批量汇总 — 平铺到 Art；平铺分类面板；从 Art 规范化导出（全套 Deliverables）
 //   成品直达 — 选中 Prefab 最净打包（仅 02_unity + 03_assetbundles，不改 Art）
 //
 // 规范化 / Extract / SafeZone 等重逻辑仍在 RetinarBatchModelBuilder*.cs（Legacy）。
@@ -25,6 +25,12 @@ public static class RetinarMenu
     public static bool MenuFlattenSelectedToArtValidate()
     {
         return RetinarFlattenScheduler.ValidateFlattenSelectedToArt();
+    }
+
+    [MenuItem("Tools/Retinar/批量汇总/平铺分类面板", false, 11)]
+    public static void MenuFlattenCategoryWindow()
+    {
+        FlattenWindow.Open();
     }
 
     [MenuItem("Tools/Retinar/批量汇总/从 Art 导出（规范化）/导出全部", false, 20)]

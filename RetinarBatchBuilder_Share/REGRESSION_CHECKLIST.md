@@ -2,7 +2,7 @@
 
 版本：1.1  
 生效日期：2026-07-24  
-最近同步：2026-08-13（v1.3.8 成品直通 + 插件1 Editor 分层；开始迭代插件1）
+最近同步：2026-08-20（v1.4.0 插件1正式：平铺分类单元 + 自愈改到平铺结束）
 
 本文是每次修改工具、更换 Unity 版本、发布分享包或正式批量打包前必须执行的回归基线。不得因为某个模型打包成功就跳过其他类型。
 
@@ -28,7 +28,7 @@
 - [ ] Prefab 必须有 Renderer，禁止只有 Collider 的空包。
 - [ ] Prefab 的所有私有资源依赖必须收敛到 `Assets/Art/<模型>`。
 - [ ] FBX `externalObjects` 不得继续引用原 `fbx.fbm` 或 `Materials`。
-- [ ] 顶层 `Material` 的全部 Texture Property 必须引用当前顶层 `Texture`。
+- [ ] 单元目录 `Material` 的全部 Texture Property 必须引用本包贴图（`image/Texture` 或 `image/UI`；旧顶层 `Texture/` 仅兼容已有 Art）。
 - [ ] 首次和重复打包都必须扫描全部既有材质，不得依赖“本轮新复制列表”。
 - [ ] 根 Transform 必须为 Position Zero / Rotation Identity / Scale One。
 - [ ] Renderer Bounds 必须居中 SafeZone，尺寸不得过小或越界。
@@ -52,20 +52,21 @@
 - [ ] 交付工作副本更新时，不得被较旧源图反向覆盖。
 - [ ] **已压缩的更小 Art 贴图，不得被更新的更大导入区源图通过 SyncNewer 覆盖。**
 - [ ] `01_source/Textures` 只归档最终 Prefab 实际引用的贴图版本。
-- [ ] `texture_size_report.txt` 必须显示 Unity Imported Size 和 Source File Size；问题行路径应落在 `Assets/Art/<模型>/Texture/`。
+- [ ] `texture_size_report.txt` 必须显示 Unity Imported Size 和 Source File Size；问题行路径应落在 `Assets/Art/<模型>/` 下按后缀递归到的贴图（常见 `image/Texture/`）。
 - [ ] 被导入插件压缩过的二的幂贴图，压缩后仍必须是二的幂；`texture_size_report.txt` 中不得因压缩而新增非二的幂问题项。
 - [ ] 导入插件的 `maxSourceMegabytes` 必须 ≤ 5，与本工具的告警线一致。
 - [ ] **两遍流程（内嵌贴图）**：
-  1. 第一遍打包后 Art/Texture 可暂时超标；
-  2. 只压 `Assets/Art/<模型>/Texture/` 下超标文件（确认结果区路径，且不得选 `.fbm`）；
-  3. 不删 Art，第二遍打包后磁盘体积与报告均保持 < 5MB OK。
+  1. 第一遍平铺后 `image/Texture` 可暂时超标；
+  2. 在 `Assets/Art` 下按后缀递归只压超标文件（确认结果区路径，且不得选 `.fbm`；不要按 `Texture` 夹名写死）；
+  3. 不删 Art，第二遍导出后磁盘体积与报告均保持 < 5MB OK。
 - [ ] 第二遍打包 Console 允许出现「恢复 N 张更小的 Art 贴图」或「SyncNewer 跳过（保留更小的 Art 贴图）」；**不得**在无恢复日志的情况下体积又回到超标。
 - [ ] 开着导入插件拖入含内嵌贴图的 FBX：`<FBX名>.fbm` 里的贴图必须保持原始尺寸不被改写，且模型材质不得丢失；手动压 `.fbm` 应被 Skip 并提示改压 Art。
 - [ ] 导入插件生成的外部 `.mat` 数量必须等于 FBX 里的材质数量；模型在 Scene/Inspector 中不得出现紫色材质槽。
 - [ ] 搬移 `.fbm` 抽取出来的贴图时，Console 不得出现 `Assertion failed on expression: 'm_hasValue'` 或 `Asset to move is not in asset database`；`Model/` 里不得残留 `.fbm` 目录。
 - [ ] Extract/remap 自愈开启时，压缩后再打包仍不得把 Art 贴图盖回大图（与外部 `.fbm` 切断可同时成立）。
 - [ ] **顶点色**：对 `Art/Model` FBX 手动「顶点色设为全白」后，不删 Art、选 Prefab 再**导出**；Model 子 Mesh 顶点色须仍为白。Console 可出现「SaveAndReimport 后已恢复 Mesh 顶点色」，或因无外部 `.fbm` 而跳过 Extract。
-- [ ] **菜单拆分**：`Tools/Retinar` 见「批量汇总」（平铺 / 从 Art 导出规范化 全部|选中）、「成品直达 > 选中预制体直通打包」、「打开交付文件夹」；无旧「从 Art 导出交付物」与 Batch Build。选导入区 Prefab 点规范化「导出选中」应警告跳过；「导出全部」不依赖选中。
+- [ ] **菜单拆分**：`Tools/Retinar` 见「批量汇总」（平铺 / 平铺分类面板 / 从 Art 导出规范化 全部|选中）、「成品直达 > 选中预制体直通打包」、「打开交付文件夹」；无旧「从 Art 导出交付物」与 Batch Build。选导入区 Prefab 点规范化「导出选中」应警告跳过；「导出全部」不依赖选中。
+- [ ] **自愈位置**：平铺结束 Console 可出现「平铺结束自愈」；导出校验不得再打「开始自愈外部依赖」，仅在仍有外部 `.fbm` 时强制 Extract。
 - [ ] **成品直达**：选中 Art 成品 Prefab → Deliverables 仅 `02_unity` + `03_assetbundles`；Art/Prefab 内容未变；AB manifest 的 Assets 只有该 Prefab。
 
 

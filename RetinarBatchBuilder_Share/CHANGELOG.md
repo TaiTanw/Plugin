@@ -2,6 +2,22 @@
 
 记录规则：最新版本写在最上方；每次修改必须填写“原因、改动、影响、验证、回退”。
 
+## 2026-08-20 — v1.4.0 正式版：插件 1 平铺分类单元 + 自愈改到平铺结束
+
+- 原因：对照「平铺开工评估」落地插件 1 首轮大改——旧平铺按写死夹名静默跳过 UI/音频/Shader 等依赖；Extract/自愈与规则 13 绑死顶层 `Texture/`；自愈主调用放在导出校验会让「平铺已完成」的 Art 仍缺补拷，且与校验职责混在一起。
+- 改动：
+  1. **自愈位置**：`TryHealExternalDependencies`（补拷缺失 .mat/.png + Extract + 全材质 remap）改到平铺内核 `CreatePackagedAdjustedPrefab` 结束；**导出校验不再跑 TryHeal**，只对仍挂外部 `.fbm` 的资产强制 `ExtractAndBind` + `RemapAllArtMaterials`。
+  2. **平铺分类**：`10_Flatten/Category` 处理器（Id=单元根目录）+ 注册表 + `FlattenLayout` / `FlattenCopyRunner`；`CopyAdjustedPrefabDependencies` 无人认领则进 `Unknown/`（提示不阻断）。贴图多出口：`image/Texture`、`image/UI`、`image/Unknown`。单出口单元文件直接在 Id 根下。
+  3. **面板**：`Tools > Retinar > 批量汇总 > 平铺分类面板` — 勾选大类 + 编辑后缀；输出路径只读。
+  4. Extract/heal/Model 纯净校验/材质 remap 一律走 `FlattenLayout`（贴图职责目录 = `image/Texture`），不双写旧顶层 `Texture/`。
+  5. **插件 2 P0**：压图 Skip 文案、两遍流程说明改为「Art 下按后缀递归」，不写死 `Texture` 夹名。
+  6. 对照开工评估补漏：Sprite 只按 `textureType == Sprite` 进 `image/UI`（避免 Default 贴图 `spriteMode` 残留被误送 UI）；平铺完成弹窗列出 Unknown，不阻断。
+  7. 平铺入口扫描**源预制体**自身的 Missing（丢脚本 / Object 槽 instanceID 残留）：`LogError`，不修复、不阻断。空槽 None 不报。
+- 影响：当前推荐线 **v1.4.0**（插件 1 正式功能迭代首版）。新平铺产物结构为 `Art/<名>/image/Texture` 等单元目录；旧 Art 顶层 `Texture/` 仍算本包内（remap 可只读回退）。字体暂进 Unknown。Packages/ Shader 不拷。后续继续按模块迭代导出/校验。
+- 验证：外部 Prefab 平铺后默认贴图在 `image/Texture`（仅 Sprite 进 `image/UI`）；平铺结束 Console 有自愈日志，完成弹窗在有 Unknown 时列出路径且不阻断；源 Prefab 若有 Missing 脚本/对象槽，平铺开始即 Error（仍继续平铺）；导出校验无「开始自愈」；含 `.wav`/自定义 `.shader` 会进 `Audio/`、`Shader/`。插件 2 对 `Assets/Art` 批量仍能压到 `image/Texture` 下文件。
+- 回退：恢复 `GetPreparedPrefabDependencyFolder` 与顶层 `Texture/` 路径；把 `TryHeal` 调回 `ValidateExternalDependencies`；去掉 `10_Flatten/Category` 与平铺面板。
+- 关联问题：平铺开工评估；平铺分类单元；自愈主位置；规则 13/34–36 路径。
+
 ## 2026-08-13 — v1.3.8 成品直通打包 + Editor 可读分层
 
 - 原因：规范化导出会再跑 SafeZone/碰撞体等，成品（尤其含 UI）易被改坏；且需更清晰的菜单与代码阅读入口。同名 AB 曾把其它 Art 目录打进同一包。
@@ -10,7 +26,7 @@
   2. **菜单重组**：批量汇总（平铺 / 从 Art 规范化导出全部|选中）+ 成品直达 + 打开交付文件夹；旧 MenuItem 从 Legacy 移除，避免双入口。
   3. **可读分层**：`00_RetinarPaths` / `00_RetinarEditorUtil` / `01_RetinarMenu` / `10_Flatten` / `20_Package` + `README_EDITOR.md`；`CreatePackagedAdjustedPrefab` 暂不拆碎。
   4. 批量路径仍委托 Legacy `ExportArtPrefabPaths`，全套 Deliverables 格式不变。
-- 影响：当前推荐线 **v1.3.8**。自本版起**逐步迭代插件 1（Retinar）**：菜单/调度层先可读可扩展，规范化重逻辑仍在 Legacy，后续按模块继续拆。规范化交付格式不变；直通产物更少。
+- 影响：曾为推荐线 **v1.3.8**；**现由 v1.4.0 接替**。自本版起**逐步迭代插件 1（Retinar）**：菜单/调度层先可读可扩展，规范化重逻辑仍在 Legacy，后续按模块继续拆。规范化交付格式不变；直通产物更少。
 - 验证：Art 成品 Prefab 直通 → Deliverables 仅 02+03，Prefab/UI 不变；AB manifest 仅当前 Prefab；批量「导出选中」仍有 01_source / xlsx。
 - 回退：去掉 `01_RetinarMenu` 与 `20_Package/RetinarDirectPackage`，恢复 Legacy 上旧 MenuItem 即可。
 - 关联问题：成品直通；插件 1 可读分层；AB 双挂。

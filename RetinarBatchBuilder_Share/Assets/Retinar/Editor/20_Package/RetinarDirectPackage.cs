@@ -107,12 +107,12 @@ public static class RetinarDirectPackage
         }
 
         string bundleFileName = RetinarEditorUtil.BuildBundleFileName(assetName);
-
+        //打包AB并将工程文件拷贝到交付文件
         if (!BuildAndCopyAssetBundles(prefabPath, assetName, bundleFileName, failLines))
         {
             return false;
         }
-
+        //打包Pack
         if (!ExportUnityPackageForPrefab(prefabPath, assetName, failLines))
         {
             return false;
@@ -132,7 +132,7 @@ public static class RetinarDirectPackage
         string bundleFileName,
         List<string> failLines)
     {
-        var build = new AssetBundleBuild
+        var build = new AssetBundleBuild//构建包结构信息
         {
             assetBundleName = assetName.ToLowerInvariant(),
             assetBundleVariant = RetinarPaths.AssetBundleVariant,
@@ -140,7 +140,7 @@ public static class RetinarDirectPackage
         };
         AssetBundleBuild[] builds = { build };
 
-        BuildTarget[] targets = { BuildTarget.Android, BuildTarget.iOS };
+        BuildTarget[] targets = { BuildTarget.Android, BuildTarget.iOS };//构建包平台信息
         foreach (BuildTarget target in targets)
         {
             string platformFolder = RetinarEditorUtil.ToPlatformFolder(target);
@@ -150,7 +150,8 @@ public static class RetinarDirectPackage
                 platformFolder);
             RetinarEditorUtil.EnsureDiskDirectory(outputPath);
 
-            AssetBundleManifest manifest = BuildPipeline.BuildAssetBundles(
+
+            AssetBundleManifest manifest = BuildPipeline.BuildAssetBundles(//========正式打包，并返回打包结果信息（资源包清单)
                 outputPath,
                 builds,
                 BuildAssetBundleOptions.None,
@@ -268,7 +269,10 @@ public static class RetinarDirectPackage
 
         return RetinarPaths.ArtRoot + "/" + relative.Substring(0, slash);
     }
-
+    /// <summary>
+    /// 得到当前选中物体并解析路径(确认是预设体）
+    /// </summary>
+    /// <returns></returns>
     private static List<string> CollectSelectedPrefabPaths()
     {
         var list = new List<string>();

@@ -34,9 +34,8 @@ using UnityEngine;
 // 这个文件的修复思路：
 //   - 贴图/材质查找改成递归、支持更多命名，且会把“搜索了哪些目录、找到了什么”
 //     打印出来，方便一眼看出是不是因为挪了文件夹。
-//   - 校验函数在报错前先尝试“自愈”：把游离在外的贴图/材质复制并重定向进该模型
-//     自己的 Art 目录，成功了就不算失败；只有自愈不了（比如缺了脚本、动画控制器
-//     这类没法简单复制重定向的资产）才真正终止打包。
+//   - 完整自愈（补拷 + Extract + 材质 remap）的主调用在平铺结束；导出校验只对仍挂
+//     外部 .fbm 的资产强制 Extract，不再跑 TryHeal。
 //   - 报错信息里带上磁盘绝对路径、最后修改时间，能直接定位是哪个文件、什么时候
 //     被动过。
 // =====================================================================================
@@ -405,26 +404,13 @@ public static partial class RetinarBatchModelBuilder
 
         foreach (GeneratedAsset asset in assets)
         {
-            // 先尝试自愈：把游离在外的贴图/材质复制并重定向进模型自己的目录。
-            // 多数“移动了文件导致打包失败”的情况会在这一步被悄悄修好，不会影响本次打包。
-            if (TryHealExternalDependencies(asset, out List<string> healedPaths))
-            {
-                AssetDatabase.SaveAssets();
-                AssetDatabase.Refresh();
-                if (healedPaths.Count > 0)
-                {
-                    Debug.Log("[Retinar] 自动修复了 " + asset.AssetName + " 的以下外部依赖引用：\n" +
-                        string.Join("\n", healedPaths.ToArray()));
-                }
-            }
-
-            // 自愈后再扫一遍；若仍挂着导入区 .fbm，再强制 Extract+remap 一次后重取依赖。
+            // 完整自愈（补拷 + Extract）已改到平铺结束。此处只处理导出时仍挂着的外部 .fbm。
             string[] dependencies = AssetDatabase.GetDependencies(asset.PrefabPath, true);
             List<string> externalFbmBefore = CollectExternalFbmPathsFromDependencies(asset, dependencies);
             if (externalFbmBefore.Count > 0)
             {
-                Debug.LogWarning("[Retinar] " + asset.AssetName + "：自愈后仍有外部 .fbm 依赖 " +
-                    externalFbmBefore.Count + " 条，开始校验阶段强制 Extract+remap：\n" +
+                Debug.LogWarning("[Retinar] " + asset.AssetName + "：校验时仍有外部 .fbm 依赖 " +
+                    externalFbmBefore.Count + " 条，强制 Extract+remap：\n" +
                     string.Join("\n", externalFbmBefore.ToArray()));
                 ExtractAndBindPackagedModelTextures(asset.AssetFolder);
                 RemapAllArtMaterialsToLocalTextures(asset.AssetFolder);
@@ -445,7 +431,7 @@ public static partial class RetinarBatchModelBuilder
             }
             else
             {
-                Debug.Log("[Retinar] " + asset.AssetName + "：自愈后无外部 .fbm 依赖");
+                Debug.Log("[Retinar] " + asset.AssetName + "：校验时无外部 .fbm 依赖");
             }
 
             foreach (string rawDependency in dependencies)
@@ -538,8 +524,8 @@ public static partial class RetinarBatchModelBuilder
     private static bool TryHealExternalDependencies(GeneratedAsset asset, out List<string> healedPaths)
     {
         healedPaths = new List<string>();
-        string materialFolder = asset.AssetFolder + "/Material";
-        string textureFolder = asset.AssetFolder + "/Texture";
+        string materialFolder = FlattenLayout.MaterialFolder(asset.AssetFolder);
+        string textureFolder = FlattenLayout.TextureFolder(asset.AssetFolder);
         EnsureAssetFolder(materialFolder);
         EnsureAssetFolder(textureFolder);
 
@@ -639,13 +625,13 @@ public static partial class RetinarBatchModelBuilder
         if (ExtractAndBindPackagedModelTextures(asset.AssetFolder))
         {
             changed = true;
-            healedPaths.Add("ExtractTextures + remap -> " + asset.AssetFolder + "/Texture");
+            healedPaths.Add("ExtractTextures + remap -> " + FlattenLayout.TextureFolder(asset.AssetFolder));
         }
 
         if (RemapAllArtMaterialsToLocalTextures(asset.AssetFolder))
         {
             changed = true;
-            healedPaths.Add("Art/Material 贴图全部收到本模型 Texture/");
+            healedPaths.Add("Art/Material 贴图全部收到本模型 " + FlattenLayout.TextureFolder(asset.AssetFolder));
         }
 
         if (changed)
@@ -663,7 +649,7 @@ public static partial class RetinarBatchModelBuilder
     }
 
     /// <summary>
-    /// 把交付区 FBX 的内嵌贴图强制抽到 Assets/Art/&lt;模型&gt;/Texture，
+    /// 把交付区 FBX 的内嵌贴图强制抽到 Assets/Art/&lt;模型&gt;/image/Texture，
     /// 并把 ModelImporter 上仍指向外部（尤其是导入区 .fbm）的贴图 remap 到本地副本。
     ///
     /// 根因：Copy/Flatten 之后 Art/Texture 里已有副本，但 FBX 再导入时 Unity 会按
@@ -672,8 +658,8 @@ public static partial class RetinarBatchModelBuilder
     /// </summary>
     private static bool ExtractAndBindPackagedModelTextures(string assetFolder)
     {
-        string modelFolder = assetFolder + "/Model";
-        string textureFolder = assetFolder + "/Texture";
+        string modelFolder = FlattenLayout.ModelFolder(assetFolder);
+        string textureFolder = FlattenLayout.TextureFolder(assetFolder);
         if (!AssetDatabase.IsValidFolder(modelFolder))
         {
             Debug.Log("[Retinar] ExtractAndBind 跳过：无 Model 目录 " + modelFolder);
@@ -949,8 +935,8 @@ public static partial class RetinarBatchModelBuilder
 
     private static bool RemapAllArtMaterialsToLocalTextures(string assetFolder)
     {
-        string materialFolder = assetFolder + "/Material";
-        string textureFolder = assetFolder + "/Texture";
+        string materialFolder = FlattenLayout.MaterialFolder(assetFolder);
+        string textureFolder = FlattenLayout.TextureFolder(assetFolder);
         if (!AssetDatabase.IsValidFolder(materialFolder))
         {
             return false;
@@ -992,7 +978,7 @@ public static partial class RetinarBatchModelBuilder
     /// </summary>
     private static bool TryRestrictPackagedModelMaterialSearch(string assetFolder)
     {
-        string modelFolder = assetFolder + "/Model";
+        string modelFolder = FlattenLayout.ModelFolder(assetFolder);
         if (!AssetDatabase.IsValidFolder(modelFolder))
         {
             return false;
@@ -1158,10 +1144,10 @@ public static partial class RetinarBatchModelBuilder
         string lastWriteText = File.Exists(fullPath)
             ? File.GetLastWriteTime(fullPath).ToString("yyyy-MM-dd HH:mm:ss")
             : "N/A";
-        string expectedFolder = IsTextureAsset(dependency) ? asset.AssetFolder + "/Texture"
-            : IsMaterialAsset(dependency) ? asset.AssetFolder + "/Material"
-            : IsModelAsset(dependency) ? asset.AssetFolder + "/Model"
-            : "(该类型不会被自动归类，需要人工确认)";
+        string relative = FlattenCopyRunner.ResolveRelativeFolder(dependency);
+        string expectedFolder = string.IsNullOrEmpty(relative)
+            ? "(该类型不会被拷进 Art，例如 Packages/ 或内置资源)"
+            : asset.AssetFolder + "/" + relative;
 
         return asset.AssetName + ": " + dependency +
             "\n    当前状态: " + existsText + "，最后修改时间: " + lastWriteText +
@@ -1179,7 +1165,7 @@ public static partial class RetinarBatchModelBuilder
         var errors = new List<string>();
         foreach (GeneratedAsset asset in assets)
         {
-            string modelFolder = asset.AssetFolder + "/Model";
+            string modelFolder = FlattenLayout.ModelFolder(asset.AssetFolder);
             string fullModelFolder = AssetPathToFullPath(modelFolder);
             if (!Directory.Exists(fullModelFolder))
             {
@@ -1211,7 +1197,7 @@ public static partial class RetinarBatchModelBuilder
                     errors.Add(asset.AssetName + ": non-model file in Model " + assetPath +
                         "\n    磁盘路径: " + filePath +
                         "\n    最后修改时间: " + File.GetLastWriteTime(filePath).ToString("yyyy-MM-dd HH:mm:ss") +
-                        "\n    处理建议: 该文件已尝试自动归类失败，请手动确认它应该在 Texture/Material/Animation/Text 中的哪一个文件夹。");
+                        "\n    处理建议: 该文件已尝试自动归类失败，请手动确认它应该落在对应单元目录（如 image/Texture、Material、Animation、Text）还是 Unknown。");
                 }
             }
         }

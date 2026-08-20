@@ -1,5 +1,7 @@
 # Retinar Editor 阅读地图（插件 1）
 
+**当前正式版：v1.4.0**（平铺分类单元 + 自愈改到平铺结束；对照「平铺开工评估」落地）
+
 面向未通读旧代码的同事：先看菜单，再看调度，最后才进 Legacy。
 
 ## 1. 两类入口（怎么用）
@@ -7,6 +9,7 @@
 | 菜单 | 何时用 | 会不会改 Art / Prefab | Deliverables |
 |------|--------|----------------------|--------------|
 | **批量汇总 → 平铺到 Art** | 外部 FBX/Prefab 要整理进规范目录 | 写入 `Assets/Art/<名>/…` | 无 |
+| **批量汇总 → 平铺分类面板** | 勾选大类、改后缀；看只读输出路径 | 否（只改本机 EditorPrefs） | 无 |
 | **批量汇总 → 从 Art 导出（规范化）** | Art 内已整理，要全套交付（含报告） | **会再跑规范化**（SafeZone/碰撞体/Extract 等） | `00` `01` `02` `03` `06` 全套 |
 | **成品直达 → 选中预制体直通打包** | Prefab 已是成品（尤其含 UI，怕被 SafeZone 弄歪） | **不改** Assets | **仅** `02_unity` + `03_assetbundles` |
 | **打开交付文件夹** | 验收 | 否 | 打开工程根 `Deliverables/` |
@@ -22,6 +25,11 @@ Assets/Retinar/Editor/
   01_RetinarMenu.cs            仅 MenuItem
   10_Flatten/
     RetinarFlattenScheduler.cs 平铺调度 → Legacy
+    FlattenLayout.cs           Art/<名>/ 单元路径（夹名来自 Processor const）
+    FlattenCopyRunner.cs       依赖分类：无人认领 → Unknown/
+    FlattenReferenceAudit.cs   源预制体 Missing 提醒（只打 Error，不修复）
+    FlattenWindow.cs           分类面板（勾选+后缀）
+    Category/                  大类处理器 + 注册表
   20_Package/
     RetinarPackageScheduler.cs 规范化导出调度 → Legacy
     RetinarDirectPackage.cs    ★ 成品直通实现
@@ -37,8 +45,9 @@ Assets/Retinar/Editor/
 ```text
 批量：外部 Prefab/FBX
   → FlattenScheduler → CreateNormalizedPrefab（Legacy）
-  → Assets/Art/<名>/{Model,Texture,Material,Prefab,…}
-  → PackageScheduler → ExportArtPrefabPaths（Legacy 全套校验与交付）
+  → Assets/Art/<名>/{Model,image/Texture,Material,Prefab,…}
+  → 平铺结束 TryHeal（补拷+Extract+remap）
+  → PackageScheduler → ExportArtPrefabPaths（Legacy 全套校验与交付；校验不再自愈）
 
 直通：选中 Prefab
   → DirectPackage
@@ -49,7 +58,7 @@ Assets/Retinar/Editor/
 
 ## 4. 为何 Legacy 暂不拆
 
-`CreatePackagedAdjustedPrefab` 与 AssetResolution 强耦合（Extract、顶点色、外部依赖自愈）。与直通路径无调用关系；本阶段全拆收益低、回归成本高。格式脚本（01_source / xlsx）仅规范化导出使用，拆分可后置。
+`CreatePackagedAdjustedPrefab` 与 AssetResolution 强耦合（Extract、顶点色、外部依赖自愈）。自愈主调用已在平铺结束；导出校验只处理残留 `.fbm`。与直通路径无调用关系；本阶段不继续拆碎 `CreatePackagedAdjustedPrefab`。格式脚本（01_source / xlsx）仅规范化导出使用，拆分可后置。
 
 ## 5. 常量同步
 

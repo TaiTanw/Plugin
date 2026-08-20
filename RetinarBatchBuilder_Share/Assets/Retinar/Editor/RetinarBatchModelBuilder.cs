@@ -86,6 +86,7 @@ public static partial class RetinarBatchModelBuilder
         EnsureAssetFolder(ArtRoot);
 
         int generatedCount = 0;
+        var unknownLines = new List<string>();
         try
         {
             for (int i = 0; i < sourcePaths.Count; i++)
@@ -100,6 +101,11 @@ public static partial class RetinarBatchModelBuilder
                 if (asset.IsValid)
                 {
                     generatedCount++;
+                    List<string> unknowns = FlattenCopyRunner.CollectUnknownAssetPaths(asset.AssetFolder);
+                    for (int u = 0; u < unknowns.Count; u++)
+                    {
+                        unknownLines.Add(asset.AssetName + "  " + unknowns[u]);
+                    }
                 }
             }
         }
@@ -111,10 +117,20 @@ public static partial class RetinarBatchModelBuilder
         AssetDatabase.SaveAssets();
         AssetDatabase.Refresh();
 
+        string unknownHint = string.Empty;
+        if (unknownLines.Count > 0)
+        {
+            unknownHint = "\n\n有 " + unknownLines.Count +
+                " 个未归类文件（Unknown/ 或 image/Unknown/）。包不完整，但已继续平铺，不阻断。\n" +
+                "可手拆后删除 Unknown 再导出。清单：\n" +
+                BuildDialogPreview(string.Join("\n", unknownLines.ToArray()), 10);
+        }
+
         ShowDialogDeferred(
             "Retinar 平铺到 Art",
-            "完成。已平铺 " + generatedCount + " / " + sourcePaths.Count + " 个资产到 " + ArtRoot + "\n\n" +
-            "下一步：用插件 2（资源处理）对手动压 Art 贴图 / 刷顶点色，再执行「批量汇总 > 从 Art 导出（规范化）」。",
+            "完成。已平铺 " + generatedCount + " / " + sourcePaths.Count + " 个资产到 " + ArtRoot +
+            unknownHint + "\n\n" +
+            "下一步：用插件 2（资源处理）对 Art 下贴图按后缀递归压缩 / 刷顶点色，再执行「批量汇总 > 从 Art 导出（规范化）」。",
             "OK");
     }
 
@@ -342,7 +358,10 @@ public static partial class RetinarBatchModelBuilder
             "OK");
         return true;
     }
-
+    /// <summary>
+    /// 模型选中得到路径
+    /// </summary>
+    /// <returns></returns>
     private static List<string> GetSelectedModelPaths()
     {
         var paths = new List<string>();
@@ -538,11 +557,11 @@ public static partial class RetinarBatchModelBuilder
 
         string assetName = MakeSafeName(Path.GetFileNameWithoutExtension(sourcePath));
         string assetFolder = ArtRoot + "/" + assetName;
-        string modelFolder = assetFolder + "/Model";
-        string textureFolder = assetFolder + "/Texture";
-        string prefabFolder = assetFolder + "/Prefab";
-        string materialFolder = assetFolder + "/Material";
-        string animationFolder = assetFolder + "/Animation";
+        string modelFolder = FlattenLayout.ModelFolder(assetFolder);
+        string textureFolder = FlattenLayout.TextureFolder(assetFolder);
+        string prefabFolder = FlattenLayout.PrefabFolder(assetFolder);
+        string materialFolder = FlattenLayout.MaterialFolder(assetFolder);
+        string animationFolder = FlattenLayout.AnimationFolder(assetFolder);
         EnsureStandardAssetFolders(assetFolder);
 
         CopySourceTexturesToUnityArtFolder(sourcePath, textureFolder);
@@ -621,7 +640,16 @@ public static partial class RetinarBatchModelBuilder
         ClearDuplicateBundleNames(prefabFolder, prefabPath, bundleName);
 
         AssetStats stats = CollectAssetStats(savedPrefab);
-        return new GeneratedAsset(assetName, assetFolder, sourcePath, unityModelPath, prefabPath, bundleName + "." + AssetBundleVariant, stats);
+        var generated = new GeneratedAsset(assetName, assetFolder, sourcePath, unityModelPath, prefabPath, bundleName + "." + AssetBundleVariant, stats);
+        List<string> healedPaths;
+        if (TryHealExternalDependencies(generated, out healedPaths) && healedPaths.Count > 0)
+        {
+            Debug.Log("[Retinar] " + assetName + "：平铺结束自愈 " + healedPaths.Count + " 条：\n" +
+                string.Join("\n", healedPaths.ToArray()));
+        }
+
+        FlattenCopyRunner.LogUnknownIfAny(assetFolder, assetName);
+        return generated;
     }
 
     private static GeneratedAsset CreatePackagedAdjustedPrefab(string sourcePath)
@@ -636,9 +664,11 @@ public static partial class RetinarBatchModelBuilder
         string assetName;
         string assetFolder;
         ResolvePackagedAssetIdentity(sourcePath, out assetName, out assetFolder);
-        string prefabFolder = assetFolder + "/Prefab";
-        string animationFolder = assetFolder + "/Animation";
+        string prefabFolder = FlattenLayout.PrefabFolder(assetFolder);
+        string animationFolder = FlattenLayout.AnimationFolder(assetFolder);
         EnsureStandardAssetFolders(assetFolder);
+
+        FlattenReferenceAudit.LogSourcePrefabMissingReferences(sourcePath, assetName);
 
         string prefabPath = PreparePackagePrefab(sourcePath, prefabFolder, assetName);
         AssetDatabase.SaveAssets();
@@ -646,29 +676,34 @@ public static partial class RetinarBatchModelBuilder
 
         Dictionary<string, string> copiedDependencies = CopyAdjustedPrefabDependencies(prefabPath, assetFolder);
         FlattenModelCompanionFolders(assetFolder);
+        FlattenCopyRunner.LogUnknownIfAny(assetFolder, assetName);
         AssetDatabase.SaveAssets();
         AssetDatabase.Refresh();
         ApplyImportSettingsToPackagedModels(assetFolder);
         // 内嵌贴图：Unity 可能复用工程里已有的同名 Assets/**/xxx.fbm（导入区残留），
         // 导致 Art/Model/fbx 一直依赖 AAA/.../fbx.fbm。强制抽到本模型 Texture/ 并重绑。
-        Debug.Log("[Retinar] " + assetName + "：开始 ExtractTextures/重绑（打包流程第 1 次） -> " + assetFolder + "/Texture");
+        Debug.Log("[Retinar] " + assetName + "：开始 ExtractTextures/重绑（打包流程第 1 次） -> " + FlattenLayout.TextureFolder(assetFolder));
         ExtractAndBindPackagedModelTextures(assetFolder);
         RemapPackagedModelImporterMaterials(assetFolder, copiedDependencies);
         RemapCopiedAssetReferences(copiedDependencies, assetFolder);
         RemapCopiedPrefabModelReferences(prefabPath, copiedDependencies);
         CopyPrefabRendererMaterials(prefabPath, assetFolder, assetName);
-        Debug.Log("[Retinar] " + assetName + "：开始 ExtractTextures/重绑（打包流程第 2 次，材质拷贝之后）");
-        ExtractAndBindPackagedModelTextures(assetFolder);
-        if (RemapAllArtMaterialsToLocalTextures(assetFolder))
+        // 自愈主位置：平铺拷贝/objectMap/材质槽改完后，补拷缺失 .mat/.png 并再 Extract+.fbm 重绑。
+        // 导出校验不再跑 TryHeal，只对仍挂外部 .fbm 的资产强制 Extract。
+        var healTarget = new GeneratedAsset(
+            assetName, assetFolder, sourcePath, string.Empty, prefabPath, string.Empty, default(AssetStats));
+        List<string> healedPaths;
+        if (TryHealExternalDependencies(healTarget, out healedPaths) && healedPaths.Count > 0)
         {
-            Debug.Log("[Retinar] " + assetName + "：已把 Art/Material 贴图引用收到本模型 Texture/");
+            Debug.Log("[Retinar] " + assetName + "：平铺结束自愈 " + healedPaths.Count + " 条：\n" +
+                string.Join("\n", healedPaths.ToArray()));
         }
 
         List<string> leftoverFbm = CollectExternalFbmTextureDependencies(assetFolder, prefabPath);
         if (leftoverFbm.Count > 0)
         {
-            Debug.LogWarning("[Retinar] " + assetName + "：打包流程结束后仍有 " + leftoverFbm.Count +
-                " 条外部 .fbm 依赖（校验阶段还会再自愈一次）：\n" + string.Join("\n", leftoverFbm.ToArray()));
+            Debug.LogWarning("[Retinar] " + assetName + "：平铺结束后仍有 " + leftoverFbm.Count +
+                " 条外部 .fbm 依赖（导出校验会再强制 Extract）：\n" + string.Join("\n", leftoverFbm.ToArray()));
         }
         else
         {
@@ -693,7 +728,7 @@ public static partial class RetinarBatchModelBuilder
         string finalModelPath = FindMainModelDependency(prefabPath);
         if (string.IsNullOrEmpty(finalModelPath))
         {
-            finalModelPath = assetFolder + "/Model/" + Path.GetFileName(sourceModelPath);
+            finalModelPath = FlattenLayout.ModelFolder(assetFolder) + "/" + Path.GetFileName(sourceModelPath);
         }
         string bundleName = assetName.ToLowerInvariant();
         AssetImporter prefabImporter = AssetImporter.GetAtPath(prefabPath);
@@ -836,12 +871,13 @@ public static partial class RetinarBatchModelBuilder
                 continue;
             }
 
-            string targetFolder = GetPreparedPrefabDependencyFolder(path);
+            string targetFolder = FlattenCopyRunner.ResolveRelativeFolder(path);
             if (string.IsNullOrEmpty(targetFolder))
             {
                 continue;
             }
 
+            FlattenLayout.EnsureFolder(assetFolder + "/" + targetFolder);
             string requestedTargetPath = assetFolder + "/" + targetFolder + "/" + Path.GetFileName(path);
             if (IsTextureAsset(path))
             {
@@ -858,38 +894,7 @@ public static partial class RetinarBatchModelBuilder
         return copied;
     }
 
-    private static string GetPreparedPrefabDependencyFolder(string assetPath)
-    {
-        string extension = Path.GetExtension(assetPath).ToLowerInvariant();
-        System.Type type = AssetDatabase.GetMainAssetTypeAtPath(assetPath);
-
-        if (IsModelAsset(assetPath))
-        {
-            return "Model";
-        }
-
-        if (extension == ".controller" || extension == ".anim" || type == typeof(AnimatorController) || type == typeof(AnimationClip))
-        {
-            return "Animation";
-        }
-
-        if (IsMaterialAsset(assetPath))
-        {
-            return "Material";
-        }
-
-        if (IsTextureAsset(assetPath) || typeof(Texture).IsAssignableFrom(type))
-        {
-            return "Texture";
-        }
-
-        if (IsTextAsset(assetPath) || type == typeof(TextAsset))
-        {
-            return "Text";
-        }
-
-        return null;
-    }
+    // GetPreparedPrefabDependencyFolder 已由 FlattenCopyRunner.ResolveRelativeFolder 取代。
 
     // MoveAssetToExactPath 已迁移到 RetinarBatchModelBuilder.AssetResolution.cs，
     // 并修复了失败时静默放弃（只 LogWarning，不重试、不上报）的问题。
@@ -1061,8 +1066,8 @@ public static partial class RetinarBatchModelBuilder
 
     private static void CopyPrefabRendererMaterials(string prefabPath, string assetFolder, string assetName)
     {
-        string materialFolder = assetFolder + "/Material";
-        string textureFolder = assetFolder + "/Texture";
+        string materialFolder = FlattenLayout.MaterialFolder(assetFolder);
+        string textureFolder = FlattenLayout.TextureFolder(assetFolder);
         EnsureAssetFolder(materialFolder);
         EnsureAssetFolder(textureFolder);
 
@@ -1322,7 +1327,7 @@ public static partial class RetinarBatchModelBuilder
 
     private static void RemapCopiedMaterials(string assetFolder, Dictionary<UnityEngine.Object, UnityEngine.Object> objectMap)
     {
-        string materialFolder = assetFolder + "/Material";
+        string materialFolder = FlattenLayout.MaterialFolder(assetFolder);
         string[] materialGuids = AssetDatabase.FindAssets("t:Material", new[] { materialFolder });
         foreach (string materialGuid in materialGuids)
         {
@@ -1350,10 +1355,12 @@ public static partial class RetinarBatchModelBuilder
                 if (packagedTexture == null)
                 {
                     string sourceTexturePath = AssetDatabase.GetAssetPath(texture).Replace("\\", "/");
-                    string expectedTexturePath = assetFolder + "/Texture/" + Path.GetFileName(sourceTexturePath);
+                    string expectedTexturePath = FlattenLayout.ResolveExistingOrDefaultTexturePath(
+                        assetFolder, Path.GetFileName(sourceTexturePath));
                     if (AssetDatabase.LoadAssetAtPath<Texture>(expectedTexturePath) == null &&
                         IsTextureAsset(sourceTexturePath))
                     {
+                        FlattenLayout.EnsureFolder(FlattenLayout.TextureFolder(assetFolder));
                         CopyAssetToExactPath(sourceTexturePath, expectedTexturePath);
                     }
                     packagedTexture = AssetDatabase.LoadAssetAtPath<Texture>(expectedTexturePath);
@@ -1423,7 +1430,7 @@ public static partial class RetinarBatchModelBuilder
 
     private static void FlattenModelCompanionFolders(string assetFolder)
     {
-        string modelFolder = assetFolder + "/Model";
+        string modelFolder = FlattenLayout.ModelFolder(assetFolder);
         if (!AssetDatabase.IsValidFolder(modelFolder))
         {
             return;
@@ -1453,12 +1460,13 @@ public static partial class RetinarBatchModelBuilder
                 continue;
             }
 
-            string targetFolder = GetModelCompanionTargetFolder(assetPath);
+            string targetFolder = FlattenCopyRunner.ResolveRelativeFolder(assetPath);
             if (string.IsNullOrEmpty(targetFolder))
             {
                 continue;
             }
 
+            FlattenLayout.EnsureFolder(assetFolder + "/" + targetFolder);
             string targetPath = assetFolder + "/" + targetFolder + "/" + Path.GetFileName(assetPath);
             MoveAssetToExactPath(assetPath, targetPath);
         }
@@ -1468,31 +1476,7 @@ public static partial class RetinarBatchModelBuilder
         DeleteEmptySubfolders(modelFolder);
     }
 
-    private static string GetModelCompanionTargetFolder(string assetPath)
-    {
-        if (IsModelAsset(assetPath))
-        {
-            return "Model";
-        }
-
-        if (IsMaterialAsset(assetPath))
-        {
-            return "Material";
-        }
-
-        if (IsTextureAsset(assetPath))
-        {
-            return "Texture";
-        }
-
-        if (IsTextAsset(assetPath))
-        {
-            return "Text";
-        }
-
-        return null;
-    }
-
+    // GetModelCompanionTargetFolder 已由 FlattenCopyRunner.ResolveRelativeFolder 取代。
     // IsTextAsset 已迁移到 RetinarBatchModelBuilder.AssetResolution.cs
 
     private static void DeleteEmptySubfolders(string rootAssetFolder)
@@ -1857,7 +1841,7 @@ public static partial class RetinarBatchModelBuilder
 
     private static void ApplyImportSettingsToPackagedModels(string assetFolder)
     {
-        string modelFolder = assetFolder + "/Model";
+        string modelFolder = FlattenLayout.ModelFolder(assetFolder);
         if (!AssetDatabase.IsValidFolder(modelFolder))
         {
             return;
@@ -1884,8 +1868,8 @@ public static partial class RetinarBatchModelBuilder
         }
 
         Dictionary<UnityEngine.Object, UnityEngine.Object> objectMap = BuildCopiedObjectMap(copiedDependencies);
-        string modelFolder = assetFolder + "/Model";
-        string materialFolder = assetFolder + "/Material";
+        string modelFolder = FlattenLayout.ModelFolder(assetFolder);
+        string materialFolder = FlattenLayout.MaterialFolder(assetFolder);
         string[] modelGuids = AssetDatabase.FindAssets("t:Model", new[] { modelFolder });
 
         foreach (string guid in modelGuids)
@@ -1999,7 +1983,8 @@ public static partial class RetinarBatchModelBuilder
         if (!fileSizeOk)
         {
             Debug.LogWarning("Texture source file is larger than 5 MB and should be optimized: " + line +
-                "\n处理方式：打开 Tools > 资源处理总面板 / 贴图子面板，选中 Assets/Art/<模型>/Texture/ 下该贴图，" +
+                "\n处理方式：打开 Tools > 资源处理总面板 / 贴图子面板，在 Assets/Art 下按后缀递归选中该贴图" +
+                "（常见落点 image/Texture，勿写死夹名），" +
                 "执行\"压缩超标的贴图源文件\"，确认体积 < 5 MB 后再重新打包。" +
                 "\n不要压 .fbm；重新打包会保留已压缩的 Art 副本（ExtractTextures / SyncNewer 不再用更大内嵌图覆盖）。");
         }
@@ -2539,16 +2524,22 @@ public static partial class RetinarBatchModelBuilder
             }
 
             string sourceTexturePath = AssetDatabase.GetAssetPath(texture);
-            if (string.IsNullOrEmpty(sourceTexturePath) || sourceTexturePath.Replace("\\", "/").StartsWith(textureFolder + "/", System.StringComparison.OrdinalIgnoreCase))
+            string assetFolder = FlattenLayout.AssetFolderFromTextureFolder(textureFolder);
+            if (string.IsNullOrEmpty(sourceTexturePath) ||
+                FlattenLayout.IsLocalArtTexture(assetFolder, sourceTexturePath.Replace("\\", "/")))
             {
-                // 内嵌贴图（无独立资产路径）或已经在目标文件夹里，跳过。
+                // 内嵌贴图（无独立资产路径）或已经在本包 image 单元 / 旧 Texture/ 里，跳过。
                 continue;
             }
 
-            string targetTexturePath = textureFolder + "/" + Path.GetFileName(sourceTexturePath);
-            Texture copiedTexture = AssetDatabase.LoadAssetAtPath<Texture>(targetTexturePath);
+            string existingPath = FlattenLayout.ResolveExistingOrDefaultTexturePath(
+                assetFolder, Path.GetFileName(sourceTexturePath));
+            Texture copiedTexture = AssetDatabase.LoadAssetAtPath<Texture>(existingPath);
             if (copiedTexture == null)
             {
+                string targetTexturePath = FlattenLayout.TextureFolder(assetFolder) + "/" +
+                    Path.GetFileName(sourceTexturePath);
+                FlattenLayout.EnsureFolder(FlattenLayout.TextureFolder(assetFolder));
                 // 目标文件夹里没有副本——很可能是因为源贴图/伴生文件夹被移动过，
                 // CollectSourceAssets 没找到它。这里做兜底：现在就地补一份副本，
                 // 而不是让材质继续指向工程里的外部路径（那样后面校验会把整批打包判为失败）。
@@ -2556,7 +2547,7 @@ public static partial class RetinarBatchModelBuilder
                 copiedTexture = AssetDatabase.LoadAssetAtPath<Texture>(copiedPath);
                 if (copiedTexture == null)
                 {
-                    Debug.LogWarning("Texture could not be relocated into " + textureFolder + ": " + sourceTexturePath +
+                    Debug.LogWarning("Texture could not be relocated into " + FlattenLayout.TextureFolder(assetFolder) + ": " + sourceTexturePath +
                         "\n如果该贴图最近被人为移动过位置，请确认它仍然存在于工程内，或手动把它放回模型旁边的 Texture/Materials 文件夹后重新执行打包。");
                     continue;
                 }
@@ -2605,14 +2596,7 @@ public static partial class RetinarBatchModelBuilder
 
     private static void EnsureStandardAssetFolders(string assetFolder)
     {
-        EnsureAssetFolder(assetFolder);
-        EnsureAssetFolder(assetFolder + "/Model");
-        EnsureAssetFolder(assetFolder + "/Texture");
-        EnsureAssetFolder(assetFolder + "/Material");
-        EnsureAssetFolder(assetFolder + "/Animation");
-        EnsureAssetFolder(assetFolder + "/Prefab");
-        EnsureAssetFolder(assetFolder + "/UI");
-        EnsureAssetFolder(assetFolder + "/Text");
+        FlattenLayout.EnsureStandardFolders(assetFolder);
     }
 
     private static void EnsureAssetFolder(string folderPath)

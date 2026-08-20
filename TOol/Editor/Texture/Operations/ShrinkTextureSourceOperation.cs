@@ -110,7 +110,7 @@ public class ShrinkTextureSourceOperation : ITextureAssetOperation
         {
             return TextureOperationResult.Skipped(
                 "这是 Unity 从 FBX 抽取内嵌贴图生成的 .fbm 缓存目录，模型下次重新导入就会被原始数据覆盖，" +
-                "压了也留不住。请改为压缩打包工具平铺到 Assets/Art/<模型>/Texture/ 之后的那一份。");
+                "压了也留不住。请改为压缩打包工具平铺到 Assets/Art/<模型>/ 之后、按后缀递归扫到的那一份（常见 image/Texture，不要按夹名写死）。");
         }
 
         string fullPath = AssetPathUtility.ToFullPath(context.AssetPath);

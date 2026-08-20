@@ -35,7 +35,11 @@ public static class RetinarEditorUtil
             "OK");
         return true;
     }
-
+    /// <summary>
+    /// 特殊字符替换为下划线
+    /// </summary>
+    /// <param name="name"></param>
+    /// <returns></returns>
     public static string MakeSafeName(string name)
     {
         if (string.IsNullOrEmpty(name))
@@ -50,7 +54,10 @@ public static class RetinarEditorUtil
 
         return name.Replace(' ', '_');
     }
-
+    /// <summary>
+    /// 确保文件存在
+    /// </summary>
+    /// <param name="path"></param>
     public static void EnsureDiskDirectory(string path)
     {
         if (!Directory.Exists(path))
@@ -71,7 +78,11 @@ public static class RetinarEditorUtil
         EnsureDiskDirectory(path);
         EditorUtility.RevealInFinder(path);
     }
-
+    /// <summary>
+    /// 目标平台文件夹名返回
+    /// </summary>
+    /// <param name="target"></param>
+    /// <returns></returns>
     public static string ToPlatformFolder(BuildTarget target)
     {
         if (target == BuildTarget.iOS)
