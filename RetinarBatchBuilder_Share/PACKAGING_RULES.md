@@ -2,7 +2,7 @@
 
 版本：1.1  
 生效日期：2026-07-16  
-最近同步：2026-08-20（v1.4.0 插件1正式：平铺分类单元 + 自愈改到平铺结束）
+最近同步：2026-08-21（v1.4.4：动画循环沿用源 Clip Loop Time）
 
 本文是后续修改打包工具时必须遵守的基线。发生冲突时，以本文和最新经确认的变更记录为准。
 
@@ -15,7 +15,7 @@
 5. UnityPackage 只从最终 Prefab 导出并包含实际依赖，不得递归打包整个工程目录或无关示例资源。
 6. Play Mode 下禁止开始打包。工具应先停止并要求用户回到 Edit Mode 后重新执行，不能产生半成品。
 7. 完成提示必须显示 `Deliverables` 的绝对路径，并提供 `Tools > Retinar > 打开交付文件夹`。
-8. 动画 FBX 可生成基础 AnimatorController，但不得宣称复杂状态机、Root Motion、Avatar、循环和触发逻辑已经自动验收。
+8. 动画 FBX 可生成基础 AnimatorController，但不得宣称复杂状态机、Root Motion、Avatar、循环和触发逻辑已经自动验收。平铺拷贝 Clip 后必须保持源 `m_LoopTime`；禁止按 Clip 文件名是否含 `once` 改写循环。交付文件名的 `_loop` / `_once` 后缀只反映源设置，不得反过来改 Clip。
 9. 自动检查不能替代人工验收。材质、法线、编号方向、SafeZone、Collider、动画、真机效果、版权与考据必须保留人工检查项。
 10. 每次代码或流程修改必须先更新 `CHANGELOG.md`，写明原因、改动、影响、验证、回退方式和关联问题；没有记录的修改不得作为正式分享版本发布。
 11. 正式交付优先选择已经在 Unity 中调整并验收过的 Prefab；工具不得修改其材质参数。FBX 入口仅用于基础规范化，不代表最终视觉效果已验收。
@@ -25,16 +25,16 @@
 15. 交付副本的 `Model` 只放 FBX、OBJ 等模型文件；`.txt / .bytes / .json / .xml / .csv` 文本依赖统一放入 `Text`，不得残留在 `Model`。
 16. 带动画或交互的模型 UnityPackage 只导出 `Assets/Art/<模型名>` 私有资源；XLua、DOTween、RichWidget、原生插件等公共代码必须由版本匹配的 Retinar Runtime 提前安装，不得在每个模型包中重复携带。
 17. AssetBundle 可以包含 Prefab、Animator、动画、材质、贴图和 Lua/TextAsset，但公共 C# Runtime 必须预先编译进验收 App；不得把 AB 能显示模型误判为交互功能已经验收。
-18. Prefab 引用未知的外部 `Assets` 资源时必须停止正式打包并报告路径；不得生成缺依赖的 UnityPackage 或 AB。
+18. Prefab 引用未知的外部 `Assets` 资源时必须停止**正式（规范化）**打包并报告路径；不得生成缺依赖的 UnityPackage 或 AB。成品直通当前仍只收 `Art/<名>/`，对本包外依赖**只报告不阻断**（`Deliverables/_diagnostics/direct_package_dropped_deps.txt`）；该入口后续将撤掉，改为面板设置输出后统一走规范化。
 19. 正式导出前必须验证 `Model` 纯净性：不得包含任何子文件夹、材质、贴图或文本，只允许 FBX/OBJ 等模型文件及其 `.meta`。验证失败必须停止打包。
 20. `Assets/Art/<模型>/Model` 内的 FBX/OBJ 工作副本必须使用 `ModelImporterMaterialLocation.InPrefab`，禁止使用会在目标工程首次导入时自动生成 `Materials` 和 `<FBX名>.fbm` 目录的 External 模式。该设置只能修改交付工作副本，不得修改原始 FBX Importer。
 21. 上述 FBX 伴生目录问题已于 2026-07-20 由用户完成导入回归验证。后续发布前必须继续检查：UnityPackage 导入完成后，`Model` 仍只有 FBX/OBJ，材质和贴图只存在于单元目录 `Material / image/Texture`（Sprite 在 `image/UI`），且 Prefab 外观与引用不丢失。
 22. 复制到交付目录的 FBX 若存在 `ModelImporter.externalObjectMap`，其材质映射必须自动改指当前模型顶层 `Material`副本。任何仍指向原始 `fbx.fbm` 或 `Materials` 目录的映射都必须阻止打包，不得依赖人工逐项重选。
-23. AR 交付 Prefab 的根节点必须归一：Position 为零、Rotation 为 Identity、Scale 为一。源 Prefab 若使用根偏移与子节点反向补偿，必须在交付副本中无损重建；Renderer Bounds 必须位于 SafeZone 中心，BoxCollider 必须与可见模型中心一致。任何根节点大幅偏移、模型远离线框或尺寸近似为零的 Prefab 必须阻止 AB 输出。
+23. AR 交付 Prefab 的**外壳根节点**必须归一：Position 为零、Rotation 为 Identity、Scale 为一。外来 Prefab 入口用空父外壳承接该约定，内容节点保留源 TRS / 命名 / 动画，不得 Bake 进子节点、不得按 SafeZone 缩放。源 Prefab 若使用根偏移与子节点反向补偿，必须靠外壳隔离，不得拆补偿。FBX 自动预制体仍将内容缩进 SafeZone（入口暂保持）。若平铺面板开启「添加根 BoxCollider」（默认开），则 BoxCollider 必须与可见模型中心一致；关掉该开关时不加碰撞体，也不再以此项阻断导出。外壳根节点大幅偏移或尺寸近似为零的 Prefab 必须阻止 AB 输出。
 24. 贴图文件已出现在 `image/Texture` 不代表整理完成；所有交付材质的 Texture Property 必须实际引用当前 `Assets/Art/<模型>/` 下本包贴图（`image/Texture` 或 `image/UI`）。工具必须先执行材质贴图专用重映射，再执行外部依赖验证；仍引用源 `fbx.fbm` 的材质不得输出。
 25. 材质贴图重映射必须每次遍历当前模型顶层 `Material` 内的全部材质，不得只遍历本次新复制的资源。首次打包和重复打包必须得到相同的依赖收敛结果。
 26. 材质依赖收敛必须是机型无关的通用功能，禁止使用 L15、直20、米15 或任何具体模型名称作为分支条件。即使本次没有新复制依赖，也必须执行当前模型全材质贴图路径验证与收敛。
-27. 真机中模型远离线框、尺寸过小或看似空包属于阻断级回归问题。所有机型在输出前必须通过通用空间门禁：根 Transform 为 `(Position 0 / Rotation Identity / Scale 1)`，Renderer Bounds 中心与 SafeZone 中心距离不超过容差，尺寸不得近似为零或超出 SafeZone，BoxCollider 中心必须与 Renderer Bounds 对齐。不得以 Unity 场景中“看起来正常”取代该验证。
+27. 真机中模型远离线框、尺寸过小或看似空包属于阻断级回归问题。**外壳**根 Transform 必须为 `(Position 0 / Rotation Identity / Scale 1)`。Renderer Bounds 中心与尺寸进 SafeZone 仅对 FBX 自动预制体（内容子节点名为 `<资产名>_Model`）阻断；外来 Prefab 不按 SafeZone 缩放，不得用该尺寸门禁挡掉。平铺开启「添加根 BoxCollider」时，根 BoxCollider 中心必须与 Renderer Bounds 对齐。不得以 Unity 场景中“看起来正常”取代该验证。
 28. 贴图验收必须区分 Unity 导入尺寸与原始文件体积。TextureImporter `Max Size/Compression` 不得被宣称为已修改原始 PNG/JPG；源文件归档默认必须保真。原始贴图文件体积的通用告警阈值为 5MB，报告必须同时显示 Unity Imported Size 与 Source File Size。
 29. 用户通过 Photoshop 等外部工具直接修改并保存 Unity 定位到的原 PNG/JPG 时，该文件视为新的贴图实体内容。打包工作副本必须在源文件更新时同步图像内容，但必须保留目标 `.meta`/GUID；不得反向覆盖更新的工作副本。`01_source/Textures` 必须以最终 Prefab 实际引用的贴图为唯一归档来源。
 30. 每次代码修改、流程变更、Unity 版本变更或正式分享前，必须执行 `REGRESSION_CHECKLIST.md`。已自动化项必须保留阻断，无法自动化项必须保留人工验收记录。发现新问题时必须同步更新 `CHANGELOG.md`、`PACKAGING_RULES.md` 和 `REGRESSION_CHECKLIST.md`，不得只修代码不留回溯基线。
@@ -52,7 +52,7 @@
     1. `Tools > Retinar > 批量汇总 > 平铺到 Art（选中）`：内嵌大图落到 `Assets/Art/<模型>/image/Texture/`（Extract 目标由 `FlattenLayout` 决定）。
     2. 在 `TOol` 贴图面板（或总面板批量路径指向 `Assets/Art`）按后缀递归选中 **Art 下超标文件**（不要选 `.fbm`）执行「压缩超标的贴图源文件」。
     3. **不要删除** `Assets/Art/<模型>/`，执行 `批量汇总 > 从 Art 导出（规范化） > 导出选中`（或「导出全部」）。
-       若 Prefab 已是成品且不想再规范化，可用 `成品直达 > 选中预制体直通打包`（仅 02+03）。
+       若 Prefab 已是成品且不想再规范化，可用 `成品直达 > 选中预制体直通打包`（仅 02+03；本包外依赖会报告但不阻断，后续将撤掉此入口）。
     已移除一键 `Batch Build Selected Models`；平铺与导出必须分两步（中间可插入插件 2 手动）。
     保护压缩结果的机制（必须同时成立，缺一会复现“压完再打包又超标”）：
     - `Flatten` / `MoveAssetToExactPath`：目标 Art 贴图已存在时保留目标，删除 Model 下新抽的源文件。
@@ -63,6 +63,7 @@
 38. 材质已在 `Art/Material` 时仍必须做贴图重映射与（必要时）Extract/remap。旧逻辑在“材质已在 Art”时跳过，会导致 Texture 目录已有副本、但 Prefab/FBX 依赖仍指向导入区 `.fbm` 的假收敛。完整自愈（补拷+Extract+remap）在**平铺结束**执行；导出校验不再跑自愈，只对仍挂外部 `.fbm` 的资产强制 Extract。
 39. `texture_size_report.txt` 与完成弹窗的 Texture check 统计的是 **最终 Prefab 依赖链上的贴图路径**（通常为 `Assets/Art/<模型>/image/Texture/...`）的磁盘体积与是否二的幂。Art 目录里“看起来都不大”但报告仍 WARN 时，先打开该报告核对具体路径与 `Source File Size`（例如刚好略超 5MB 的单张），不得先假定是误扫了外部 `.fbm`。
 40. 对 `Assets/Art/<模型>/Model` 内 FBX/OBJ 的任何 `SaveAndReimport`，必须保留导入后已写入的 Mesh 顶点色（及其他同等“改子资产、不改 FBX 二进制”的编辑）。TOol「顶点色设为全白」只改 Mesh 子资产；无保护的重导会从 FBX 源色重建。无外部 `.fbm` 时不得无意义地 `ExtractTextures`+重导。
+41. 门禁是业务验收层（只检查、可阻断），输出是可勾选交付槽。二者均为可扩展类型（对齐插件 2 Operation），启用列表写在 `RetinarBusinessProfile`。磁盘夹名是实现类 / `RetinarPaths` 的 const（可改字面量），语义 Id（`RetinarGateIds` / `RetinarDeliverableIds`）发布后不得改含义。总面板拖入全部业务 SO 并选择当前业务——**v1.4.2 只留接口，导出不得读取该 SO**。SafeZone 缩放与外来 Prefab 套空父属于平铺内核，不得做成门禁勾选。外来 Prefab 套的是同一份资产里的空父 Transform，禁止再套一份 Unity 嵌套预制体。
 
 ## 二、发布前强制验收
 

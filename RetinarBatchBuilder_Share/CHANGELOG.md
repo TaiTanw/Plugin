@@ -2,6 +2,51 @@
 
 记录规则：最新版本写在最上方；每次修改必须填写“原因、改动、影响、验证、回退”。
 
+## 2026-08-21 — v1.4.4：动画循环只沿用源 Clip 设置
+
+- 原因：平铺按 Clip 文件名是否含 `once` 强制写 `m_LoopTime`。源「点扩散镜片的工作原理」Loop Time 为 0（播完停在结尾），名字不含 once，被改成循环并改名为 `_loop`。
+- 改动：`NormalizePreparedPrefabAnimations` 不再改写 Loop Time。交付 `_loop` / `_once` 后缀只读取源 Clip 的 `isLooping`。删除按名字猜测的 `ShouldLoopAnimation` / `SetClipLoopFlag`。
+- 影响：当前推荐线 **v1.4.4**。新平铺的 Clip 循环与源工程一致。已被改成循环的 Art `.anim` 不会自愈，须删 `Assets/Art/<名>/` 后从源再平铺。
+- 验证：从源再平铺「点扩散镜片工作原理」后，Art Clip 的 `m_LoopTime` 为 0，文件名后缀 `_once`，播放停在结尾。
+- 回退：恢复按名字含 `once` 才 once、否则写 Loop Time=1。
+- 关联问题：平铺后动画变循环。
+
+## 2026-08-21 — v1.4.3：外来 Prefab 套空父外壳，不再缩放/Bake 子节点
+
+- 原因：Prefab 入口把源根 Rebase 成 Identity 后把世界姿态 Bake 进每个直接子节点，再按 SafeZone 缩放平移。动画仍写源 local，播放位置/朝向错；World Space Canvas 被当 Mesh 挪。
+- 改动：
+  1. Prefab 入口（`CreatePackagedAdjustedPrefab`）改为套一层空外壳：外壳 Identity，只挂可选 BoxCollider；内容节点保留源名字与源 TRS。不缩放、不居中、不 Bake 子节点。已是「空根 + 单内容子」则不再套。FBX 自动预制体入口暂不改。
+  2. 空间门禁：外壳 Identity 与可选碰撞体对齐仍阻断；SafeZone 中心/尺寸仅对 FBX 自动预制体（子节点 `<名>_Model`）阻断，避免未缩放的外来 Prefab 被 0.8m 挡掉。
+- 影响：点扩散镜片一类带动画/UI 的外来 Prefab 播放应与源工程一致。已被旧逻辑 Bake 过的 Art 副本不会自愈，必须删 `Assets/Art/<名>/` 后从源重新平铺。运行时请用 GetComponentInChildren 取 Animator（根上没有）。
+- 验证：删 Art 后从源平铺「点扩散镜片工作原理」：外壳 Identity、内容节点仍是源名和源 local；播放朝向与源一致；规范化导出不因尺寸>0.8m 失败。Plane FBX 入口仍缩进 SafeZone。再平铺不叠加第三层。
+- 回退：恢复 Prefab 入口调用 `NormalizePreparedPrefabBounds`；空间门禁恢复对所有资产检查 SafeZone 尺寸。
+- 关联问题：动画 SafeZone 错位；外来 Prefab 不缩放；套空父而非嵌套 Prefab。
+
+## 2026-08-21 — v1.4.2：业务门禁 / 输出 SO 接口预留（未接线）
+
+- 原因：门禁应是可扩展的业务验收层，输出应是可勾选槽位；二者与业务档案都要进 SO，总面板以后拖入并选当前业务。本期不落地总面板，但要先把扩展点留下，避免继续把 SafeZone 校验和 00–06 写死在一起。
+- 改动：
+  1. 新增 `30_Business`：`IRetinarAcceptanceGate`、`IRetinarDeliverableOutput`、语义 Id 常量、`RetinarBusinessProfile` SO。对齐插件 2（实现类扩展 + SO 只存 Id）。
+  2. `RetinarPaths` 补齐 `00/01/02/03/06/_diagnostics` 夹名 const（字面量可改，语义 Id 冻结）。
+  3. Legacy 空间校验与平铺面板注明后续迁门禁；**导出仍走硬编码，创建该 SO 不改变行为。**
+- 影响：编译多一组未使用的接口。现行 SafeZone / 全套 Deliverables / 直通均不变。
+- 验证：Roslyn/Unity 编译零错误。创建 `RetinarBusinessProfile` 后规范化导出与直通产物与 v1.4.1 相同。
+- 回退：删除 `30_Business`，去掉 `RetinarPaths` 新增夹名 const。
+- 关联问题：外来 Prefab 不缩放；门禁与输出按业务勾选；套空父而非嵌套 Prefab。
+
+## 2026-08-21 — v1.4.1：动画换材质曲线原地重绑 + 直通报告未收录依赖
+
+- 原因：点扩散镜片平铺后源工程能播、直通能出包、导入其它工程播放变紫。根因是动画 `m_PPtrCurves` 仍指向源导入区材质；上次重绑误用错误绑定类型另写 classID 2 曲线，运行时仍走 MeshRenderer(23)。自愈只扫 Renderer，GetDependencies 看到的源包/兄弟 Art 引用补不到。直通把本包外依赖静默丢掉。
+- 改动：
+  1. 动画重绑改为原地改 classID 23 关键帧，删除同 path/attribute 的重复曲线，再用 `MeshRenderer` 写回 ClipBindingConstant。
+  2. `RemapCopiedAssetReferences` 不再跳过 `.anim`。
+  3. 平铺自愈增加 `GetDependencies` 全量补拷（动画 PPtr、兄弟 Art、源导入区）；目标已存在则只 remap。无外部 `.fbm` 时仍对 FBX **AddRemap 本包外贴图**（兄弟 Art 同名贴图），不只校正 materialSearch。
+  4. 直通 UnityPackage 仍只收本 Art 夹，但弹出/写入 `Deliverables/_diagnostics/direct_package_dropped_deps.txt`，不阻断。输出文件夹可配与撤直通下一步再做。
+- 影响：再平铺后 `.anim` 的 23 号曲线应指向本包 Material。规范化导出应不再因源包材质曲线失败。直通仍可能打出不完整 UnityPackage，但会明确报告。
+- 验证：对「点扩散镜片工作原理」再平铺，`.anim` 中 `7c6f8bff` / `0de0a1bc` 应消失，且不再出现 classID 2 重复曲线；`GetDependencies(Prefab)` 不得再出现 `Art/Cornea/...`；规范化导出无源包 EXTERNAL_DEP；直通完成弹窗列出未收录路径。
+- 回退：恢复跳过 `.anim` 的 remap；自愈去掉 GetDependencies 补拷；直通去掉 dropped 报告。
+- 关联问题：动画 PPtr 紫材质；EXTERNAL_DEP 源包/Cornea；直通静默丢依赖。
+
 ## 2026-08-20 — v1.4.0 正式版：插件 1 平铺分类单元 + 自愈改到平铺结束
 
 - 原因：对照「平铺开工评估」落地插件 1 首轮大改——旧平铺按写死夹名静默跳过 UI/音频/Shader 等依赖；Extract/自愈与规则 13 绑死顶层 `Texture/`；自愈主调用放在导出校验会让「平铺已完成」的 Art 仍缺补拷，且与校验职责混在一起。
@@ -13,8 +58,10 @@
   5. **插件 2 P0**：压图 Skip 文案、两遍流程说明改为「Art 下按后缀递归」，不写死 `Texture` 夹名。
   6. 对照开工评估补漏：Sprite 只按 `textureType == Sprite` 进 `image/UI`（避免 Default 贴图 `spriteMode` 残留被误送 UI）；平铺完成弹窗列出 Unknown，不阻断。
   7. 平铺入口扫描**源预制体**自身的 Missing（丢脚本 / Object 槽 instanceID 残留）：`LogError`，不修复、不阻断。空槽 None 不报。
-- 影响：当前推荐线 **v1.4.0**（插件 1 正式功能迭代首版）。新平铺产物结构为 `Art/<名>/image/Texture` 等单元目录；旧 Art 顶层 `Texture/` 仍算本包内（remap 可只读回退）。字体暂进 Unknown。Packages/ Shader 不拷。后续继续按模块迭代导出/校验。
-- 验证：外部 Prefab 平铺后默认贴图在 `image/Texture`（仅 Sprite 进 `image/UI`）；平铺结束 Console 有自愈日志，完成弹窗在有 Unknown 时列出路径且不阻断；源 Prefab 若有 Missing 脚本/对象槽，平铺开始即 Error（仍继续平铺）；导出校验无「开始自愈」；含 `.wav`/自定义 `.shader` 会进 `Audio/`、`Shader/`。插件 2 对 `Assets/Art` 批量仍能压到 `image/Texture` 下文件。
+  8. 平铺按 SerializedObject 的 `m_PPtrCurves` 重绑动画材质曲线（不依赖空的 ClipBindingConstant / AnimationUtility.GetBindings）。源 Missing 时用当前 Renderer 槽兜底并写回 runtime 绑定。
+  9. 平铺面板增加后处理开关「添加根 BoxCollider」（默认开）。关掉则不加碰撞体，规范化导出也不再要求有碰撞体。输出文件清单下一步再做成可配。
+- 影响：曾为推荐线 **v1.4.0**；后续由 **v1.4.1–v1.4.4** 补齐引用拆解、FBX/预设体分流、动画循环等。新平铺产物结构为 `Art/<名>/image/Texture` 等单元目录；旧 Art 顶层 `Texture/` 仍算本包内（remap 可只读回退）。字体暂进 Unknown。Packages/ Shader 不拷。后续继续按模块迭代导出/校验。
+- 验证：含材质换槽动画的 Prefab 再平铺后，`.anim` 的 `m_PPtrCurves` GUID 应变成 Art/Material 下副本（不再是 7c6f8bff / 0de0a1bc 这种工程内找不到的 GUID），导入其它工程播放不应变紫；平铺面板关掉「添加根 BoxCollider」后 Art Prefab 根上无新碰撞体，规范化导出不因缺碰撞体失败。
 - 回退：恢复 `GetPreparedPrefabDependencyFolder` 与顶层 `Texture/` 路径；把 `TryHeal` 调回 `ValidateExternalDependencies`；去掉 `10_Flatten/Category` 与平铺面板。
 - 关联问题：平铺开工评估；平铺分类单元；自愈主位置；规则 13/34–36 路径。
 

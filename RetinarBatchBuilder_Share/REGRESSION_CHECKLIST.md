@@ -2,7 +2,7 @@
 
 版本：1.1  
 生效日期：2026-07-24  
-最近同步：2026-08-20（v1.4.0 插件1正式：平铺分类单元 + 自愈改到平铺结束）
+最近同步：2026-08-21（v1.4.4：动画循环沿用源 Clip Loop Time）
 
 本文是每次修改工具、更换 Unity 版本、发布分享包或正式批量打包前必须执行的回归基线。不得因为某个模型打包成功就跳过其他类型。
 
@@ -31,8 +31,9 @@
 - [ ] 单元目录 `Material` 的全部 Texture Property 必须引用本包贴图（`image/Texture` 或 `image/UI`；旧顶层 `Texture/` 仅兼容已有 Art）。
 - [ ] 首次和重复打包都必须扫描全部既有材质，不得依赖“本轮新复制列表”。
 - [ ] 根 Transform 必须为 Position Zero / Rotation Identity / Scale One。
-- [ ] Renderer Bounds 必须居中 SafeZone，尺寸不得过小或越界。
-- [ ] 根 BoxCollider 必须存在且中心与 Renderer Bounds 对齐。
+- [ ] **FBX 自动预制体**：Renderer Bounds 必须居中 SafeZone，尺寸不得过小或越界。
+- [ ] **外来 Prefab**：不得因未缩进 0.8m 而被空间门禁排除；内容节点 local / 动画应与源一致。
+- [ ] 根 BoxCollider：仅当平铺面板「添加根 BoxCollider」开启时必须存在且中心与 Renderer Bounds 对齐；关闭时不得因缺碰撞体阻断导出。
 - [ ] 未知外部依赖必须停止，不得强行生成缺依赖包。
 - [ ] 阻断必须是单资产粒度：一批中混入一个不合规资产时，其余资产仍要正常出包，不合规的那个不得产出 AB/UnityPackage。
 - [ ] 被排除的资产必须出现在 `Deliverables/_diagnostics/validation_failures.txt`，且完成弹窗显示实际出包数量。
@@ -67,7 +68,11 @@
 - [ ] **顶点色**：对 `Art/Model` FBX 手动「顶点色设为全白」后，不删 Art、选 Prefab 再**导出**；Model 子 Mesh 顶点色须仍为白。Console 可出现「SaveAndReimport 后已恢复 Mesh 顶点色」，或因无外部 `.fbm` 而跳过 Extract。
 - [ ] **菜单拆分**：`Tools/Retinar` 见「批量汇总」（平铺 / 平铺分类面板 / 从 Art 导出规范化 全部|选中）、「成品直达 > 选中预制体直通打包」、「打开交付文件夹」；无旧「从 Art 导出交付物」与 Batch Build。选导入区 Prefab 点规范化「导出选中」应警告跳过；「导出全部」不依赖选中。
 - [ ] **自愈位置**：平铺结束 Console 可出现「平铺结束自愈」；导出校验不得再打「开始自愈外部依赖」，仅在仍有外部 `.fbm` 时强制 Extract。
-- [ ] **成品直达**：选中 Art 成品 Prefab → Deliverables 仅 `02_unity` + `03_assetbundles`；Art/Prefab 内容未变；AB manifest 的 Assets 只有该 Prefab。
+- [ ] **成品直达**：选中 Art 成品 Prefab → Deliverables 仅 `02_unity` + `03_assetbundles`；Art/Prefab 内容未变；AB manifest 的 Assets 只有该 Prefab。若 Prefab 仍引用本包外资源，完成弹窗与 `Deliverables/_diagnostics/direct_package_dropped_deps.txt` 必须列出路径，且**不因这些路径失败**。
+- [ ] **动画换材质曲线**：含 `m_PPtrCurves` 换槽的 Prefab 平铺后，`.anim` 的 classID 23 曲线 GUID 必须落在本包 `Material/`；不得残留源导入区 GUID，不得出现同 path 的 classID 2 重复曲线。导入其它工程播放不得因 Missing 材质变紫。
+- [ ] **业务 SO 未接线**：即使创建了 `RetinarBusinessProfile` 资产，规范化导出仍跑硬编码门禁并写全套 00–06，直通仍只写 02+03。
+- [ ] **外来 Prefab 套壳**：含动画/UI 的源 Prefab（如点扩散镜片）须**删除** `Assets/Art/<名>/` 后从源再平铺。外壳 Identity、无 Animator；内容节点源名与源 local；播放朝向与源工程一致。再平铺不得套第三层。已被旧逻辑 Bake 过的 Art 副本重跑不会自愈。
+- [ ] **动画循环**：点扩散镜片一类源 Clip `m_LoopTime=0` 的，平铺后 Art Clip 仍为 0，文件名后缀 `_once`，播放停在结尾；不得因名字不含 `once` 被改成循环。
 
 
 

@@ -4,9 +4,9 @@ Unity Editor 插件集合，用于模型/贴图的**导入期处理**与**交付
 适用环境：Unity 2020.3（Built-in RP）、Windows Editor。
 
 远程仓库：`http://swm-server.local:3000/Hanson/asset-bundle.git`  
-当前版本：**v1.4.0**（`other` / `main` / 标签 `v1.4.0`）  
-**迭代重点：** **插件 1（Retinar）正式功能迭代**——平铺分类单元（`image/Texture` 等）、自愈前移到平铺结束、分类面板；插件 2（TOol）配合路径文案，维持稳定。  
-历史：`v1.3.8` 成品直通/可读分层；`v1.3.7` 面板分层；`v1.3.5` 全流程基线；`v1.3.2-test` 测试版
+当前版本：**v1.4.4**（`other` / `main` / 标签 `v1.4.4`）  
+**本批重点：** 修复引用拆解不完全（动画材质 PPtr / GetDependencies 补拷）；**区分 FBX 与外来预设体**（预设体套空壳、不 SafeZone 缩放；FBX 仍缩进 SafeZone）；动画循环沿用源 Clip。  
+历史：`v1.4.0` 平铺分类；`v1.3.8` 成品直通；`v1.3.5` 全流程基线
 
 ---
 
@@ -15,7 +15,7 @@ Unity Editor 插件集合，用于模型/贴图的**导入期处理**与**交付
 | 目录 | 定位 | 菜单入口 |
 |------|------|----------|
 | [`TOol/`](./TOol/) | 批量 FBX 入库；导入期设置 + 源文件/模型后处理 | `Tools > 批量FBX导入`；`Tools > 资源处理总面板` |
-| [`RetinarBatchBuilder_Share/`](./RetinarBatchBuilder_Share/) | **插件 1（v1.4.0 正式迭代）**：分类平铺、规范化导出、成品直通 | `Tools > Retinar > 批量汇总`（平铺 / 分类面板 / 导出） / `成品直达` / `打开交付文件夹` |
+| [`RetinarBatchBuilder_Share/`](./RetinarBatchBuilder_Share/) | **插件 1（v1.4.4）**：分类平铺、引用收敛、FBX/预设体分流、成品直通 | `Tools > Retinar > 批量汇总` / `成品直达` / `打开交付文件夹` |
 
 **目录边界：** 自动处理流默认不碰 `Assets/Art/**`（交付产物区由打包工具管理）。两边不得同时改同一 Importer 属性。详见 [`RetinarBatchBuilder_Share/PACKAGING_RULES.md`](./RetinarBatchBuilder_Share/PACKAGING_RULES.md) 规则 33。  
 插件 1 Editor 阅读地图：[`RetinarBatchBuilder_Share/Assets/Retinar/Editor/README_EDITOR.md`](./RetinarBatchBuilder_Share/Assets/Retinar/Editor/README_EDITOR.md)。  
@@ -38,13 +38,16 @@ Unity Editor 插件集合，用于模型/贴图的**导入期处理**与**交付
 - 简要：[TOol/README.md](./TOol/README.md)
 - 结构与扩展：[TOol/ARCHITECTURE.md](./TOol/ARCHITECTURE.md)
 
-### Retinar（插件 1，v1.4.0 正式迭代）
+### Retinar（插件 1，v1.4.4）
 
 1. 确认工程内存在 Retinar Editor 脚本并可编译。
-2. （可选）打开 **`批量汇总 > 平铺分类面板`**：勾选大类、改后缀。
-3. **批量路径**：选中 Prefab/FBX → `批量汇总 > 平铺到 Art` → Art 下按单元目录落盘（默认贴图在 `image/Texture`）→（按需插件 2 处理）→ `从 Art 规范化导出`。
-4. **成品直通（不改 Art）**：已是成品 Prefab → `成品直达 > 选中预制体直通打包` → 仅 `02_unity` + `03_assetbundles`。
-5. 用 **`打开交付文件夹`** 查看输出。
+2. （可选）打开 **`批量汇总 > 平铺分类面板`**：勾选大类、改后缀；可选根 BoxCollider。
+3. **批量平铺**：选中 Prefab/FBX → `平铺到 Art`  
+   - **外来 Prefab**：套空外壳、保留源 TRS/动画，不 SafeZone 缩放。  
+   - **FBX 自动预制体**：仍缩进 SafeZone。  
+   - 动画材质曲线 / 依赖会收敛到本包（修复引用拆解不完全）。
+4. （按需）插件 2 处理 Art 贴图等 → `从 Art 规范化导出`；或 **成品直通**（仅 02+03，外依赖会报告）。
+5. 用 **`打开交付文件夹`** 查看输出。已被旧逻辑改过的 Art 副本须**删后重平铺**才会自愈。
 
 说明文档：
 
@@ -71,7 +74,7 @@ Unity Editor 插件集合，用于模型/贴图的**导入期处理**与**交付
 
 ## 协作说明
 
-- **迭代重心（v1.4.0+）：** 正式推进 **插件 1（Retinar）**——平铺分类、自愈时机、后续导出/校验模块；插件 2 以稳定维护与路径兼容小改为主。
+- **迭代重心（v1.4.x）：** 插件 1——引用收敛、FBX/预设体分流、平铺/导出模块化；插件 2 以稳定维护为主。
 - 开发在独立分支进行，通过合并请求（PR）合入；任务用平台 **工单（Issue）** 跟踪。
 - 敏感信息（账号、Token、密码）只放本地 `.env` 或环境变量，**禁止提交**。仓库已忽略 `.env`。
 - 本地可同时保留 GitHub `origin` 与团队远程 `team`（指向本仓库）。

@@ -96,8 +96,7 @@ public sealed class ImageFlattenProcessor : IFlattenCategoryProcessor
         }
 
         // Cube 仍走 Texture 职责，不进 UI。
-        if (importer.textureType == UnityEditor.TextureImporterType.Cubemap ||
-            importer.textureShape == UnityEditor.TextureImporterShape.TextureCube)
+        if (importer.textureShape == UnityEditor.TextureImporterShape.TextureCube)
         {
             return ProcessorId + "/" + FolderTexture;
         }

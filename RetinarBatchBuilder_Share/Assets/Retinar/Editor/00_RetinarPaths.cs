@@ -23,8 +23,13 @@ public static class RetinarPaths
     /// <summary>与历史交付一致的 AssetBundle Variant（文件名形如 name.assetbundle）。</summary>
     public const string AssetBundleVariant = "assetbundle";
 
+    /// <summary>磁盘文件夹名（可改字面量）。语义 Id 见 <see cref="RetinarDeliverableIds"/>，不得把语义改成别的产物。</summary>
+    public const string DeliverableRuntimeFolder = "00_runtime_requirements";
+    public const string DeliverableSourceFolder = "01_source";
     public const string DeliverableUnityFolder = "02_unity";
     public const string DeliverableAssetBundlesFolder = "03_assetbundles";
+    public const string DeliverableDocsFolder = "06_docs";
+    public const string DeliverableDiagnosticsFolder = "_diagnostics";
     public const string PlatformAndroid = "Android";
     public const string PlatformIOS = "iOS";
 }

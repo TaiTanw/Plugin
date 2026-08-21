@@ -30,6 +30,7 @@ public static partial class RetinarBatchModelBuilder
     private const string AssetInfoTemplatePath = "Assets/Retinar/Templates/asset_info_template.xlsx";
     private const string RequiredRuntimeVersion = "RetinarRuntime_v1.0.0";
     private const float SafeZonePadding = 0.8f;
+    private const string FbxNormalizedModelChildSuffix = "_Model";
     private const float EmissionIntensity = 0.3f;
     private const float MetallicValue = 0.4f;
     private const float SmoothnessValue = 0.4f;
@@ -583,7 +584,7 @@ public static partial class RetinarBatchModelBuilder
 
         GameObject root = new GameObject(assetName + "_prefab");
         GameObject model = Object.Instantiate(source);
-        model.name = assetName + "_Model";
+        model.name = assetName + FbxNormalizedModelChildSuffix;
         model.transform.SetParent(root.transform, false);
         model.transform.localPosition = Vector3.zero;
         model.transform.localRotation = Quaternion.identity;
@@ -649,6 +650,8 @@ public static partial class RetinarBatchModelBuilder
         }
 
         FlattenCopyRunner.LogUnknownIfAny(assetFolder, assetName);
+        FlattenAnimationClipRemapper.CopyAndRemapPrefabClips(prefabPath, assetFolder, assetName);
+        RemapAllArtMaterialsToLocalTextures(assetFolder);
         return generated;
     }
 
@@ -712,8 +715,15 @@ public static partial class RetinarBatchModelBuilder
 
         AssetDatabase.SaveAssets();
         AssetDatabase.Refresh();
+        FlattenAnimationClipRemapper.CopyAndRemapPrefabClips(prefabPath, assetFolder, assetName);
+        if (RemapAllArtMaterialsToLocalTextures(assetFolder))
+        {
+            Debug.Log("[Retinar] " + assetName + "：动画重绑后再次收敛材质贴图到本包");
+        }
 
-        NormalizePreparedPrefabBounds(prefabPath);
+        AssetDatabase.SaveAssets();
+
+        WrapIncomingPrefabInEmptyShell(prefabPath, assetName);
         AddOrUpdateBoxColliderInPrefab(prefabPath);
         NormalizePreparedPrefabAnimations(prefabPath, animationFolder, assetName);
 
@@ -1045,8 +1055,7 @@ public static partial class RetinarBatchModelBuilder
 
         foreach (string copiedPath in copiedDependencies.Values.Distinct(System.StringComparer.OrdinalIgnoreCase))
         {
-            string extension = Path.GetExtension(copiedPath).ToLowerInvariant();
-            if (IsModelAsset(copiedPath) || IsTextureAsset(copiedPath) || IsTextAsset(copiedPath) || extension == ".anim")
+            if (IsModelAsset(copiedPath) || IsTextureAsset(copiedPath) || IsTextAsset(copiedPath))
             {
                 continue;
             }
@@ -1060,8 +1069,40 @@ public static partial class RetinarBatchModelBuilder
             }
         }
 
+        RemapAnimationClipsInAssetFolder(assetFolder, objectMap);
+
         AssetDatabase.SaveAssets();
         AssetDatabase.Refresh();
+    }
+
+    private static void RemapAnimationClipsInAssetFolder(
+        string assetFolder,
+        Dictionary<UnityEngine.Object, UnityEngine.Object> objectMap)
+    {
+        string animationFolder = FlattenLayout.AnimationFolder(assetFolder);
+        if (!AssetDatabase.IsValidFolder(animationFolder) || objectMap == null || objectMap.Count == 0)
+        {
+            return;
+        }
+
+        string[] guids = AssetDatabase.FindAssets("t:AnimationClip", new[] { animationFolder });
+        for (int i = 0; i < guids.Length; i++)
+        {
+            string path = AssetDatabase.GUIDToAssetPath(guids[i]);
+            if (string.IsNullOrEmpty(path) || Path.GetExtension(path).ToLowerInvariant() != ".anim")
+            {
+                continue;
+            }
+
+            Object[] assets = AssetDatabase.LoadAllAssetsAtPath(path);
+            for (int a = 0; a < assets.Length; a++)
+            {
+                if (assets[a] is AnimationClip)
+                {
+                    RemapSerializedObjectReferences(assets[a], objectMap);
+                }
+            }
+        }
     }
 
     private static void CopyPrefabRendererMaterials(string prefabPath, string assetFolder, string assetName)
@@ -1521,6 +1562,90 @@ public static partial class RetinarBatchModelBuilder
         }
     }
 
+    /// <summary>
+    /// 外来 Prefab：套一层空外壳（Identity），内容节点保持源 TRS / 名字 / Animator。
+    /// 不缩放、不居中、不 Bake 子节点。已是外壳则不再套。禁止嵌套预制体资产。
+    /// </summary>
+    private static void WrapIncomingPrefabInEmptyShell(string prefabPath, string assetName)
+    {
+        GameObject source = AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
+        if (source == null)
+        {
+            return;
+        }
+
+        if (IsIncomingPrefabDeliveryShell(source))
+        {
+            Debug.Log("[Retinar] " + assetName + "：已是交付空外壳，跳过再套层");
+            return;
+        }
+
+        GameObject content = Object.Instantiate(source);
+        GameObject shell = null;
+        try
+        {
+            content.name = source.name;
+            if (PrefabUtility.GetPrefabInstanceStatus(content) != PrefabInstanceStatus.NotAPrefab)
+            {
+                PrefabUtility.UnpackPrefabInstance(content, PrefabUnpackMode.Completely, InteractionMode.AutomatedAction);
+            }
+
+            shell = new GameObject(assetName);
+            Vector3 localPos = content.transform.localPosition;
+            Quaternion localRot = content.transform.localRotation;
+            Vector3 localScale = content.transform.localScale;
+            content.transform.SetParent(shell.transform, false);
+            content.transform.localPosition = localPos;
+            content.transform.localRotation = localRot;
+            content.transform.localScale = localScale;
+            shell.transform.position = Vector3.zero;
+            shell.transform.rotation = Quaternion.identity;
+            shell.transform.localScale = Vector3.one;
+
+            PrefabUtility.SaveAsPrefabAsset(shell, prefabPath);
+            Debug.Log("[Retinar] " + assetName + "：外来 Prefab 已套空父外壳，不缩放、不 Bake 子节点");
+        }
+        finally
+        {
+            if (shell != null)
+            {
+                Object.DestroyImmediate(shell);
+            }
+            else if (content != null)
+            {
+                Object.DestroyImmediate(content);
+            }
+        }
+    }
+
+    private static bool IsIncomingPrefabDeliveryShell(GameObject root)
+    {
+        if (root == null || root.transform.childCount != 1)
+        {
+            return false;
+        }
+
+        return root.GetComponent<Renderer>() == null &&
+               root.GetComponent<Animator>() == null &&
+               root.GetComponent<Animation>() == null &&
+               root.GetComponent<MeshFilter>() == null &&
+               root.GetComponent<Canvas>() == null;
+    }
+
+    private static bool LooksLikeFbxNormalizedPrefab(GameObject root, string assetName)
+    {
+        if (root == null || root.transform.childCount != 1 || string.IsNullOrEmpty(assetName))
+        {
+            return false;
+        }
+
+        return root.transform.GetChild(0).name == assetName + FbxNormalizedModelChildSuffix;
+    }
+
+    /// <summary>
+    /// FBX 自动预制体的 SafeZone Bake。Prefab 入口禁止调用：会改子节点 local，打坏动画。
+    /// FBX 入口仍走 CreateNormalizedPrefab 内联缩放，本方法暂保留。
+    /// </summary>
     private static void NormalizePreparedPrefabBounds(string prefabPath)
     {
         GameObject instance = PrefabUtility.LoadPrefabContents(prefabPath);
@@ -1612,6 +1737,9 @@ public static partial class RetinarBatchModelBuilder
         return movableRoots.ToArray();
     }
 
+    /// <summary>
+    /// 只按交付命名改 Clip / Controller 文件名。循环与否沿用源 Clip 的 Loop Time，不得按名字猜测或改写。
+    /// </summary>
     private static void NormalizePreparedPrefabAnimations(string prefabPath, string animationFolder, string assetName)
     {
         GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
@@ -1629,9 +1757,7 @@ public static partial class RetinarBatchModelBuilder
         AnimationClip[] clips = animator.runtimeAnimatorController.animationClips;
         foreach (AnimationClip clip in clips)
         {
-            bool loop = ShouldLoopAnimation(clip.name);
-            SetClipLoopFlag(clip, loop);
-
+            bool loop = clip.isLooping;
             string clipPath = AssetDatabase.GetAssetPath(clip);
             if (!string.IsNullOrEmpty(clipPath) && clipPath.StartsWith(animationFolder + "/", System.StringComparison.OrdinalIgnoreCase))
             {
@@ -1641,17 +1767,12 @@ public static partial class RetinarBatchModelBuilder
         }
 
         AnimationClip primaryClip = clips.FirstOrDefault();
-        string suffix = primaryClip == null || ShouldLoopAnimation(primaryClip.name) ? "loop" : "once";
+        string suffix = primaryClip != null && primaryClip.isLooping ? "loop" : "once";
         string controllerPath = AssetDatabase.GetAssetPath(animator.runtimeAnimatorController);
         if (!string.IsNullOrEmpty(controllerPath) && controllerPath.StartsWith(animationFolder + "/", System.StringComparison.OrdinalIgnoreCase))
         {
             AssetDatabase.RenameAsset(controllerPath, "Anim_" + assetName + "_" + CleanAnimationName(primaryClip != null ? primaryClip.name : "default") + "_" + suffix);
         }
-    }
-
-    private static bool ShouldLoopAnimation(string animationName)
-    {
-        return animationName.IndexOf("once", System.StringComparison.OrdinalIgnoreCase) < 0;
     }
 
     private static string CleanAnimationName(string animationName)
@@ -1660,25 +1781,6 @@ public static partial class RetinarBatchModelBuilder
         name = name.Replace("_loop", "");
         name = name.Replace("_once", "");
         return MakeSafeName(name);
-    }
-
-    private static void SetClipLoopFlag(AnimationClip clip, bool loop)
-    {
-        SerializedObject serializedClip = new SerializedObject(clip);
-        SerializedProperty animationSettings = serializedClip.FindProperty("m_AnimationClipSettings");
-        if (animationSettings == null)
-        {
-            return;
-        }
-
-        SerializedProperty loopTime = animationSettings.FindPropertyRelative("m_LoopTime");
-        if (loopTime != null)
-        {
-            loopTime.boolValue = loop;
-        }
-
-        serializedClip.ApplyModifiedProperties();
-        EditorUtility.SetDirty(clip);
     }
 
     private static bool TryGetRendererBounds(GameObject root, out Bounds bounds)
@@ -2186,6 +2288,8 @@ public static partial class RetinarBatchModelBuilder
     // 自己的 Art 目录），只有自愈也失败时才报错，
     // 并且报错信息里会带上磁盘绝对路径、最后修改时间等线索。
 
+    // 业务验收层预留：后续拆到 IRetinarAcceptanceGate。
+    // Prefab 入口只强制外壳 Identity（及可选碰撞体对齐）；SafeZone 中心/尺寸仅 FBX 自动预制体阻断。
     private static bool ValidatePrefabSpatialPlacement(List<GeneratedAsset> assets, out string errorText)
     {
         var errors = new List<string>();
@@ -2216,30 +2320,42 @@ public static partial class RetinarBatchModelBuilder
                     continue;
                 }
 
-                float centerDistance = Vector3.Distance(bounds.center, SafeZoneCenter);
                 float maxSize = Mathf.Max(bounds.size.x, bounds.size.y, bounds.size.z);
-                float targetMaxSize = Mathf.Min(SafeZoneSize.x, SafeZoneSize.y, SafeZoneSize.z) * SafeZonePadding;
-                if (centerDistance > 0.02f)
-                {
-                    errors.Add(asset.AssetName + ": renderer center is outside SafeZone center by " + centerDistance.ToString("F4") + " m.");
-                }
-
-                if (maxSize < 0.01f || maxSize > targetMaxSize + 0.02f)
+                if (maxSize < 0.01f)
                 {
                     errors.Add(asset.AssetName + ": renderer max size is invalid: " + maxSize.ToString("F4") + " m.");
                 }
 
-                BoxCollider collider = instance.GetComponent<BoxCollider>();
-                if (collider == null)
+                bool enforceSafeZoneFit = LooksLikeFbxNormalizedPrefab(instance, asset.AssetName);
+                if (enforceSafeZoneFit)
                 {
-                    errors.Add(asset.AssetName + ": root BoxCollider is missing.");
-                }
-                else
-                {
-                    Vector3 colliderWorldCenter = root.TransformPoint(collider.center);
-                    if (Vector3.Distance(colliderWorldCenter, bounds.center) > 0.02f)
+                    float centerDistance = Vector3.Distance(bounds.center, SafeZoneCenter);
+                    float targetMaxSize = Mathf.Min(SafeZoneSize.x, SafeZoneSize.y, SafeZoneSize.z) * SafeZonePadding;
+                    if (centerDistance > 0.02f)
                     {
-                        errors.Add(asset.AssetName + ": BoxCollider center does not match renderer center.");
+                        errors.Add(asset.AssetName + ": renderer center is outside SafeZone center by " + centerDistance.ToString("F4") + " m.");
+                    }
+
+                    if (maxSize > targetMaxSize + 0.02f)
+                    {
+                        errors.Add(asset.AssetName + ": renderer max size is invalid: " + maxSize.ToString("F4") + " m.");
+                    }
+                }
+
+                BoxCollider collider = instance.GetComponent<BoxCollider>();
+                if (FlattenPostProcessSettings.AddBoxCollider)
+                {
+                    if (collider == null)
+                    {
+                        errors.Add(asset.AssetName + ": root BoxCollider is missing.");
+                    }
+                    else
+                    {
+                        Vector3 colliderWorldCenter = root.TransformPoint(collider.center);
+                        if (Vector3.Distance(colliderWorldCenter, bounds.center) > 0.02f)
+                        {
+                            errors.Add(asset.AssetName + ": BoxCollider center does not match renderer center.");
+                        }
                     }
                 }
             }
@@ -2388,6 +2504,11 @@ public static partial class RetinarBatchModelBuilder
     // 互不干扰。调用入口仍然是 WriteDocsFiles 里的 WriteAssetInfoWorkbook。
     private static void AddOrUpdateBoxCollider(GameObject root)
     {
+        if (!FlattenPostProcessSettings.AddBoxCollider)
+        {
+            return;
+        }
+
         if (!TryGetRendererBounds(root, out Bounds bounds))
         {
             return;
