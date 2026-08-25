@@ -660,8 +660,18 @@ public static partial class RetinarBatchModelBuilder
         string sourceModelPath = FindMainModelDependency(sourcePath);
         if (string.IsNullOrEmpty(sourceModelPath))
         {
-            Debug.LogWarning("Selected prefab has no FBX/OBJ dependency: " + sourcePath);
-            return GeneratedAsset.Invalid;
+            // GLB 嵌套预制体应能命中 .glb；若 Mesh 全嵌在 Prefab 内也可继续（无独立模型文件）。
+            GameObject probe = AssetDatabase.LoadAssetAtPath<GameObject>(sourcePath);
+            if (probe == null || probe.GetComponentsInChildren<Renderer>(true).Length == 0)
+            {
+                Debug.LogWarning(
+                    "Selected prefab has no FBX/OBJ/GLB model dependency and no renderers: " + sourcePath);
+                return GeneratedAsset.Invalid;
+            }
+
+            Debug.LogWarning(
+                "[Retinar] Prefab 无独立模型文件依赖（无 .fbx/.obj/.glb），将仅按 Renderer/材质依赖平铺: " +
+                sourcePath);
         }
 
         string assetName;
@@ -736,9 +746,13 @@ public static partial class RetinarBatchModelBuilder
         }
 
         string finalModelPath = FindMainModelDependency(prefabPath);
-        if (string.IsNullOrEmpty(finalModelPath))
+        if (string.IsNullOrEmpty(finalModelPath) && !string.IsNullOrEmpty(sourceModelPath))
         {
             finalModelPath = FlattenLayout.ModelFolder(assetFolder) + "/" + Path.GetFileName(sourceModelPath);
+        }
+        if (string.IsNullOrEmpty(finalModelPath))
+        {
+            finalModelPath = prefabPath;
         }
         string bundleName = assetName.ToLowerInvariant();
         AssetImporter prefabImporter = AssetImporter.GetAtPath(prefabPath);
