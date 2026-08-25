@@ -14,7 +14,7 @@ public sealed class ModelFlattenProcessor : IFlattenCategoryProcessor
 
     public string[] DefaultSuffixes
     {
-        get { return new[] { "fbx", "obj" }; }
+        get { return new[] { "fbx", "obj", "glb", "gltf" }; }
     }
 
     public string[] OutputFolderHints
