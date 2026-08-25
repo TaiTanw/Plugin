@@ -10,7 +10,7 @@ using UnityEditor;
 // 规范化 / Extract / SafeZone 等重逻辑仍在 RetinarBatchModelBuilder*.cs（Legacy）。
 // =====================================================================================
 
-/// <summary>Retinar 菜单栏唯一挂载点。</summary>
+/// <summary>入口层：只挂菜单，把点击转到平铺/导出/直通调度，不承载校验或搬文件。</summary>
 public static class RetinarMenu
 {
     // ----- 批量汇总 -----

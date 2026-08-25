@@ -21,6 +21,10 @@ using UnityEngine;
 //   RetinarBatchModelBuilder.AssetResolution.cs  源资产发现 + 打包前校验与自愈
 //   RetinarBatchModelBuilder.AssetInfoWorkbook.cs asset_info.xlsx（手写 OOXML）
 // =====================================================================================
+/// <summary>
+/// 平铺与规范化内核（Legacy）：FBX/预设体两条入口、依赖收敛、空间验收、全套交付写出仍集中于此。
+/// 菜单与调度已外置；门禁/输出 SO 尚未接管本类内的硬编码验收与 00–06 写出。
+/// </summary>
 public static partial class RetinarBatchModelBuilder
 {
     private const string ArtRoot = "Assets/Art";

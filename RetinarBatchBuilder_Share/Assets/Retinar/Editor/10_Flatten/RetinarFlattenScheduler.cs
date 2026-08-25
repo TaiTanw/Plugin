@@ -5,7 +5,7 @@
 // 具体搬文件 / Importer / SafeZone 仍在 RetinarBatchModelBuilder（暂不拆碎）。
 // =====================================================================================
 
-/// <summary>平铺到 Art 的菜单调度入口。</summary>
+/// <summary>平铺调度层：把「选中 → 写入 Art」转给 Legacy，本类不决定分类、套壳或缩放。</summary>
 public static class RetinarFlattenScheduler
 {
     /// <summary>
