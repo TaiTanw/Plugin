@@ -49,7 +49,9 @@ public static partial class RetinarBatchModelBuilder
     private static bool IsModelAsset(string assetPath)
     {
         string extension = Path.GetExtension(assetPath).ToLowerInvariant();
-        return extension == ".fbx" || extension == ".obj";
+        // .glb/.gltf：UnityGLTF ScriptedImporter 主资产，外来 Prefab 常嵌套引用它（无 FBX/OBJ）。
+        return extension == ".fbx" || extension == ".obj" ||
+               extension == ".glb" || extension == ".gltf";
     }
 
     private static bool IsMaterialAsset(string assetPath)

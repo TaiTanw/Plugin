@@ -73,14 +73,9 @@ TOol/
    │  ├─ BatchFbxImportWindow.cs        # 批量 FBX 入库（独立菜单）
    │  ├─ BatchFbxImportSettings.cs
    │  └─ BatchFbxImportService.cs       # 夹名解析、冲突、单 FBX 拷贝+Import
-   ├─ Shared/                           # 跨贴图/模型共用
-   │  ├─ ResourceProcessSwitches.cs
-   │  ├─ ResourceBatchFolderStore.cs      # L1 共用批量路径（已合并贴图/模型）
-   │  ├─ ResourceManualOperationStore.cs  # L2 精准 Op 勾选（Prefs）
-   │  ├─ ResourceBatchFolderListGui.cs
-   │  ├─ ImportPostProcessScheduler.cs
-   │  ├─ ResourceExcludeUtility.cs
-   │  └─ AssetPathUtility.cs
+   ├─ Shared/                           # 跨贴图/模型共用（见 Shared/README_SHARED.md）
+   │  ├─ （根下历史扁平脚本：开关/批量路径/导入后调度…）
+   │  └─ Prefab/                        # ★ ③ 自动预设体：Config / Layout / Service
    ├─ Texture/
    │  ├─ Config/     TextureProcessSettings.cs
    │  ├─ Codec/      编解码 + 缩放
