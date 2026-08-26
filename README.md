@@ -14,10 +14,14 @@ Unity Editor 插件集合，用于模型/贴图的**导入期处理**与**交付
 
 | 目录 | 定位 | 菜单入口 |
 |------|------|----------|
+| [`Pipeline/`](./Pipeline/) | **流程编排**：步骤 SO、Runner、自动化管线总面板 | `Tools > 自动化管线总面板` |
 | [`TOol/`](./TOol/) | 批量 FBX 入库；导入期设置 + 源文件/模型后处理 | `Tools > 批量FBX导入`；`Tools > 资源处理总面板` |
 | [`RetinarBatchBuilder_Share/`](./RetinarBatchBuilder_Share/) | **插件 1（v1.4.4）**：分类平铺、引用收敛、FBX/预设体分流、成品直通 | `Tools > Retinar > 批量汇总` / `成品直达` / `打开交付文件夹` |
 
-**目录边界：** 自动处理流默认不碰 `Assets/Art/**`（交付产物区由打包工具管理）。两边不得同时改同一 Importer 属性。详见 [`RetinarBatchBuilder_Share/PACKAGING_RULES.md`](./RetinarBatchBuilder_Share/PACKAGING_RULES.md) 规则 33。  
+**目录边界（防混淆）：**  
+- **导入期自动**（设置自动 / 后处理自动）：默认**不碰** `Assets/Art/**`（`excludedPathPrefixes`），避免与插件 1 的交付 Importer 互踩（规则 33）。  
+- **⑤ 总批量 / L1 手动**：路径默认就是 `Assets/Art`，**故意**对交付区压图、刷顶点色等；与上面「自动跳过」不是同一条通道。  
+两边不得同时改同一 Importer 属性。详见 [`PACKAGING_RULES.md`](./RetinarBatchBuilder_Share/PACKAGING_RULES.md) 规则 33、[`TOol/ARCHITECTURE.md`](./TOol/ARCHITECTURE.md)。  
 插件 1 Editor 阅读地图：[`RetinarBatchBuilder_Share/Assets/Retinar/Editor/README_EDITOR.md`](./RetinarBatchBuilder_Share/Assets/Retinar/Editor/README_EDITOR.md)。  
 **v1.4.0 Art 结构：** `Assets/Art/<名>/image/Texture`（默认贴图）、`image/UI`（Sprite）等单元目录；未知依赖进 `Unknown/`。
 
@@ -84,4 +88,4 @@ Unity Editor 插件集合，用于模型/贴图的**导入期处理**与**交付
 ## 分支提示
 
 当前常用功能分支为 `other`；`main` 为基线分支。浏览代码时请在网页左上角选择对应分支。  
-命令行自动化一体流程（2022 / GLB）开发说明见 [`docs/CLI_AUTOMATION_DEV.md`](./docs/CLI_AUTOMATION_DEV.md)（分支 `feature/cli-pipeline-2022`）。
+命令行自动化一体流程（2022 / GLB）开发备忘见 [`docs/dev-wip/`](./docs/dev-wip/README.md)（入口 [`docs/CLI_AUTOMATION_DEV.md`](./docs/CLI_AUTOMATION_DEV.md)；分支 `feature/cli-pipeline-2022`）。

@@ -74,7 +74,7 @@ public class TextureToolWindow : EditorWindow
 
             EditorGUILayout.HelpBox(
                 "精准处理：选范围 → 勾选操作 → 扫描/执行（勾选为本机 EditorPrefs）。\n" +
-                "主面板批量路径/操作集合在总面板与「高级设置」；自动流跳过 Art 与 .fbm。",
+                "主面板批量路径/操作集合在总面板与「高级设置」；导入期自动跳过 Art 与 .fbm（总批量仍打 Art）。",
                 MessageType.Info);
 
             List<string> targets = DrawTargetSection();

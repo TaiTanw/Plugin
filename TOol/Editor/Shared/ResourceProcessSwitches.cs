@@ -28,6 +28,7 @@ public static class ResourceProcessSwitches
     private const string ModelPostProcessKey = "TOol.Switch.Model.PostProcessAuto";
     private const string MasterBatchIncludeTextureKey = "TOol.Switch.MasterBatch.IncludeTexture";
     private const string MasterBatchIncludeModelKey = "TOol.Switch.MasterBatch.IncludeModel";
+    private const string MasterBatchIncludeMaterialKey = "TOol.Switch.MasterBatch.IncludeMaterial";
     private const string MigratedKey = "TOol.Switch.MigratedFromLegacy";
 
     private static bool? masterEnabled;
@@ -37,6 +38,7 @@ public static class ResourceProcessSwitches
     private static bool? modelPostProcessAuto;
     private static bool? masterBatchIncludeTexture;
     private static bool? masterBatchIncludeModel;
+    private static bool? masterBatchIncludeMaterial;
 
     /// <summary>总开关。默认 true。关闭后所有导入设置自动与后处理自动均不执行。</summary>
     public static bool MasterEnabled
@@ -81,6 +83,13 @@ public static class ResourceProcessSwitches
     {
         get { return Get(ref masterBatchIncludeModel, MasterBatchIncludeModelKey, true); }
         set { Set(ref masterBatchIncludeModel, MasterBatchIncludeModelKey, value); }
+    }
+
+    /// <summary>总面板「执行全部」是否跑材质批量（交付 Shader 规范化）。默认 true。</summary>
+    public static bool MasterBatchIncludeMaterial
+    {
+        get { return Get(ref masterBatchIncludeMaterial, MasterBatchIncludeMaterialKey, true); }
+        set { Set(ref masterBatchIncludeMaterial, MasterBatchIncludeMaterialKey, value); }
     }
 
     public static bool IsTextureSettingsEffective
