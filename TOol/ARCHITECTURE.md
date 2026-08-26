@@ -1,8 +1,8 @@
 # TOol（插件 2）结构说明
 
 版本：1.3.9  
-最近同步：2026-08-20（插件 1 平铺单元目录；压图/两遍流程改为 Art 下按后缀递归，不写死 Texture 夹名）  
-适用：Unity 2020.3 Editor；与 `RetinarBatchBuilder_Share`（插件 1）配合使用。
+最近同步：2026-08-26（澄清：导入自动排除 Art ≠ ⑤总批量不碰 Art；介入目录表已改）  
+适用：Unity 2020.3 / 2022.3 Editor；与 `RetinarBatchBuilder_Share`（插件 1）配合使用。
 
 本文说明目录层级、类职责、自动化两层语义，以及和打包工具的边界。便于扩展新 Operation / 新资源类型时对照。
 
@@ -16,8 +16,9 @@
 | **`deliveryAlertPathPrefixes`** | `BatchFbxImportSettings.asset` | **批量 FBX 导入**面板 | 导入根/目标落在前缀上 → **Conflict，禁止执行** | 不参与导入后贴图/模型自动跳过 |
 
 **为何分两块（三份列表）：**  
-- 批量路径要本机可改、不进版本库 → EP。  
-- 「自动流不要碰交付区」与「入库不要写进交付区」语义不同：前者是 *skip process*，后者是 *hard block copy*；故用不同字段名，各挂在自己的 SO。  
+- 批量路径要本机可改、不进版本库 → EP；**L1 默认种子含 `Assets/Art`**，总批量本就是打交付区。  
+- 「**导入期自动**不要改交付区 Importer」与「**入库不要拷进交付区**」语义不同：前者是 *skip process*（`excludedPathPrefixes`），后者是 *hard block copy*（`deliveryAlertPathPrefixes`）；故用不同字段名。  
+- **切勿**把 `excludedPathPrefixes` 理解成「⑤ 也扫不到 Art」——⑤ `RunMasterBatch` **不读**该列表。  
 - 默认值都是 `Assets/Art/`，**改一处不会自动同步**。若团队改交付根目录，请在 L3 贴图/模型高级设置与批量 FBX 配置里对照改三处。
 
 导入期 Console 常见信息（可忽略与否）：
@@ -47,7 +48,7 @@
 | ------- | -------------------------------- | ------------------------------ |
 | 定位      | 交付打包：平铺 Art、导出 AB/UnityPackage/报告 | 导入期设置 + 源文件/模型后处理              |
 | 主菜单     | `Tools > Retinar > 平铺到 Art` / `从 Art 导出交付物`（全部·选中）/ `打开交付文件夹` | `Tools > 资源处理总面板`（唯一入口）        |
-| 介入目录    | **写入** `Assets/Art/`**           | **自动流跳过** `Assets/Art/`**（可手动） |
+| 介入目录    | **写入** `Assets/Art/`             | **导入期自动跳过** Art；**⑤/L1 总批量故意打 Art**（默认路径） |
 | 改贴图像素？  | 否（只归档告警）；重导时保留已压缩 Art            | 是（压缩 / 转 PNG / 亮度→Alpha）       |
 | 改 Mesh？ | 重导时保留已写入顶点色                      | 是（如顶点色全白）                      |
 

@@ -110,8 +110,8 @@ Tools > 自动化管线总面板（计划）
 
 1. ~~1/2 窄口 + PipelineRunner 骨架~~ **已做**  
 2. ~~**D3** 总面板 + **D2** 单文件导入~~ **已做**（`Tools > 自动化管线总面板`）  
-3. 实机验证；⑤/StepResult 按需  
-4. **D1 核对收口**（命名/压缩，见 d1-ab-only）  
-5. CLI 参数对齐  
+3. ~~实机验证~~ **已做**（GLB 样例 `Assets/Art/ggdddd`；安卓洋红见待办 D13）  
+4. ~~**D1** 核对收口~~ **已做**（命名/压缩见 d1-ab-only；契约 1/2 退化）  
+5. **D5 CLI 第一刀**（见 [cli-getting-started.md](./cli-getting-started.md)）  
 
 结果：当前用 `PipelineResult` 字符串 Messages，不加 StepResult。

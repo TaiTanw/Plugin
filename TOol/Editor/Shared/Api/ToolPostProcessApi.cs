@@ -11,13 +11,15 @@ using System.Collections.Generic;
 public static class ToolPostProcessApi
 {
     /// <summary>
-    /// 跑总批量（贴图→模型）。folders 为 null 时用 L1 当前批量路径。
+    /// 跑总批量（贴图→材质→模型）。folders 为 null 时用 L1 当前批量路径。
     /// </summary>
     public static string RunMasterBatch(
         IList<string> folders = null,
         bool? includeTexture = null,
-        bool? includeModel = null)
+        bool? includeModel = null,
+        bool? includeMaterial = null)
     {
-        return ResourcePostProcessService.RunMasterBatch(folders, includeTexture, includeModel);
+        return ResourcePostProcessService.RunMasterBatch(
+            folders, includeTexture, includeModel, includeMaterial);
     }
 }

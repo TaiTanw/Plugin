@@ -5,7 +5,7 @@ using UnityEngine;
 // =====================================================================================
 // 20_Package — 交付目录 I/O（AB 拷贝、UnityPackage 写出）
 //
-// 直通打包与（后续若抽）规范化导出共用路径约定，保证 Deliverables 布局不变。
+// 直通打包与 BuildAbOnly 共用；支持自定义 DeliverableRoot / AssetBundleRoot。
 // =====================================================================================
 
 /// <summary>
@@ -14,25 +14,30 @@ using UnityEngine;
 /// </summary>
 public static class RetinarDeliverableIo
 {
-    public static string GetAssetDeliverableRoot(string assetName)
+    public static string GetAssetDeliverableRoot(string assetName, string deliverableRoot = null)
     {
-        return Path.Combine(
-            Directory.GetCurrentDirectory(),
-            RetinarPaths.DeliverableRoot,
-            assetName);
+        string root = string.IsNullOrWhiteSpace(deliverableRoot)
+            ? RetinarPaths.DeliverableRoot
+            : deliverableRoot.Trim().Replace("\\", "/").TrimEnd('/');
+        return Path.Combine(Directory.GetCurrentDirectory(), root, assetName);
     }
 
-    public static string GetUnityPackageOutputPath(string assetName)
+    public static string GetUnityPackageOutputPath(string assetName, string deliverableRoot = null)
     {
-        string dir = Path.Combine(GetAssetDeliverableRoot(assetName), RetinarPaths.DeliverableUnityFolder);
+        string dir = Path.Combine(
+            GetAssetDeliverableRoot(assetName, deliverableRoot),
+            RetinarPaths.DeliverableUnityFolder);
         RetinarEditorUtil.EnsureDiskDirectory(dir);
         return Path.Combine(dir, assetName + ".unitypackage");
     }
 
-    public static string GetAssetBundleDeliverableDir(string assetName, string platformFolder)
+    public static string GetAssetBundleDeliverableDir(
+        string assetName,
+        string platformFolder,
+        string deliverableRoot = null)
     {
         string dir = Path.Combine(
-            GetAssetDeliverableRoot(assetName),
+            GetAssetDeliverableRoot(assetName, deliverableRoot),
             RetinarPaths.DeliverableAssetBundlesFolder,
             platformFolder);
         RetinarEditorUtil.EnsureDiskDirectory(dir);
@@ -40,15 +45,23 @@ public static class RetinarDeliverableIo
     }
 
     /// <summary>
-    /// 从工程根 <see cref="RetinarPaths.AssetBundleRoot"/>/&lt;平台&gt; 拷贝到 Deliverables。
+    /// 从工程根 AB 构建目录拷贝到 Deliverables。
     /// </summary>
-    public static void CopyBuiltBundleToDeliverables(string assetName, string bundleFileName, string platformFolder)
+    public static void CopyBuiltBundleToDeliverables(
+        string assetName,
+        string bundleFileName,
+        string platformFolder,
+        string assetBundleRoot = null,
+        string deliverableRoot = null)
     {
         string projectRoot = Directory.GetCurrentDirectory();
-        string sourceDir = Path.Combine(projectRoot, RetinarPaths.AssetBundleRoot, platformFolder);
+        string abRoot = string.IsNullOrWhiteSpace(assetBundleRoot)
+            ? RetinarPaths.AssetBundleRoot
+            : assetBundleRoot.Trim().Replace("\\", "/").TrimEnd('/');
+        string sourceDir = Path.Combine(projectRoot, abRoot, platformFolder);
         string bundleSource = Path.Combine(sourceDir, bundleFileName);
         string manifestSource = bundleSource + ".manifest";
-        string targetDir = GetAssetBundleDeliverableDir(assetName, platformFolder);
+        string targetDir = GetAssetBundleDeliverableDir(assetName, platformFolder, deliverableRoot);
 
         CopyFileIfExists(bundleSource, Path.Combine(targetDir, bundleFileName));
         CopyFileIfExists(manifestSource, Path.Combine(targetDir, bundleFileName + ".manifest"));
@@ -78,12 +91,6 @@ public static class RetinarDeliverableIo
         {
             Debug.LogError("[Retinar] ExportUnityPackage：资产列表为空 → " + outputPath);
             return;
-        }
-
-        string dir = Path.GetDirectoryName(outputPath);
-        if (!string.IsNullOrEmpty(dir))
-        {
-            RetinarEditorUtil.EnsureDiskDirectory(dir);
         }
 
         AssetDatabase.ExportPackage(assetPaths, outputPath, ExportPackageOptions.Default);

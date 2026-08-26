@@ -12,6 +12,7 @@ using UnityEngine;
 public class PipelineWindow : EditorWindow
 {
     private PipelineStepSettings settings;
+    private RetinarExportSettings exportSettings;
     private string sourcePath = string.Empty;
     private string materialId = string.Empty;
     private string lastResultText = string.Empty;
@@ -27,6 +28,11 @@ public class PipelineWindow : EditorWindow
     private void OnEnable()
     {
         settings = PipelineStepSettings.GetOrCreateAsset();
+        exportSettings = RetinarExportSettings.GetOrCreateAsset();
+        if (settings != null && exportSettings != null)
+        {
+            settings.exportUnityPackage = exportSettings.exportUnityPackage;
+        }
     }
 
     private void OnGUI()
@@ -80,6 +86,11 @@ public class PipelineWindow : EditorWindow
                 if (GUILayout.Button("选中步骤 SO", GUILayout.Height(26f)))
                 {
                     Selection.activeObject = settings;
+                }
+
+                if (GUILayout.Button("选中导出 SO", GUILayout.Height(26f)))
+                {
+                    Selection.activeObject = RetinarExportSettings.GetOrCreateAsset();
                 }
             }
 
@@ -180,11 +191,42 @@ public class PipelineWindow : EditorWindow
                 EditorGUILayout.HelpBox("⑤ 依赖④：未平铺到 Art 时总批量通常无意义，故锁定关闭。", MessageType.None);
             }
 
-            settings.runAb = EditorGUILayout.ToggleLeft("⑥ 仅双端 AB（默认开）", settings.runAb);
+            settings.runAb = EditorGUILayout.ToggleLeft("⑥ 双端 AB（默认开）", settings.runAb);
+            using (new EditorGUI.DisabledScope(!settings.runAb))
+            {
+                settings.exportUnityPackage = EditorGUILayout.ToggleLeft(
+                    "⑥ 附带 UnityPackage", settings.exportUnityPackage);
+            }
+
             settings.quiet = EditorGUILayout.ToggleLeft("Quiet（无确认框）", settings.quiet);
             if (EditorGUI.EndChangeCheck())
             {
                 EditorUtility.SetDirty(settings);
+                if (exportSettings != null)
+                {
+                    exportSettings.exportUnityPackage = settings.exportUnityPackage;
+                    EditorUtility.SetDirty(exportSettings);
+                }
+            }
+
+            EditorGUILayout.Space(4f);
+            if (GUILayout.Button("导出路径设置…（交付根 / AB 根）", GUILayout.Height(26f)))
+            {
+                if (exportSettings == null)
+                {
+                    exportSettings = RetinarExportSettings.GetOrCreateAsset();
+                }
+
+                Selection.activeObject = exportSettings;
+                EditorGUIUtility.PingObject(exportSettings);
+            }
+
+            if (exportSettings != null)
+            {
+                EditorGUILayout.LabelField(
+                    "交付根: " + exportSettings.deliverableRoot +
+                    "  |  AB根: " + exportSettings.assetBundleRoot,
+                    EditorStyles.miniLabel);
             }
         }
     }

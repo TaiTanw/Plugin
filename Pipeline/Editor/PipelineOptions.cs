@@ -28,6 +28,12 @@ public sealed class PipelineOptions
     /// <summary>⑥ 仅双端 AB（默认开）。</summary>
     public bool RunAb = true;
 
+    /// <summary>⑥ 是否附带 UnityPackage。</summary>
+    public bool ExportUnityPackage;
+
+    /// <summary>⑥ 详细出包选项（输出根等）。</summary>
+    public RetinarAbBuildOptions AbBuildOptions;
+
     /// <summary>禁止 DisplayDialog（编排默认 true）。</summary>
     public bool Quiet = true;
 

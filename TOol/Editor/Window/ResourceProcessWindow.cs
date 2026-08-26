@@ -40,11 +40,11 @@ public class ResourceProcessWindow : EditorWindow
 
             EditorGUILayout.LabelField("自动化开关（本机 EditorPrefs，不进版本库）", EditorStyles.boldLabel);
             EditorGUILayout.HelpBox(
-                "总开关：关掉后设置自动/后处理自动都不跑；手动执行不受影响。\n" +
-                "设置自动：导入前改 Importer（导入区建议按需开启）。\n" +
-                "后处理自动：导入后跑 Operation——不保证交付生效（Art 被排除；" +
-                "内嵌贴图/顶点色须平铺后再手动处理）。默认请保持关闭。\n" +
-                "日常：配路径 → 执行全部。分项开关/精准面板/入库等在「高级操作」。",
+                "总开关：关掉后设置自动/后处理自动都不跑；手动「执行全部」不受影响。\n" +
+                "设置自动：导入前改 Importer（导入区建议按需开启；Art 被 exclude，不会改交付 Importer）。\n" +
+                "后处理自动：导入后跑 Operation——默认跳过 Art，不保证交付生效；" +
+                "内嵌贴图/顶点色须平铺后再用下方批量路径（默认 Art）手动/编排总批量。\n" +
+                "日常：配路径（默认可含 Assets/Art）→ 执行全部。分项开关/精准面板/入库等在「高级操作」。",
                 MessageType.Info);
 
             using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
@@ -124,6 +124,8 @@ public class ResourceProcessWindow : EditorWindow
                 Repaint();
             });
 
+        DrawMaterialBlock();
+
         EditorGUILayout.Space(10f);
         EditorGUILayout.LabelField("入库", EditorStyles.boldLabel);
         using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
@@ -153,6 +155,12 @@ public class ResourceProcessWindow : EditorWindow
                 EditorGUIUtility.PingObject(Selection.activeObject);
             }
 
+            if (GUILayout.Button("确保材质配置资产存在"))
+            {
+                Selection.activeObject = MaterialProcessSettings.GetOrCreateAsset();
+                EditorGUIUtility.PingObject(Selection.activeObject);
+            }
+
             if (GUILayout.Button("确保批量FBX导入配置资产存在"))
             {
                 Selection.activeObject = BatchFbxImportSettings.GetOrCreateAsset();
@@ -161,10 +169,50 @@ public class ResourceProcessWindow : EditorWindow
         }
     }
 
+    private void DrawMaterialBlock()
+    {
+        EditorGUILayout.Space(8f);
+        using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
+        {
+            EditorGUILayout.LabelField("材质", EditorStyles.boldLabel);
+            EditorGUILayout.HelpBox(
+                "无导入期设置自动。交付 Shader 规范化（如 PBRGraph→Standard）走此处手动/总批量。\n" +
+                "目标 Shader 与 Op 列表：MaterialProcessSettings（ConfigData）。",
+                MessageType.None);
+
+            List<string> valid = ResourceBatchFolderStore.GetValidMasterFolders();
+            if (valid.Count == 0)
+            {
+                EditorGUILayout.HelpBox("请先在上方配置主面板批量路径。", MessageType.Warning);
+            }
+            else
+            {
+                EditorGUILayout.LabelField(
+                    "路径：" + ResourceBatchFolderStore.FormatMasterPathsTitle(2),
+                    EditorStyles.miniLabel);
+            }
+
+            using (new EditorGUI.DisabledScope(valid.Count == 0))
+            {
+                if (GUILayout.Button("按批量路径执行材质", GUILayout.Height(28f)))
+                {
+                    lastBatchMessage = RunMaterialBatchCore();
+                    Repaint();
+                }
+            }
+
+            if (GUILayout.Button("选中 MaterialProcessSettings", GUILayout.Height(26f)))
+            {
+                Selection.activeObject = MaterialProcessSettings.GetOrCreateAsset();
+                EditorGUIUtility.PingObject(Selection.activeObject);
+            }
+        }
+    }
+
     private void DrawMasterPathSection()
     {
         EditorGUILayout.Space(8f);
-        EditorGUILayout.LabelField("主面板批量路径（贴图/模型共用，本机）", EditorStyles.boldLabel);
+        EditorGUILayout.LabelField("主面板批量路径（贴图/材质/模型共用，本机）", EditorStyles.boldLabel);
         using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
         {
             if (ResourceBatchFolderListGui.DrawEditableList("文件夹列表", masterFolders))
@@ -196,17 +244,10 @@ public class ResourceProcessWindow : EditorWindow
         using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
         {
             EditorGUILayout.HelpBox(
-                "平铺后手动总批量，顺序固定：贴图 → 模型。\n" +
-                "路径用上方共用列表；操作集合在贴图/模型「高级设置」。\n" +
+                "平铺后手动总批量，顺序固定：贴图 → 材质 → 模型。\n" +
+                "路径用上方共用列表（默认 Art）；材质 Op 见 MaterialProcessSettings。\n" +
                 "「纳入总批量」只影响本按钮。",
                 MessageType.None);
-
-            bool includeModel = EditorGUILayout.ToggleLeft(
-                "总批量纳入模型", ResourceProcessSwitches.MasterBatchIncludeModel);
-            if (includeModel != ResourceProcessSwitches.MasterBatchIncludeModel)
-            {
-                ResourceProcessSwitches.MasterBatchIncludeModel = includeModel;
-            }
 
             bool includeTexture = EditorGUILayout.ToggleLeft(
                 "总批量纳入贴图", ResourceProcessSwitches.MasterBatchIncludeTexture);
@@ -215,12 +256,27 @@ public class ResourceProcessWindow : EditorWindow
                 ResourceProcessSwitches.MasterBatchIncludeTexture = includeTexture;
             }
 
+            bool includeMaterial = EditorGUILayout.ToggleLeft(
+                "总批量纳入材质（交付 Shader）", ResourceProcessSwitches.MasterBatchIncludeMaterial);
+            if (includeMaterial != ResourceProcessSwitches.MasterBatchIncludeMaterial)
+            {
+                ResourceProcessSwitches.MasterBatchIncludeMaterial = includeMaterial;
+            }
+
+            bool includeModel = EditorGUILayout.ToggleLeft(
+                "总批量纳入模型", ResourceProcessSwitches.MasterBatchIncludeModel);
+            if (includeModel != ResourceProcessSwitches.MasterBatchIncludeModel)
+            {
+                ResourceProcessSwitches.MasterBatchIncludeModel = includeModel;
+            }
+
             bool anyIncluded = ResourceProcessSwitches.MasterBatchIncludeModel ||
-                               ResourceProcessSwitches.MasterBatchIncludeTexture;
+                               ResourceProcessSwitches.MasterBatchIncludeTexture ||
+                               ResourceProcessSwitches.MasterBatchIncludeMaterial;
             List<string> valid = ResourceBatchFolderStore.GetValidMasterFolders();
             using (new EditorGUI.DisabledScope(!anyIncluded || valid.Count == 0))
             {
-                if (GUILayout.Button("按批量路径执行全部（贴图→模型）", GUILayout.Height(30f)))
+                if (GUILayout.Button("按批量路径执行全部（贴图→材质→模型）", GUILayout.Height(30f)))
                 {
                     RunMasterBatch();
                 }
@@ -228,7 +284,7 @@ public class ResourceProcessWindow : EditorWindow
 
             if (!anyIncluded)
             {
-                EditorGUILayout.HelpBox("两类均未纳入总批量，按钮已禁用。", MessageType.Info);
+                EditorGUILayout.HelpBox("均未纳入总批量，按钮已禁用。", MessageType.Info);
             }
             else if (valid.Count == 0)
             {
@@ -405,6 +461,34 @@ public class ResourceProcessWindow : EditorWindow
         AssetOperationScanSummary summary = ModelOperationRunner.Scan(operations, targets, settings, true);
         return "[模型扫描] 目标 " + targets.Count + "，需处理 " + summary.NeedsWorkCount +
                "，跳过 " + summary.SkippedCount +
+               (summary.Canceled ? "（已取消）" : string.Empty);
+    }
+
+    private static string RunMaterialBatchCore()
+    {
+        List<string> targets = MaterialTargetCollector.CollectFromBatchFolders();
+        MaterialProcessSettings settings = MaterialProcessSettings.GetOrCreateAsset();
+        List<IMaterialAssetOperation> operations =
+            MaterialOperationRegistry.GetMasterBatchOperations(settings);
+        if (operations.Count == 0)
+        {
+            string msg = "[材质] 配置中未勾选任何主批量操作。";
+            Debug.LogWarning(msg);
+            return msg;
+        }
+
+        if (targets.Count == 0)
+        {
+            string msg = "[材质] 批量路径下没有命中 .mat。";
+            Debug.LogWarning(msg);
+            return msg;
+        }
+
+        MaterialOperationRunSummary summary = MaterialOperationRunner.Run(operations, targets, settings);
+        return "[材质] 批量完成：目标 " + targets.Count +
+               "，改动 " + summary.ChangedCount +
+               "，跳过 " + summary.SkippedCount +
+               "，失败 " + summary.FailedCount +
                (summary.Canceled ? "（已取消）" : string.Empty);
     }
 

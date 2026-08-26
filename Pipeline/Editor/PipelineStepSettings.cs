@@ -22,14 +22,17 @@ public class PipelineStepSettings : ScriptableObject
     [Tooltip("③ 自动化 Prefab。")]
     public bool runPrefab = true;
 
-    [Tooltip("④ 平铺到 Art（默认关）。")]
-    public bool runFlatten;
+    [Tooltip("④ 平铺到 Art（Converter 默认开；可关）。")]
+    public bool runFlatten = true;
 
-    [Tooltip("⑤ 资源总批量（默认关；对应「按批量路径执行全部」口）。")]
-    public bool runPostProcess;
+    [Tooltip("⑤ 资源总批量（Converter 默认开；对应「按批量路径执行全部」口；须先开④）。")]
+    public bool runPostProcess = true;
 
     [Tooltip("⑥ 仅双端 AB。")]
     public bool runAb = true;
+
+    [Tooltip("⑥ 额外打 UnityPackage（读/写与 RetinarExportSettings.exportUnityPackage 同步）。")]
+    public bool exportUnityPackage;
 
     [Header("导入后与 L1 的衔接")]
     [Tooltip("导入成功后把模型所在夹写入资源处理总面板批量路径（EditorPrefs），便于日后开⑤。")]
@@ -97,8 +100,26 @@ public class PipelineStepSettings : ScriptableObject
         options.RunFlatten = runFlatten;
         options.RunPostProcess = runFlatten && runPostProcess;
         options.RunAb = runAb;
+        options.ExportUnityPackage = exportUnityPackage;
         options.Quiet = quiet;
         options.SyncImportFolderToResourcePanel = syncImportFolderToResourcePanel;
+
+        RetinarExportSettings export = RetinarExportSettings.Current;
+        if (export != null)
+        {
+            // 步骤勾选与导出 SO 双向：以步骤 SO 为准写回 export 的 UP 开关
+            export.exportUnityPackage = exportUnityPackage;
+            options.AbBuildOptions = RetinarAbBuildOptions.FromExportSettings(
+                export,
+                exportUnityPackageOverride: exportUnityPackage,
+                quietOverride: quiet);
+        }
+        else
+        {
+            options.AbBuildOptions = RetinarAbBuildOptions.CreateDefaultAbOnly();
+            options.AbBuildOptions.ExportUnityPackage = exportUnityPackage;
+            options.AbBuildOptions.Quiet = quiet;
+        }
     }
 
     private static PipelineStepSettings FindExistingAsset()

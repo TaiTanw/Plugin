@@ -17,5 +17,6 @@ MonoBehaviour:
   runFlatten: 1
   runPostProcess: 1
   runAb: 1
+  exportUnityPackage: 0
   syncImportFolderToResourcePanel: 1
   quiet: 0

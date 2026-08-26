@@ -96,7 +96,7 @@ Assets/Plugin/
 |---|---|
 | `Plugin2022/` | Unity 2022 宿主根（无整仓 Git） |
 | `Plugin2022/Packages/` | 含 UnityGLTF 等 |
-| `Plugin2022/Assets/Art/` | ④ 交付产物区（插件 2 自动流默认跳过） |
+| `Plugin2022/Assets/Art/` | ④ 交付产物区。插件 2：**导入期自动跳过**；**⑤/L1 总批量默认打这里** |
 | `Plugin2022/Assets/IncomingPrefab/` | ③ 默认输出根 |
 | `Plugin2022/Deliverables/` | ⑥ 规范化/直通输出 |
 

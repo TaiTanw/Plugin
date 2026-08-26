@@ -46,11 +46,11 @@
 | 流程总步骤（含②开关） | `PipelineStepSettings` **SO** | runImport/Prefab/Flatten/Post/Ab、同步 L1 路径 |
 | 资源自动细节 | 资源总面板 **EditorPrefs** + L3 SO | 设置自动/后处理自动、Op、压缩等 |
 
-设置自动：编排**不调用**；导入触发 Unity 回调。结果汇总：暂用字符串（StepResult 延后）。D1 见 d1-ab-only，细点另核。
+设置自动：编排**不调用**；导入触发 Unity 回调。结果汇总：暂用字符串（StepResult 延后）。D1 见 d1-ab-only（**已收口**）。
 
 ### ⑤ 与流程编排的数据边界（已确认）
 
-- **流程编排**决定：要不要做资源处理（总步骤 Options；**⑤ 暂默认关**）。  
+- **流程编排**决定：要不要做资源处理（总步骤 Options；Converter **④⑤ 默认开**，可关；轻重在 L1 纳入开关 + L3 Op）。  
 - **资源处理总面板（L1）**决定：做哪些资源类型批量 / 路径 / 开关；**单文件导入后可由管线写入批量路径**。  
 - **设置自动**：只靠 Prefs 开关 + Unity `AssetPostprocessor`。  
 - **⑤ 总批量口**：`ToolPostProcessApi.RunMasterBatch`。  

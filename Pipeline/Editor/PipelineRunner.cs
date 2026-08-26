@@ -104,17 +104,33 @@ public static class PipelineRunner
             result.Info("[Pipeline] ⑤ PostProcess\n" + report);
         }
 
-        // ⑥ 仅双端 AB
+        // ⑥ AB（Options：输出根 / 可选 UP）
         if (options.RunAb)
         {
-            RetinarAbBuildResult ab = RetinarAbApi.BuildAbOnly(prefabPaths);
+            RetinarAbBuildOptions abOpt = options.AbBuildOptions;
+            if (abOpt == null)
+            {
+                abOpt = RetinarAbBuildOptions.FromExportSettings(
+                    RetinarExportSettings.Current,
+                    options.ExportUnityPackage,
+                    options.Quiet);
+            }
+            else
+            {
+                abOpt.ExportUnityPackage = options.ExportUnityPackage;
+                abOpt.Quiet = options.Quiet;
+            }
+
+            RetinarAbBuildResult ab = RetinarAbApi.Build(prefabPaths, abOpt);
             if (ab.BuiltBundleFiles != null)
             {
                 result.AbOutputs.AddRange(ab.BuiltBundleFiles);
             }
 
-            result.Info("[Pipeline] ⑥ AbOnly 成功 " + ab.OkNames.Count +
-                        " 失败行 " + ab.FailLines.Count);
+            result.Info("[Pipeline] ⑥ Ab 成功 " + ab.OkNames.Count +
+                        " 失败行 " + ab.FailLines.Count +
+                        " 交付根=" + abOpt.NormalizedDeliverableRoot +
+                        (abOpt.ExportUnityPackage ? " +UP" : string.Empty));
             for (int i = 0; i < ab.FailLines.Count; i++)
             {
                 result.Info("  AB fail: " + ab.FailLines[i]);
@@ -122,7 +138,7 @@ public static class PipelineRunner
 
             if (!ab.PartialOk)
             {
-                result.Fail(PipelineErrorCodes.AbFailed, "BuildAbOnly 全部失败");
+                result.Fail(PipelineErrorCodes.AbFailed, "Build AB 全部失败");
                 LogResult(result);
                 return result;
             }

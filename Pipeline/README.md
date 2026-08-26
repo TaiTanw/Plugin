@@ -25,5 +25,5 @@ Pipeline/
 | ② | `ToolImportApi.ImportSingleModel` |
 | ③ | `ToolPrefabApi` |
 | ④ | `RetinarFlattenApi` |
-| ⑤ | `ToolPostProcessApi`（默认关） |
+| ⑤ | `ToolPostProcessApi`（Converter 默认开；贴图→材质→模型） |
 | ⑥ | `RetinarAbApi.BuildAbOnly` |
