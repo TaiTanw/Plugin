@@ -69,12 +69,13 @@ TOol/
 │  └─ BatchFbxImportSettings.asset      # 导入根 / 交付区警报路径
 └─ Editor/
    ├─ Window/
-   │  ├─ ResourceProcessWindow.cs       # L1 总面板（路径 + 批量 + 开关）
+   │  ├─ ResourceProcessWindow.cs       # L1 资源处理总面板（⑤ 子流程编排入口）
    │  ├─ BatchFbxImportWindow.cs        # 批量 FBX 入库（独立菜单）
    │  ├─ BatchFbxImportSettings.cs
    │  └─ BatchFbxImportService.cs       # 夹名解析、冲突、单 FBX 拷贝+Import
-   ├─ Shared/                           # 跨贴图/模型共用（见 Shared/README_SHARED.md）
-   │  ├─ （根下历史扁平脚本：开关/批量路径/导入后调度…）
+   ├─ Shared/                           # 横切工具 / 将来对外窄口（见 Shared/README_SHARED.md）
+   │  └─ （根下历史扁平：开关/批量路径/导入后调度…）
+   ├─ Generated/                        # 中间资产能力（非 Art、非⑤原地改）
    │  └─ Prefab/                        # ★ ③ 自动预设体：Config / Layout / Service
    ├─ Texture/
    │  ├─ Config/     TextureProcessSettings.cs
@@ -89,7 +90,18 @@ TOol/
       └─ Window/     模型子面板 + 目标收集
 ```
 
-设计原则：**按资源类型纵向切开（Texture / Model），横切能力放 Shared；配置与代码分离（ConfigData 资产 vs Config 类）。**
+设计原则：**按资源类型纵向切开（Texture / Model）；横切放 Shared；中间资产写盘放 Generated；配置与代码分离。**
+
+### 2.0 面板与编排分层（勿与 Plugin 级流程编排混数据）
+
+| 层 | 谁决定 | 数据 |
+|---|---|---|
+| **流程编排**（将来 `Plugin/Pipeline`） | 是否跑 ②③④⑤⑥、quiet、门禁 | 总步骤 Options/SO（未建） |
+| **L1 资源处理总面板** | ⑤ **子流程**：跑哪些资源类型批量、路径、导入后开关；对外暴露 PostOps 入口 | EP 路径/开关 + L3 的 master Op 列表 |
+| **L2 贴图/模型子面板** | 当前编辑器临时范围 + 本机勾选 Op | 现 Prefs；是否升 SO → 见 backlog 低优 |
+| **L3 高级设置** | 压缩程度等参数、主批量/导入自动 Op 集合 | Texture/Model SO |
+
+**共享的是 API，不是同一块 UI 状态。** 流程编排勾选⑤时调用 L1 能力；不把步骤开关写进 `ResourceProcessSwitches`。
 
 ### 2.1 批量 FBX 导入（入库边界）
 

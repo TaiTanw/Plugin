@@ -239,46 +239,7 @@ public class ResourceProcessWindow : EditorWindow
 
     private void RunMasterBatch()
     {
-        var report = new StringBuilder();
-        report.AppendLine("[总批量] 开始（贴图→模型，平铺后手动）");
-
-        if (ResourceProcessSwitches.MasterBatchIncludeTexture)
-        {
-            if (ResourceBatchFolderStore.GetValidMasterFolders().Count == 0)
-            {
-                string warn = "[总批量] 贴图已纳入，但主面板批量路径为空，已跳过。";
-                Debug.LogWarning(warn);
-                report.AppendLine(warn);
-            }
-            else
-            {
-                report.AppendLine(RunTextureBatchCore());
-            }
-        }
-        else
-        {
-            report.AppendLine("[总批量] 已跳过贴图（未纳入）。");
-        }
-
-        if (ResourceProcessSwitches.MasterBatchIncludeModel)
-        {
-            if (ResourceBatchFolderStore.GetValidMasterFolders().Count == 0)
-            {
-                string warn = "[总批量] 模型已纳入，但主面板批量路径为空，已跳过。";
-                Debug.LogWarning(warn);
-                report.AppendLine(warn);
-            }
-            else
-            {
-                report.AppendLine(RunModelBatchCore());
-            }
-        }
-        else
-        {
-            report.AppendLine("[总批量] 已跳过模型（未纳入）。");
-        }
-
-        lastBatchMessage = report.ToString().TrimEnd();
+        lastBatchMessage = ResourcePostProcessService.RunMasterBatch();
         Repaint();
     }
 

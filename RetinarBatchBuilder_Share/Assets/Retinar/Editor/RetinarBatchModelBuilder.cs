@@ -84,42 +84,12 @@ public static partial class RetinarBatchModelBuilder
             return;
         }
 
-        EnsureAssetFolder(ArtRoot);
-
-        int generatedCount = 0;
-        var unknownLines = new List<string>();
-        try
-        {
-            for (int i = 0; i < sourcePaths.Count; i++)
-            {
-                string sourcePath = sourcePaths[i];
-                EditorUtility.DisplayProgressBar(
-                    "Retinar 平铺到 Art",
-                    "平铺: " + sourcePath,
-                    (float)i / sourcePaths.Count);
-
-                GeneratedAsset asset = CreateNormalizedPrefab(sourcePath);
-                if (asset.IsValid)
-                {
-                    generatedCount++;
-                    List<string> unknowns = FlattenCopyRunner.CollectUnknownAssetPaths(asset.AssetFolder);
-                    for (int u = 0; u < unknowns.Count; u++)
-                    {
-                        unknownLines.Add(asset.AssetName + "  " + unknowns[u]);
-                    }
-                }
-            }
-        }
-        finally
-        {
-            EditorUtility.ClearProgressBar();
-        }
-
-        AssetDatabase.SaveAssets();
-        AssetDatabase.Refresh();
+        List<string> unknownLines;
+        List<string> artPrefabPaths;
+        int generatedCount = FlattenSourcePaths(sourcePaths, false, out unknownLines, out artPrefabPaths);
 
         string unknownHint = string.Empty;
-        if (unknownLines.Count > 0)
+        if (unknownLines != null && unknownLines.Count > 0)
         {
             unknownHint = "\n\n有 " + unknownLines.Count +
                 " 个未归类文件（Unknown/ 或 image/Unknown/）。包不完整，但已继续平铺，不阻断。\n" +
@@ -133,6 +103,98 @@ public static partial class RetinarBatchModelBuilder
             unknownHint + "\n\n" +
             "下一步：用插件 2（资源处理）对 Art 下贴图按后缀递归压缩 / 刷顶点色，再执行「批量汇总 > 从 Art 导出（规范化）」。",
             "OK");
+    }
+
+    /// <summary>
+    /// 按路径平铺到 Art。quiet=true 时不弹窗、不进度条确认阻塞以外的 Dialog。
+    /// 供编排窄口调用。
+    /// </summary>
+    public static int FlattenSourcePaths(IList<string> sourcePaths, bool quiet)
+    {
+        List<string> unknownLines;
+        List<string> artPrefabPaths;
+        return FlattenSourcePaths(sourcePaths, quiet, out unknownLines, out artPrefabPaths);
+    }
+
+    /// <summary>按路径平铺；返回成功数，并输出未归类清单与 Art Prefab 路径。</summary>
+    public static int FlattenSourcePaths(
+        IList<string> sourcePaths,
+        bool quiet,
+        out List<string> unknownLines,
+        out List<string> artPrefabPaths)
+    {
+        unknownLines = new List<string>();
+        artPrefabPaths = new List<string>();
+        if (sourcePaths == null || sourcePaths.Count == 0)
+        {
+            if (!quiet)
+            {
+                ShowDialogDeferred("Retinar", "平铺路径列表为空。", "OK");
+            }
+            else
+            {
+                Debug.LogWarning("[Retinar] FlattenSourcePaths: 路径列表为空");
+            }
+
+            return 0;
+        }
+
+        if (StopIfEditorIsPlaying())
+        {
+            return 0;
+        }
+
+        EnsureAssetFolder(ArtRoot);
+
+        int generatedCount = 0;
+        try
+        {
+            for (int i = 0; i < sourcePaths.Count; i++)
+            {
+                string sourcePath = sourcePaths[i];
+                if (!quiet)
+                {
+                    EditorUtility.DisplayProgressBar(
+                        "Retinar 平铺到 Art",
+                        "平铺: " + sourcePath,
+                        (float)i / sourcePaths.Count);
+                }
+
+                GeneratedAsset asset = CreateNormalizedPrefab(sourcePath);
+                if (asset.IsValid)
+                {
+                    generatedCount++;
+                    if (!string.IsNullOrEmpty(asset.PrefabPath))
+                    {
+                        artPrefabPaths.Add(asset.PrefabPath);
+                    }
+
+                    List<string> unknowns = FlattenCopyRunner.CollectUnknownAssetPaths(asset.AssetFolder);
+                    for (int u = 0; u < unknowns.Count; u++)
+                    {
+                        unknownLines.Add(asset.AssetName + "  " + unknowns[u]);
+                    }
+                }
+            }
+        }
+        finally
+        {
+            if (!quiet)
+            {
+                EditorUtility.ClearProgressBar();
+            }
+        }
+
+        AssetDatabase.SaveAssets();
+        AssetDatabase.Refresh();
+
+        if (quiet)
+        {
+            Debug.Log("[Retinar] FlattenSourcePaths quiet: " + generatedCount + " / " + sourcePaths.Count +
+                      " ArtPrefab=" + artPrefabPaths.Count);
+        }
+
+        return generatedCount;
     }
 
     /// <summary>由 RetinarPackageScheduler / 菜单「批量汇总/从 Art 导出（规范化）/导出全部」调用。</summary>
@@ -2658,12 +2720,20 @@ public static partial class RetinarBatchModelBuilder
                 continue;
             }
 
-            string sourceTexturePath = AssetDatabase.GetAssetPath(texture);
-            string assetFolder = FlattenLayout.AssetFolderFromTextureFolder(textureFolder);
-            if (string.IsNullOrEmpty(sourceTexturePath) ||
-                FlattenLayout.IsLocalArtTexture(assetFolder, sourceTexturePath.Replace("\\", "/")))
+            string sourceTexturePath = AssetDatabase.GetAssetPath(texture).Replace("\\", "/");
+            // 内嵌贴图（无路径）：跳过。
+            // GLB/FBX/gltf 等容器路径：GetAssetPath(子资源贴图) 仍是容器文件；
+            // 不得 CopyAsset 整包进 image/Texture（否则 Project 里像「贴图夹变成了模型」）。
+            // 与 CreateMaterialCopyPreserveSettings 一致，只拷独立贴图后缀。
+            if (string.IsNullOrEmpty(sourceTexturePath) || !IsTextureAsset(sourceTexturePath))
             {
-                // 内嵌贴图（无独立资产路径）或已经在本包 image 单元 / 旧 Texture/ 里，跳过。
+                continue;
+            }
+
+            string assetFolder = FlattenLayout.AssetFolderFromTextureFolder(textureFolder);
+            if (FlattenLayout.IsLocalArtTexture(assetFolder, sourceTexturePath))
+            {
+                // 已经在本包 image 单元 / 旧 Texture/ 里，跳过。
                 continue;
             }
 

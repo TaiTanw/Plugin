@@ -14,6 +14,7 @@ Unity Editor 插件集合，用于模型/贴图的**导入期处理**与**交付
 
 | 目录 | 定位 | 菜单入口 |
 |------|------|----------|
+| [`Pipeline/`](./Pipeline/) | **流程编排**：步骤 SO、Runner、自动化管线总面板 | `Tools > 自动化管线总面板` |
 | [`TOol/`](./TOol/) | 批量 FBX 入库；导入期设置 + 源文件/模型后处理 | `Tools > 批量FBX导入`；`Tools > 资源处理总面板` |
 | [`RetinarBatchBuilder_Share/`](./RetinarBatchBuilder_Share/) | **插件 1（v1.4.4）**：分类平铺、引用收敛、FBX/预设体分流、成品直通 | `Tools > Retinar > 批量汇总` / `成品直达` / `打开交付文件夹` |
 
@@ -84,4 +85,4 @@ Unity Editor 插件集合，用于模型/贴图的**导入期处理**与**交付
 ## 分支提示
 
 当前常用功能分支为 `other`；`main` 为基线分支。浏览代码时请在网页左上角选择对应分支。  
-命令行自动化一体流程（2022 / GLB）开发说明见 [`docs/CLI_AUTOMATION_DEV.md`](./docs/CLI_AUTOMATION_DEV.md)（分支 `feature/cli-pipeline-2022`）。
+命令行自动化一体流程（2022 / GLB）开发备忘见 [`docs/dev-wip/`](./docs/dev-wip/README.md)（入口 [`docs/CLI_AUTOMATION_DEV.md`](./docs/CLI_AUTOMATION_DEV.md)；分支 `feature/cli-pipeline-2022`）。

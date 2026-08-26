@@ -144,7 +144,7 @@ public static class RetinarDirectPackage
         }
 
         string bundleFileName = RetinarEditorUtil.BuildBundleFileName(assetName);
-        if (!BuildAndCopyAssetBundles(prefabPath, assetName, bundleFileName, failLines))
+        if (!RetinarAbApi.BuildAndCopyAssetBundles(prefabPath, assetName, bundleFileName, failLines))
         {
             return false;
         }
@@ -168,71 +168,7 @@ public static class RetinarDirectPackage
         return true;
     }
 
-    /// <summary>
-    /// 用 AssetBundleBuild[] 显式指定单个 Prefab，避免依赖/污染 Importer 上的 bundle 名，
-    /// 也避免工程内同名 bundle 把其它 Art 目录打进同一包。
-    /// </summary>
-    private static bool BuildAndCopyAssetBundles(
-        string prefabPath,
-        string assetName,
-        string bundleFileName,
-        List<string> failLines)
-    {
-        var build = new AssetBundleBuild
-        {
-            assetBundleName = assetName.ToLowerInvariant(),
-            assetBundleVariant = RetinarPaths.AssetBundleVariant,
-            assetNames = new[] { prefabPath }
-        };
-        AssetBundleBuild[] builds = { build };
-
-        BuildTarget[] targets = { BuildTarget.Android, BuildTarget.iOS };
-        foreach (BuildTarget target in targets)
-        {
-            string platformFolder = RetinarEditorUtil.ToPlatformFolder(target);
-            string outputPath = Path.Combine(
-                Directory.GetCurrentDirectory(),
-                RetinarPaths.AssetBundleRoot,
-                platformFolder);
-            RetinarEditorUtil.EnsureDiskDirectory(outputPath);
-
-            AssetBundleManifest manifest = BuildPipeline.BuildAssetBundles(
-                outputPath,
-                builds,
-                BuildAssetBundleOptions.None,
-                target);
-
-            if (manifest == null)
-            {
-                failLines.Add(assetName + " — " + platformFolder + " BuildAssetBundles 返回 null");
-                return false;
-            }
-
-            string builtPath = Path.Combine(outputPath, bundleFileName);
-            if (!File.Exists(builtPath))
-            {
-                string alt = Path.Combine(outputPath, assetName.ToLowerInvariant());
-                if (File.Exists(alt))
-                {
-                    File.Copy(alt, builtPath, true);
-                    if (File.Exists(alt + ".manifest"))
-                    {
-                        File.Copy(alt + ".manifest", builtPath + ".manifest", true);
-                    }
-                }
-            }
-
-            if (!File.Exists(builtPath))
-            {
-                failLines.Add(assetName + " — 未找到 AB 文件: " + builtPath);
-                return false;
-            }
-
-            RetinarDeliverableIo.CopyBuiltBundleToDeliverables(assetName, bundleFileName, platformFolder);
-        }
-
-        return true;
-    }
+    // BuildAndCopyAssetBundles 已迁至 RetinarAbApi（编排 BuildAbOnly 与直通共用）
 
     private static bool ExportUnityPackageForPrefab(
         string prefabPath,
