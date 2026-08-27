@@ -51,7 +51,9 @@ public static class ModelOperationRunner
             EditorUtility.ClearProgressBar();
         }
 
-        if (summary.ChangedCount > 0)
+        // OnPostprocessModel 期间禁止 SaveAssets（Unity 会报 restricted）。
+        // 导入回调里改的 Mesh 会随本次 Import 一并落库；手动/⑤ 路径才在这里 Save。
+        if (summary.ChangedCount > 0 && !triggeredByImport)
         {
             AssetDatabase.SaveAssets();
         }
@@ -247,7 +249,9 @@ public static class ModelOperationRunner
             return;
         }
 
-        string trigger = triggeredByImport ? "导入触发" : "手动触发";
+        // 导入触发 = OnPostprocessModel / 导入后调度（默认跳过 Art）。
+        // 非导入 = L1/⑤/子面板总批量（可处理 Art；语义等于面板手动跑 Op）。
+        string trigger = triggeredByImport ? "导入触发" : "手动/⑤总批量";
         var report = new List<string>
         {
             "[模型处理] " + trigger + " 完成：改动 " + summary.ChangedCount +

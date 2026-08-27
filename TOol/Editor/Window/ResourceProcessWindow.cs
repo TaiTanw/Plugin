@@ -43,7 +43,8 @@ public class ResourceProcessWindow : EditorWindow
                 "总开关：关掉后设置自动/后处理自动都不跑；手动「执行全部」不受影响。\n" +
                 "设置自动：导入前改 Importer（导入区建议按需开启；Art 被 exclude，不会改交付 Importer）。\n" +
                 "后处理自动：导入后跑 Operation——默认跳过 Art，不保证交付生效；" +
-                "内嵌贴图/顶点色须平铺后再用下方批量路径（默认 Art）手动/编排总批量。\n" +
+                "内嵌贴图/顶点色须平铺后再用下方批量路径（默认 Art）点「执行全部」。" +
+                "自动化管线⑤走的是同一按钮内核，不是这条导入自动流。\n" +
                 "日常：配路径（默认可含 Assets/Art）→ 执行全部。分项开关/精准面板/入库等在「高级操作」。",
                 MessageType.Info);
 
@@ -95,6 +96,7 @@ public class ResourceProcessWindow : EditorWindow
             () => ResourceProcessSwitches.TexturePostProcessAuto,
             v => ResourceProcessSwitches.TexturePostProcessAuto = v,
             TextureToolWindow.ShowWindow,
+            TextureAdvancedSettingsWindow.ShowWindow,
             () =>
             {
                 lastBatchMessage = RunTextureBatchCore();
@@ -113,6 +115,7 @@ public class ResourceProcessWindow : EditorWindow
             () => ResourceProcessSwitches.ModelPostProcessAuto,
             v => ResourceProcessSwitches.ModelPostProcessAuto = v,
             ModelToolWindow.ShowWindow,
+            ModelAdvancedSettingsWindow.ShowWindow,
             () =>
             {
                 lastBatchMessage = RunModelBatchCore();
@@ -176,8 +179,8 @@ public class ResourceProcessWindow : EditorWindow
         {
             EditorGUILayout.LabelField("材质", EditorStyles.boldLabel);
             EditorGUILayout.HelpBox(
-                "无导入期设置自动。交付 Shader 规范化（如 PBRGraph→Standard）走此处手动/总批量。\n" +
-                "目标 Shader 与 Op 列表：MaterialProcessSettings（ConfigData）。",
+                "无导入期设置自动。交付 Shader 规范化走精准面板 / 本处分项 / 总批量。\n" +
+                "范围与手动勾选 = 本机 Prefs；目标 Shader 与主批量 Op = MaterialProcessSettings（SO）。",
                 MessageType.None);
 
             List<string> valid = ResourceBatchFolderStore.GetValidMasterFolders();
@@ -201,10 +204,14 @@ public class ResourceProcessWindow : EditorWindow
                 }
             }
 
-            if (GUILayout.Button("选中 MaterialProcessSettings", GUILayout.Height(26f)))
+            if (GUILayout.Button("打开材质精准面板", GUILayout.Height(26f)))
             {
-                Selection.activeObject = MaterialProcessSettings.GetOrCreateAsset();
-                EditorGUIUtility.PingObject(Selection.activeObject);
+                MaterialToolWindow.ShowWindow();
+            }
+
+            if (GUILayout.Button("高级设置（目标 Shader / 主批量 Op）", GUILayout.Height(26f)))
+            {
+                MaterialAdvancedSettingsWindow.ShowWindow();
             }
         }
     }
@@ -306,6 +313,7 @@ public class ResourceProcessWindow : EditorWindow
         System.Func<bool> getPost,
         System.Action<bool> setPost,
         System.Action openPanel,
+        System.Action openAdvanced,
         System.Action runBatch,
         System.Action scanBatch)
     {
@@ -360,6 +368,12 @@ public class ResourceProcessWindow : EditorWindow
             if (GUILayout.Button("打开 " + title + " 精准处理面板", GUILayout.Height(26f)))
             {
                 openPanel();
+            }
+
+            if (openAdvanced != null &&
+                GUILayout.Button("高级设置（子处理配置 / 操作集合）", GUILayout.Height(26f)))
+            {
+                openAdvanced();
             }
         }
     }

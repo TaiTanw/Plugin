@@ -16,6 +16,8 @@ MonoBehaviour:
   modelStripLightsAndCameras: 1
   supportedExtensions:
   - .fbx
+  - .glb
+  - .gltf
   importAutoOperationIds: []
   masterBatchOperationIds:
   - set_vertex_colors_white

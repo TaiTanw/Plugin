@@ -20,8 +20,8 @@ public class ModelProcessSettings : ScriptableObject
     public bool modelStripLightsAndCameras = true;
 
     [Header("可处理的模型扩展名")]
-    [Tooltip("后处理与设置自动都只认这些扩展名。v1 默认仅 .fbx；以后要加 .obj 等在此配置即可。")]
-    public List<string> supportedExtensions = new List<string> { ".fbx" };
+    [Tooltip("后处理与设置自动都只认这些扩展名。默认含 .fbx/.glb/.gltf（与管线导入对齐）；可在 SO 增删。")]
+    public List<string> supportedExtensions = new List<string> { ".fbx", ".glb", ".gltf" };
 
     [HideInInspector]
     public List<string> importAutoOperationIds = new List<string> { "set_vertex_colors_white" };
@@ -31,8 +31,8 @@ public class ModelProcessSettings : ScriptableObject
     public List<string> masterBatchOperationIds = new List<string> { "set_vertex_colors_white" };
 
     [Header("不介入的目录（自动流）")]
-    [Tooltip("路径以此列表任一前缀开头时，设置自动与后处理自动都跳过。默认排除 Assets/Art/（打包产物区）。" +
-             "子面板手动处理仍可对 Art 内模型执行。" +
+    [Tooltip("路径以此列表任一前缀开头时，仅「设置自动 / 后处理自动」（导入期钩子）跳过。默认排除 Assets/Art/。" +
+             "L1「执行全部」、子面板手动、中间层⑤（代跑同一总批量）都不读本列表，可以对 Art 刷顶点色。" +
              "注意：本列表与 TextureProcessSettings.excludedPathPrefixes、BatchFbxImportSettings.deliveryAlertPathPrefixes " +
              "是三份独立配置（默认都写 Assets/Art/），改一处不会自动同步；改交付根时请三处对照。")]
     public List<string> excludedPathPrefixes = new List<string> { "Assets/Art/" };
@@ -48,6 +48,8 @@ public class ModelProcessSettings : ScriptableObject
 
     public void EnsureMasterBatchDefaults()
     {
+        EnsureSupportedExtensionsDefaults();
+
         const string seededKey = "TOol.MasterBatchOps.ModelSeeded";
         if (EditorPrefs.GetBool(seededKey, false))
         {
@@ -79,6 +81,67 @@ public class ModelProcessSettings : ScriptableObject
         }
 
         EditorPrefs.SetBool(seededKey, true);
+    }
+
+    /// <summary>
+    /// D12 一次性迁移：空列表填默认；旧「仅 fbx」资产补 glb/gltf。之后不再强行追加，避免覆盖用户删改。
+    /// </summary>
+    public void EnsureSupportedExtensionsDefaults()
+    {
+        const string migratedKey = "TOol.ModelExt.GlbGltfMigrated.v1";
+
+        if (supportedExtensions == null)
+        {
+            supportedExtensions = new List<string>();
+        }
+
+        if (EditorPrefs.GetBool(migratedKey, false))
+        {
+            return;
+        }
+
+        bool dirty = false;
+        if (supportedExtensions.Count == 0)
+        {
+            supportedExtensions.Add(".fbx");
+            supportedExtensions.Add(".glb");
+            supportedExtensions.Add(".gltf");
+            dirty = true;
+        }
+        else
+        {
+            dirty |= AddExtensionIfMissing(".glb");
+            dirty |= AddExtensionIfMissing(".gltf");
+        }
+
+        if (dirty)
+        {
+            EditorUtility.SetDirty(this);
+        }
+
+        EditorPrefs.SetBool(migratedKey, true);
+    }
+
+    private bool AddExtensionIfMissing(string extension)
+    {
+        string want = extension.ToLowerInvariant();
+        for (int i = 0; i < supportedExtensions.Count; i++)
+        {
+            string e = supportedExtensions[i];
+            if (string.IsNullOrEmpty(e))
+            {
+                continue;
+            }
+
+            string n = e.StartsWith(".") ? e.ToLowerInvariant() : ("." + e.ToLowerInvariant());
+            if (n == want)
+            {
+                return false;
+            }
+        }
+
+        supportedExtensions.Add(want);
+        return true;
     }
 
     public bool IsSupportedModelExtension(string assetPath)
@@ -121,6 +184,7 @@ public class ModelProcessSettings : ScriptableObject
             if (fallbackInstance == null)
             {
                 fallbackInstance = CreateInstance<ModelProcessSettings>();
+                fallbackInstance.EnsureSupportedExtensionsDefaults();
             }
 
             if (!fallbackWarningLogged)

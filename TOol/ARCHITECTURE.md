@@ -1,7 +1,7 @@
 # TOol（插件 2）结构说明
 
 版本：1.3.9  
-最近同步：2026-08-26（澄清：导入自动排除 Art ≠ ⑤总批量不碰 Art；介入目录表已改）  
+最近同步：2026-08-27（三条通道：导入期自动流不碰 Art；L1 手动总批量碰 Art；中间层⑤=代跑 L1，不是导入钩子）  
 适用：Unity 2020.3 / 2022.3 Editor；与 `RetinarBatchBuilder_Share`（插件 1）配合使用。
 
 本文说明目录层级、类职责、自动化两层语义，以及和打包工具的边界。便于扩展新 Operation / 新资源类型时对照。
@@ -19,6 +19,7 @@
 - 批量路径要本机可改、不进版本库 → EP；**L1 默认种子含 `Assets/Art`**，总批量本就是打交付区。  
 - 「**导入期自动**不要改交付区 Importer」与「**入库不要拷进交付区**」语义不同：前者是 *skip process*（`excludedPathPrefixes`），后者是 *hard block copy*（`deliveryAlertPathPrefixes`）；故用不同字段名。  
 - **切勿**把 `excludedPathPrefixes` 理解成「⑤ 也扫不到 Art」——⑤ `RunMasterBatch` **不读**该列表。  
+- **切勿**把中间层⑤也叫成「导入自动流」。管线勾选⑤ = 编排代调 L1「执行全部」同一内核（手动路径），不是 `AssetPostprocessor`。  
 - 默认值都是 `Assets/Art/`，**改一处不会自动同步**。若团队改交付根目录，请在 L3 贴图/模型高级设置与批量 FBX 配置里对照改三处。
 
 导入期 Console 常见信息（可忽略与否）：
@@ -143,10 +144,12 @@ TOol/
 | 分项含义      | 时机              | 谁执行                                   | 典型事                              |
 | --------- | --------------- | ------------------------------------- | -------------------------------- |
 | **设置自动**  | `OnPreprocess`* | `*ImportSettingsProcessor`            | 贴图关 Read/Write；模型 External、剔灯剔相机 |
-| **后处理自动** | 导入后 `delayCall` | `ImportPostProcessScheduler` → Runner | 压缩超标；顶点色全白（**不覆盖 Art**）         |
+| **后处理自动** | 导入后 `delayCall` | `ImportPostProcessScheduler` → Runner | 压缩超标；顶点色全白（**仅导入区；exclude Art**）         |
 
 
 **设置自动建议保留**（导入区 Importer 行为需要）。**后处理自动默认关 + UI 标明「仅导入区」**：内嵌贴图压缩、Art 顶点色与贴图两遍同类，平铺前跑了易误以为交付已成功；管线代码保留，不删。
+
+交付区（Art）的压图/刷白走下面「平铺后手动总批量」；中间层⑤只是代跑这一段，**不要**为了管线自动再把 Op 塞进 `OnPostprocessModel` 打 Art。
 
 后处理要真正跑起来，需要同时满足：
 
@@ -171,7 +174,7 @@ TOol/
         └─ RunTexturePhase 只 SaveAssets，不 Refresh（Refresh 会重导 FBX 冲顶点色）
 ```
 
-平铺后手动（总面板「按批量路径执行全部」）：
+平铺后手动（总面板「按批量路径执行全部」；**中间层⑤ = 代调同一入口**）：
 
 ```text
 贴图批量（压 Art 下按后缀递归到的贴图，常见 image/Texture）→ 只 SaveAssets

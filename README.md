@@ -18,9 +18,10 @@ Unity Editor 插件集合，用于模型/贴图的**导入期处理**与**交付
 | [`TOol/`](./TOol/) | 批量 FBX 入库；导入期设置 + 源文件/模型后处理 | `Tools > 批量FBX导入`；`Tools > 资源处理总面板` |
 | [`RetinarBatchBuilder_Share/`](./RetinarBatchBuilder_Share/) | **插件 1（v1.4.4）**：分类平铺、引用收敛、FBX/预设体分流、成品直通 | `Tools > Retinar > 批量汇总` / `成品直达` / `打开交付文件夹` |
 
-**目录边界（防混淆）：**  
-- **导入期自动**（设置自动 / 后处理自动）：默认**不碰** `Assets/Art/**`（`excludedPathPrefixes`），避免与插件 1 的交付 Importer 互踩（规则 33）。  
-- **⑤ 总批量 / L1 手动**：路径默认就是 `Assets/Art`，**故意**对交付区压图、刷顶点色等；与上面「自动跳过」不是同一条通道。  
+**目录边界（防混淆，三条通道）：**  
+- **导入期自动流**（设置自动 / 后处理自动，`AssetPostprocessor`）：默认**不碰** `Assets/Art/**`（`excludedPathPrefixes`），避免与插件 1 的交付 Importer 互踩（规则 33）。这是「不碰 Art」的那条，且应保持如此。  
+- **L1 手动总批量**（资源处理总面板「执行全部」）：路径默认就是 `Assets/Art`，**故意**对交付区压图、刷顶点色。  
+- **中间层⑤**（自动化管线勾选⑤）：**代调上一行同一内核**，不是导入期自动流。看起来像自动，但是编排在点面板按钮。  
 两边不得同时改同一 Importer 属性。详见 [`PACKAGING_RULES.md`](./RetinarBatchBuilder_Share/PACKAGING_RULES.md) 规则 33、[`TOol/ARCHITECTURE.md`](./TOol/ARCHITECTURE.md)。  
 插件 1 Editor 阅读地图：[`RetinarBatchBuilder_Share/Assets/Retinar/Editor/README_EDITOR.md`](./RetinarBatchBuilder_Share/Assets/Retinar/Editor/README_EDITOR.md)。  
 **v1.4.0 Art 结构：** `Assets/Art/<名>/image/Texture`（默认贴图）、`image/UI`（Sprite）等单元目录；未知依赖进 `Unknown/`。

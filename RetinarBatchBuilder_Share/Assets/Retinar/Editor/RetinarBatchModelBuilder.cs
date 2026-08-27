@@ -601,6 +601,8 @@ public static partial class RetinarBatchModelBuilder
         importer.importAnimation = true;
         importer.animationCompression = ModelImporterAnimationCompression.Optimal;
         importer.addCollider = false;
+        // 交付区 FBX 保持 Read/Write，便于⑤写顶点色；且避免⑤再裸重导冲色。
+        importer.isReadable = true;
         SaveAndReimportPreservingMeshVertexColors(importer);
     }
 

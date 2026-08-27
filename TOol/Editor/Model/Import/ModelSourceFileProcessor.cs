@@ -3,7 +3,7 @@ using UnityEditor;
 using UnityEngine;
 
 // =====================================================================================
-// 模型后处理流程控制：
+// 模型后处理流程控制（导入期自动流 · 只服务导入区）：
 //   1) OnPostprocessAllAssets → 入队 ImportPostProcessScheduler（delayCall，模型→贴图）
 //   2) OnPostprocessModel → 在「每一次」模型导入结束时立刻跑 importAuto 操作
 //
@@ -12,6 +12,11 @@ using UnityEngine;
 //   或其它原因导致 FBX 再导入，Mesh 会被源数据重建。仅靠 delayCall 一轮时，
 //   再导入往往落在 Scheduler.IsRunning==true 窗口内，入队被跳过，颜色就丢了。
 //   OnPostprocessModel 在每次（含重导）导入末尾执行，才能稳定留下全白顶点色。
+//
+// Art / excludedPathPrefixes：
+//   本文件是「导入期自动流」，必须整段跳过 Art（规则 33：不改交付区 Importer，
+//   也不在钩子里对 Art 跑 Op）。交付区刷白/压图走 L1 手动总批量，或中间层⑤
+//   代调同一 RunMasterBatch（triggeredByImport=false），不是本钩子。
 // =====================================================================================
 public class ModelSourceFileProcessor : AssetPostprocessor
 {

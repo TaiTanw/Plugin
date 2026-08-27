@@ -9,6 +9,7 @@ public static class ResourceManualOperationStore
 {
     public const string DomainTexture = "Texture";
     public const string DomainModel = "Model";
+    public const string DomainMaterial = "Material";
 
     private const string KeyPrefix = "TOol.ManualOp.";
 
@@ -52,6 +53,20 @@ public static class ResourceManualOperationStore
         foreach (IModelAssetOperation operation in ModelOperationRegistry.All)
         {
             if (operation != null && IsSelected(DomainModel, operation.Id))
+            {
+                result.Add(operation);
+            }
+        }
+
+        return result;
+    }
+
+    public static List<IMaterialAssetOperation> CollectSelectedMaterialOperations()
+    {
+        var result = new List<IMaterialAssetOperation>();
+        foreach (IMaterialAssetOperation operation in MaterialOperationRegistry.All)
+        {
+            if (operation != null && IsSelected(DomainMaterial, operation.Id))
             {
                 result.Add(operation);
             }

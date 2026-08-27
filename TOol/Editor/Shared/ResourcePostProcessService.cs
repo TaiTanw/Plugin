@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Text;
+using UnityEditor;
 using UnityEngine;
 
 // =====================================================================================
@@ -185,6 +186,17 @@ public static class ResourcePostProcessService
             return msg;
         }
 
+        // 贴图批 ImportAsset 常把同单元 ModelImporter 标脏并延后重导，会冲掉顶点白。
+        // 模型 Op 前同步重导，但必须 preserve 顶点色（裸 ForceSynchronousImport 会每次冲回 FBX 源色，
+        // 表现为「再跑管线又刷白 33/38」）。
+        AssetDatabase.SaveAssets();
+        for (int i = 0; i < targets.Count; i++)
+        {
+            ModelMeshVertexColorUtility.ForceSyncReimportPreservingVertexColors(targets[i]);
+        }
+
+        // triggeredByImport=false：与 L1/L2「手动总批量」同路径（会 EnsureModelReadable 等）。
+        // 不是导入期后处理自动——后者走 AssetPostprocessor + exclude Art，本口不读 exclude。
         ModelOperationRunSummary summary = ModelOperationRunner.Run(operations, targets, settings, false);
         return "[模型] 批量完成：目标 " + targets.Count +
                "，改动 " + summary.ChangedCount +

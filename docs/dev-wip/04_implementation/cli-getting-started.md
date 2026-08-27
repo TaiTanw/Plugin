@@ -1,105 +1,134 @@
-# D5 入门：CLI 是什么、怎么接（先概念后动手）
+# D5：CLI 工具入口
 
-返回 [总目录](../README.md) · [待办](../03_open-items/backlog.md) · [技术要点](../01_requirements/tech-and-ops.md)
+返回 [总目录](../README.md) · [流程与中间层](./pipeline-flow.md) · [待办](../03_open-items/backlog.md)
 
-> 2026-08-26：编辑器内 ②③⑥（可选④）已用 `Assets/Art/ggdddd` 跑通。  
-> **下一步才是命令行外壳**；本文只讲概念与第一刀，不替代参数表拍板。
+> CLI = 无头外壳；内核仍是 `PipelineRunner.Run(options)`。面板继续直调 Runner，不改成「面板调 CLI」。  
+> **第一刀已写** `PipelineCli.Run`：必填 `-source`，可选 `-materialId`；步骤跟 SO。
 
 ---
 
-## 1. 先分清三层（不要混）
+## 1. 在总架构里的位置（块 B）
 
 ```text
-网页 / lean-api / Docker     ← 以后（V1.2 基建）
+网页 / lean-api / Docker     ← 以后（V1.2 基建，本迭代不做）
         ↓ 调进程
-Unity 命令行（本阶段 D5）    ← 无窗口开工程、跑同一套 Runner、退出码
-        ↓ 调
-PipelineRunner.Run(options)  ← 已经有了（总面板也走这里）
+Unity 命令行（D5）
+        ↓
+PipelineCli.Run()            ← Editor：Assets/Plugin/Pipeline/Editor/PipelineCli.cs
+        ↓ 填 PipelineOptions（Quiet 强制 true）
+PipelineRunner.Run(options)  ← 已有（与总面板同一内核）
+        ↓
+窄口 ②③④⑤⑥
+        ↓
+EditorApplication.Exit(code) ← = PipelineResult.ExitCode
 ```
 
-| 层 | 现在有没有 | 说明 |
+| 层 | 有无 | 说明 |
 |---|---|---|
-| 总面板 | **有** | 人拖文件 → 填 Options → `PipelineRunner` |
-| Runner / 窄口 | **有** | ② `ToolImportApi` → ③ Prefab → ④ Flatten → ⑥ `RetinarAbApi` |
-| Unity CLI | **还没有** | 缺一个 `static void Xxx()` 给 `-executeMethod` 调 |
-| 网页/队列 | **没有** | 不在本迭代 |
-
-CLI **不是**另一套管线，只是「用命令行代替点按钮」。
+| (A) 总面板 | **有** | 人填 Options → Runner |
+| (A) Runner / 窄口 | **有** | 见 [pipeline-flow](./pipeline-flow.md) |
+| (B) `PipelineCli` | **有（第一刀）** | 只解析 argv、组 Options、调 Runner、Exit |
+| 网页/队列 | **无** | 不在本迭代 |
 
 ---
 
-## 2. Unity 命令行在干什么
+## 2. 代码结构
 
-Unity **没有**「只跑插件、不开工程」的官方 SDK。做法是：
+```text
+Assets/Plugin/Pipeline/Editor/
+├─ PipelineRunner.cs          # 内核（CLI 禁止绕过）
+├─ PipelineOptions.cs         # CLI 填这个，不另造配置类型
+├─ PipelineResult.cs          # ExitCode / Messages
+├─ PipelineErrorCodes.cs      # 与进程退出码对齐
+├─ PipelineWindow.cs          # (A) 人机；与 CLI 并行
+└─ PipelineCli.cs             # (B) public static void Run()
+```
+
+| 类 | 职责 | 禁止 |
+|---|---|---|
+| `PipelineCli` | 读 argv、校验、组 Options、调 Runner、`Exit` | Selection、Dialog、业务细节 |
+| `PipelineRunner` | 步骤编排 | 解析 argv |
+| 窄口 | 单步能力 | 知道自己被 CLI 还是面板调用 |
+
+---
+
+## 3. Unity 命令行外壳
 
 ```text
 Unity.exe
-  -batchmode          不要编辑器窗口
-  -nographics         不要 GPU 窗口（服务器常用）
-  -projectPath <工程> 打开 Plugin2022
-  -executeMethod 类.方法   进编辑器后立刻跑这个静态方法
-  -logFile <路径>     日志写文件
-  -quit               方法结束后退出
+  -batchmode
+  -nographics
+  -projectPath <Plugin2022 工程根>
+  -executeMethod PipelineCli.Run
+  -logFile <路径>
+  -quit
+  -source <模型路径>
+  [-materialId <name>]
 ```
 
 要点：
 
-- 方法必须是 **Editor 程序集里的 `public static void`**，且 **无参数**（参数从命令行自己解析）。
-- **禁止** `Selection`、`DisplayDialog`（batchmode 会卡住或失败）。路径必须当参数传入。
-- 进程退出码应对齐 `PipelineErrorCodes`（0/10/20/…）。
-- Quiet 面板勾选 **不等于** `-quit`；`-quit` 才是关 Unity 进程。
+- 入口必须是 Editor 程序集里 **`public static void` 无参**方法。
+- CLI **强制** `Quiet=true`（batchmode 禁 Dialog）。**Quiet ≠ `-quit`**。
+- 退出码 = `PipelineResult.ExitCode`。缺 `-source` → `10`（BadArgs）。未捕获异常 → `80`（Other）。
+- `70` LicenseOrEnv **预留，本入口不赋值**。⑤ 失败暂不映射 `50`（D16）。⑥ 部分成功仍可能 `0`。
 
 ---
 
-## 3. 建议的第一刀（最小可测，不一次做完 D5）
+## 4. 参数（第一刀）
 
-**先做一个入口，只认 1～2 个参数，跑通已验证的 GLB 样例。**  
-参数格式（flag / 环境变量 / 临时 SO）仍模糊（待办 B.9），第一刀用最笨的即可：
+| 参数 | 必填 | 映射 Options | 说明 |
+|---|---|---|---|
+| `-source <path>` 或 `-source=` | 是 | `SourcePath` | 工程外 .glb/.fbx 或 `Assets/…` |
+| `-materialId <name>` | 否 | `MaterialId` | 覆盖 Prefab 三层命名 |
+
+步骤开关全部跟 `PipelineStepSettings` SO，不做 flag 覆盖。
 
 ```text
--source <磁盘上的 .glb 或工程内 Assets/…>
-（可选）-materialId <名>
+1. 解析 -source / 可选 -materialId
+2. opt = PipelineOptions.FromSettings(PipelineStepSettings.Current, source)
+3. opt.Quiet = true；若有 materialId → 写入
+4. r = PipelineRunner.Run(opt)
+5. EditorApplication.Exit(r.ExitCode)
 ```
 
-伪流程（实现时写进例如 `Pipeline/Editor/PipelineCli.cs`）：
+后续可加（不进第一刀）：步骤 flag、输出根、多源（D10）、清 Incoming（D11）。⑤ 扫描夹已由 **D17** 在 Runner 内写 Art 单元。
+
+---
+
+## 5. 验收
+
+本机示例（路径按机器改）：
 
 ```text
-1. 解析命令行得到 source
-2. PipelineOptions.FromSettings(SO, source)   // 步骤开关仍用现有 SO
-3. PipelineResult r = PipelineRunner.Run(opt)
-4. EditorApplication.Exit(r.ExitCode)
-```
-
-本机验收命令（路径按你机器改）：
-
-```text
-"<Unity2022.3>/Unity.exe"
+"<Unity2022.3>\Unity.exe"
   -batchmode -nographics -quit
   -projectPath "D:\UnityMyCSProject\UnityProject\Plugin2022"
   -executeMethod PipelineCli.Run
   -logFile "D:\temp\pipeline-cli.log"
-  -source "D:\path\to\ggdddd.glb"
+  -source "D:\path\to\sample.glb"
 ```
 
-成功标志：日志里 `[Pipeline] ⑥ Ab` 成功、进程退出码 **0**、`AssetBundles/Android` 与 `iOS` 有包。  
-洋红材质是 **APP 加载问题**（见待办 D13），不要当成 CLI 失败。
-
----
-
-## 4. 故意先不做的
-
-| 不做 | 原因 |
+| 检查 | 期望 |
 |---|---|
-| 一次钉死全部 flag | B.9 未拍板；先 1 个 `-source` 验证通道 |
-| Docker / 队列 | 战略：本迭代只保证本机静默 API |
-| 面板改走 CLI | 面板继续直调 Runner；CLI 与面板并行入口 |
-| 用 CLI 修洋红 | 着色器/管线问题，与「能不能无头跑」无关 |
+| 日志 | 有 `[PipelineCli]` 与 `[Pipeline] ⑥ Ab`（或当前 SO 开启的等价步） |
+| 退出码 | `0` |
+| 产物 | `AssetBundles/Android` 与 `iOS`（或 ExportSettings 根下）有包 |
+| 洋红 | **不**算 CLI 失败（D13） |
+| Prefab 夹顶点色 | **不**算 CLI 失败（可选 D20；色在 `Model/*.FBX`） |
+
+先回切工程等 `PipelineCli` 编译进 Editor 程序集，再跑无头命令。
 
 ---
 
-## 5. 开工顺序（你点头后再改代码）
+## 6. 缺口（相对 CLI）
 
-1. 加 `PipelineCli.Run` + 解析 `-source`  
-2. 用已跑通的 GLB 无头打一遍 AB  
-3. 把错误码与日志约定写进 D5 表  
-4. 再加 `materialId`、输出根等（与 D8 Options 对齐）
+| 缺口 | 影响 CLI？ | 代办 |
+|---|---|---|
+| 参数格式未钉死全表 | 第一刀已死 `-source` | backlog **B.CLI** |
+| ⑤ 仅 string；不 Fail(50) | ⑤挂了仍可能 exit 0 | **D16** |
+| `SourceBindings` Runner 未消费 | 多文件 CLI 不可用 | **D10** |
+| `LicenseOrEnv(70)` | 表有洞 | 预留 |
+| ⑥ 部分失败仍 Ok | CI 语义 | 随错误码表拍板 |
+
+**已复用：** `PipelineOptions.FromSettings`、`PipelineRunner`、窄口、D17 Art 单元路径。

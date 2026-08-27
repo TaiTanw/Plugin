@@ -11,24 +11,106 @@
 
 | ID  | 事项                                   | 优先级 | 状态                                                                                   |
 | --- | ------------------------------------ | --- | ------------------------------------------------------------------------------------ |
-| D5  | `-executeMethod` 参数与错误码表固化           | P1  | 概念/第一刀见 [cli-getting-started](../04_implementation/cli-getting-started.md)；**下一步开工** |
-| D13 | GLB 通道 AB 安卓洋红（材质/Shader） | P0 | **已拍板**：⑤ Material 层 + 方案 A；见 **H** |
-| D12 | ⑤ 模型扩展名默认仅 `.fbx`；管线已含 GLB 时 Op 可能空跑 | P1  | 评估见 **G**                                                                            |
-| D9  | materialId UX：选源时填入默认名；清除源时一并清 Id    | P1  | 评估见 **F**                                                                            |
-| D10 | materialId → 列表（多文件/多夹）；同夹多模型加文件名后缀  | P2  | 评估见 **F**                                                                            |
+| D5  | CLI：`PipelineCli` + `-executeMethod`；最小参数与退出码表 | P1  | **第一刀已写** `PipelineCli.Run`（`-source` / 可选 `-materialId`）→ [cli-getting-started](../04_implementation/cli-getting-started.md)；无头跑通后固化表 |
+| D16 | ⑤ 结构化结果：窄口/Runner 映射 `PostProcessFailed(50)` | P1  | CLI/面板共用；现状 `RunMasterBatch` 仅 string、Runner 不 Fail → 见 [pipeline-flow](../04_implementation/pipeline-flow.md) §4 |
+| D17 | ④成功后同步本次 Art 单元到⑤（`PostProcessFolderPaths`） | — | **已完成**：Runner ④后写 Art 单元根；见 [pipeline-flow](../04_implementation/pipeline-flow.md) |
+| D13 | GLB 通道 AB 安卓洋红（材质/Shader）            | —   | **已完成** → [d13-glb-magenta](./d13-glb-magenta.md)                                    |
+| D12 | ⑤ 模型扩展名 / L3 识别只读展示 | — | **已完成**：默认 .fbx/.glb/.gltf；L3 只读识别说明；见 **G** |
+| D9  | materialId UX：选源时填入默认名；清除源时一并清 Id    | —   | **已完成**：Pipeline 选源/清除同步；见 **F**                                                     |
+| D10 | materialId → 列表（多文件/多夹）；同夹多模型加文件名后缀  | P2  | 评估见 **F**；`SourceBindings` 已预备、**Runner 未消费**（CLI 多源依赖此项） |
 | D11 | 成功后可选清理 Incoming（缓存）；**默认不删 Art**    | P2  | 与 Quiet 无关；见 **F**                                                                   |
 | D14 | 模型自带动画/音效 vs Pack 入口                 | P2  | 评估见 **I**；**暂不新开管线**                                                                 |
+| D15 | ⑤ 扫 Art 范围：单单元路径 vs 大根；Text 标记「已处理」  | P3  | **低优**；见 **J**；暂不实现                                                                  |
+| D18 | 单文件②同目标路径「复用」：源已变仍不覆盖（静默用旧文件） | P2  | **隐患成立**；见 **K**；策略待选：覆盖 / Conflict 失败 / 内容哈希 / 版本后缀 |
+| D19 | FBX 刷白后被重导冲掉（⑤贴图批 / ⑥ AB） | P1  | 补偿走**中间层代跑 L1 总批量**（preserve + ⑥后重刷白再打 AB）；**不**在导入钩子里打 Art。见 **L** |
+| D20 | Art `Prefab/` 夹「看起来」未刷顶点色 | P3  | **可选**。色在 `Model/*.FBX` 子资产；编辑器预览常已白。不挡 CLI。见 **M** |
 
 
 ---
 
+
+
+## K. 单文件导入同路径复用（D18）
+
+> 2026-08-27 核对：`ToolImportApi.ImportSingleModel` 对工程外源按 `Import根/三层夹名/原文件名` 落盘；**目标已存在则复用、不 `File.Copy` 覆盖**。
+
+| 问 | 结论 |
+|---|---|
+| 算不算判重失败？ | **否**——有意幂等，同路径再导一次当命中 |
+| 算不算内容缓存加速？ | **否**——只按路径复用，**不比哈希/mtime** |
+| 隐患 | 同三层名 + 同文件名、源已替换 → **静默旧资产**；批量 FBX 面板更严（夹已存在 Skip/Conflict） |
+| 产品方向（待拍板） | CLI/服务器：覆盖更新 / BadArgs·Conflict / 后缀消歧；与 D11 清 Incoming 可配合 |
+
+**现状可接受场景：** 同一任务反复跑同一源路径。  
+**不可接受场景：** 同名新版本必须进工程。
+
+---
+
+
+
+## L. FBX 顶点刷白「⑤后 OK、⑥后/扫描又非白」（D19）
+
+> 歼31：`Assets/Art/歼31-yy3d_3d/Model/fbx.FBX`  
+> ⑤末 `[顶点色诊断] OK 非白=0`；⑥ AB 后 L1 扫描又报 `33/38 非全白`。
+
+| 项 | 说明 |
+|---|---|
+| **不是** | 通道 1 exclude 挡了⑤；也不是「刷白没写上」（⑤后诊断已证明全白） |
+| **是** | 色写在 ModelImporter 导入结果上；**⑥ `BuildAssetBundles` 会依赖重导**，从 FBX 二进制重建 Mesh → 白丢（⑤内贴图批标脏也可同类冲掉） |
+| 时序 | ⑤（通道 3 代跑 L1）贴图→材质→模型→诊断 OK → ⑥ AB → 工程 Mesh 又黄 → 扫描 BAD；若未重打 AB，**交付 AB 也可能已是黄** |
+| 一刀（正确层） | ⑤模型批前 preserve + colors/colors32；⑥后若仍 BAD → **再调同一 `RunMasterBatch` 只跑模型** → 再打 AB。全部是中间层代跑手动内核 |
+| **不要** | 在 `OnPostprocessModel` 对 Art 刷白来「抗⑥重导」——那是把通道 3 做成通道 1，违反规则 33。导入期自动流继续整段跳过 Art |
+| 验收 | ⑤后诊断 OK；⑥后应再出现诊断；若曾冲掉应有「重刷白并重打 AB」且第二次诊断 OK；再扫 L1 应 Skip |
+| 非管线 | UnityGLTF 只读当前 `mesh.colors`；Export 在⑤前 = 验旧状态。导出黄 ≠ 这份 AB 黄 |
+
+GLB 刷白仍暂放。通道定义见 [tech-and-ops](../01_requirements/tech-and-ops.md)「Art 目录边界」。
+
+---
+
+
+
+## M. Art Prefab 夹未刷顶点色（D20 · 可选）
+
+> 2026-08-27：`Assets/Art/歼31-yy3d_3d/Prefab` 跑完管线后仍「未刷顶点色」；编辑器观感无明显问题。
+
+| 项 | 说明 |
+|---|---|
+| 色写在哪 | Mesh 顶点色在 **`Art/<名>/Model/*.FBX`** 子资产上，**不在** `.prefab` 文件里 |
+| 为何 Prefab 夹像没刷 | 对 Prefab 夹做「模型扫描」若只看 `.prefab`、未跟依赖到 FBX，会空或误判；Project 里点 Prefab 也看不到 Mesh.colors |
+| 编辑器为何像正常 | Prefab 实例引用同一份 FBX Mesh；诊断/Scene 看的是 Model 上已白的 Mesh |
+| 顽固点 | ⑥ 重导、UnityGLTF 另存 glb、看错夹，都可能再显得「Prefab 没白」 |
+| 本阶段 | **不挡 CLI**。要对齐观感：扫 `Model/` 或 Prefab 的 GetDependencies；不要对 Prefab 夹单独写顶点色 |
+
+---
+
+
+
+## J. ⑤ Art 扫描范围 / Text 标记（D15 · 低优基本评估）
+
+> 与「④后写本次 Art 单元给⑤」同一问题域；大根约定当前够用。详见拍板记录；**暂不实现**。
+
+
+| 问                   | 结论                   |
+| ------------------- | -------------------- |
+| 当前⑤是否整棵 Assets/Art？ | **多数是**（L1 种子/习惯路径）  |
+| Text 已处理标记？         | **暂不需要**；优先路径收窄（D15） |
+
+
+---
+
+
+
 ## B. 仍模糊 / 未拍板
+
+
 
 ### 工程
 
 1. `productName` 是否改为 Plugin2022
 2. 宿主是否将来 submodule
 3. ModleEvent 与 Plugin2022 两份 Plugin 长期如何对齐
+
+
 
 ### 产品 / 流程
 
@@ -38,31 +120,39 @@
 4. 门禁 Profile / SO 何时接线
 5. Converter 工程用 **专用 URP** 还是双管线（与 D13 相关）
 
+
+
 ### CLI / 运维
 
-1. 参数格式（自定义 flag / 环境变量 / 临时 SO）
-2. License：Personal vs Pro；多机互踢策略
+1. **B.CLI** 参数格式（自定义 flag / 环境变量 / 临时 SO）— D5 第一刀先死 `-source`；全表拍板后再扩
+2. License：Personal vs Pro；多机互踢策略（错误码 70 预留，见 D5）
 3. Unity 精确版本号（现网打 AB 头为 `2022.3.54f1c1`）
 4. iOS on Linux 失败时的拆分构建方案（基建）
+5. ⑥ **部分** AB 失败时退出码：仍 0（当前 `PartialOk`）还是非 0 — 随 D5 错误码表拍板
 
 ---
+
+
 
 ## C. 已知风险（实现时注意）
 
 
-| 风险                  | 说明                                            |
-| ------------------- | --------------------------------------------- |
-| ⑥ 输入源               | 未平铺时应用**任意 Prefab**（近直通），勿写死必须 Art            |
-| ④ 后打 AB             | 开④时 Runner **已**改用平铺返回的 Art Prefab            |
-| Legacy 大函数拆 options | 易影响现有「导出全部/选中」菜单回归                            |
-| ⑤ + GLB 内嵌          | 压图空跑 ≠ 合规；面板需提示                               |
-| 总面板命名               | 勿与「资源处理总面板」混淆                                 |
-| URP 落差 / GLB 洋红     | 见 **H**（D13）。主因 Shader，不是空 AB                 |
-| Art 通道混淆            | **导入自动跳过 Art** ≠ **⑤ 不碰 Art**。后者默认打 Art。见 tech-and-ops「Art 目录边界」、规则 33 |
-| 贴图抽出                | 已延后；勿当洋红 blocker。ggdddd 贴图仍嵌在 `Model/glb.glb` |
+| 风险                  | 说明                                                                     |
+| ------------------- | ---------------------------------------------------------------------- |
+| ⑥ 输入源               | 未平铺时应用**任意 Prefab**（近直通），勿写死必须 Art                                     |
+| ④ 后打 AB             | 开④时 Runner **已**改用平铺返回的 Art Prefab                                     |
+| Legacy 大函数拆 options | 易影响现有「导出全部/选中」菜单回归                                                     |
+| ⑤ + GLB 内嵌          | 压图空跑 ≠ 合规；面板需提示                                                        |
+| 总面板命名               | 勿与「资源处理总面板」混淆                                                          |
+| URP 落差 / GLB 洋红     | 见 [d13-glb-magenta](./d13-glb-magenta.md)。主因 Shader，不是空 AB             |
+| Art 通道混淆            | **导入期自动流不碰 Art** ≠ **中间层⑤/L1 不碰 Art**。⑤是代跑面板手动总批量。见 tech-and-ops「三条通道」、规则 33 |
+| 贴图抽出                | 已延后；勿当洋红 blocker。ggdddd 贴图仍嵌在 `Model/glb.glb`                          |
+| 单文件②路径复用（D18）   | 目标已存在不覆盖 → 同名新源可能静默旧文件；见 **K**                                      |
 
 
 ---
+
+
 
 ## E. 低优先级 / 与当前总目标弱相关
 
@@ -75,14 +165,18 @@
 
 ---
 
+
+
 ## F. 需求评估：materialId 默认名 / 列表 / Quiet / 缓存清理
 
-> 2026-08-26 评估；**建议位置**见上表 D9–D11。不立刻改代码，除非先做 D9 小 UX。
+> 2026-08-26 评估；**D9 已落地**；D10 接口预备、多选 UI/Runner 暂缓。
 
-### 1. 「清除」后 materialId 还在——现状
 
-面板「清除」**只清 `sourcePath`**，不清 `materialId` 文本。  
-所以不是传参缓存错乱，是 **UI 未同步**。期望：选源/导入时写入默认名；清源时清 Id（或灰显只读展示默认名）。
+
+### 1. 「清除」后 materialId 还在——现状 → **D9 已修**
+
+选源（拖入/浏览/改路径）写入默认 materialId（三层夹名）；「清除」同时清源与 Id。  
+实现：`PipelineWindow.SetSourcePath` + `PipelineMaterialId.SuggestDefault`。手改 Id 后若再换源，会按新源重写默认名。
 
 ### 2. 导入时写入默认名 + 能否少一次空判断？
 
@@ -94,14 +188,19 @@
 | 省逻辑 | 省的是产品语义分叉（空=算名 / 非空=覆盖），不是省一行 `if`；内核保留防御判断更稳                                                        |
 
 
+
+
 ### 3. 未来 materialId 列表 + 同夹多 FBX/GLB 加文件名后缀
 
 
-| 点    | 结论                                               |
-| ---- | ------------------------------------------------ |
-| 合理性  | **高**，与批量入库消歧一致                                  |
-| 建议位置 | **P2 / D10**                                     |
-| 渠道   | 网页选中 → **单夹/单任务**；人工面板 → **可选多文件**——合理，勿过早揉进网页契约 |
+| 点      | 结论                                                                                                  |
+| ------ | --------------------------------------------------------------------------------------------------- |
+| 合理性    | **高**，与批量入库消歧一致                                                                                     |
+| 建议位置   | **P2 / D10**                                                                                        |
+| 渠道     | 网页选中 → **单夹/单任务**；人工面板 → **可选多文件**——合理，勿过早揉进网页契约                                                    |
+| 预备（本步） | PipelineMaterialId.BuildSourceBindings + PipelineOptions.SourceBindings 已就位；**多选 UI / Runner 消费暂缓** |
+
+
 
 
 ### 4. Quiet ≠ 退出编辑器
@@ -129,17 +228,22 @@
 ### 建议实施顺序（在总排期中的位置）
 
 ```text
-进行中 P0     D13：Material 层已接线；ggdddd 烤 Standard + APP 验洋红
-紧接着 P1     D5 CLI；④后同步 Art 单元路径给⑤（加固）
-紧接着可插    D9 materialId 默认写入/清除同步
-P1 并行       D12 ⑤ 扩展名
-P2            D10 列表；D11 清 Incoming；D14 Pack/音效入口
+已完成        D13：见 [d13-glb-magenta](./d13-glb-magenta.md)
+文档已整理    对外接口分块 A/B → pipeline-flow + cli-getting-started（无代码）
+紧接着 P1     D5 CLI 写 PipelineCli；并行/随后 D16（⑤→50）、D17（④→⑤路径）；**D19 歼31 再验刷白**
+已完成        D9 materialId 选源/清除同步
+已完成        D12 模型扩展名 + L3 识别只读
+P2            D10 列表（接口已预备）；D11 清 Incoming；D14 Pack/音效入口；**D18 单文件同路径复用策略**
 不要做        Quiet=退出；退出默认删 Art；为 Pack 另开一套 ②③⑥
 ```
 
 ---
 
+
+
 ## G. ⑤ 资源处理：后缀 / 未知夹 / 子面板风险
+
+
 
 ### 行为（现状）
 
@@ -148,248 +252,57 @@ P2            D10 列表；D11 清 Incoming；D14 Pack/音效入口
 
 | 侧   | 认什么后缀                                                       |
 | --- | ----------------------------------------------------------- |
-| 贴图  | `TextureCodecRegistry`（实现了 Codec 的扩展名，如 png/jpg/tga…）       |
-| 模型  | `ModelProcessSettings.supportedExtensions`（**默认只有 `.fbx`**） |
+| 贴图  | `TextureCodecRegistry`（Codec 扩展名）；L3 只读展示 |
+| 模型  | `supportedExtensions` 默认 `.fbx` / `.glb` / `.gltf`；L3 只读，改 SO |
+| 材质  | Unity `t:Material`（.mat）；Op 再按 Shader 名过滤；无需后缀表 |
 
 
 - **未知文件夹名**：一般**不用担心**——只要夹在扫描根之下且文件后缀命中，就会收到。  
 - **未知/未注册后缀**：会**静默跳过**（不是报「找不到夹」）。  
 - 平铺 `Unknown/`：那是④分类后缀表的事，与⑤ Codec/扩展名列表是两套。
 
-### 风险（建议代办 D12）
 
 
-| 风险              | 说明                                                           |
-| --------------- | ------------------------------------------------------------ |
-| GLB/管线 vs 模型 Op | 自动化已导 GLB，但模型 L3 默认扩展名无 `.glb` → ⑤「刷顶点白」等对 GLB **可能 0 命中**   |
-| 子面板无「后缀编辑」      | L2/L3 不提供像平铺分类那样的后缀 UI；贴图靠 Codec 代码、模型靠 SO 列表——**易漏配**       |
-| Art 排除前缀 | `excludedPathPrefixes` 默认含 `Assets/Art/`——**只拦导入自动**，不拦⑤总批量。L1 默认路径本就是 Art（见 H 归属修订） |
+### 风险 / D12 收口
 
 
-**建议位置：** P1 **D12**——核对并扩展 `ModelProcessSettings.supportedExtensions`（至少 `.glb`/`.gltf` 若⑤要对它们生效）；文档写清「⑤ 按后缀收，不按文件夹名」。平铺分类面板后缀编辑保留；**不要**与⑤混成同一套 UI（除非以后做统一 Profile）。
-
----
-
-## H. GLB 样例 + 安卓洋红（D13）
-
-> 2026-08-26：编辑器内总流程已用 `Assets/Art/ggdddd` 验收。交付 AB 约 19.1MB，**不是空包**。
+| 风险              | 说明                                                                                                    |
+| --------------- | ----------------------------------------------------------------------------------------------------- |
+| GLB/管线 vs 模型 Op | **已缓**：默认与 Ensure 含 `.glb`/`.gltf`；旧 SO 打开 L3/加载会追加 |
+| 子面板无「后缀编辑」      | **只读展示已做**（L3 `ResourceRecognitionGui`）；改后缀仍在 SO/Codec |
+| Art 排除前缀        | excludedPathPrefixes 默认含 Assets/Art/——**只拦导入自动**，不拦⑤总批量。L1 默认路径本就是 Art（见 [d13](./d13-glb-magenta.md)） |
 
 
-| 项        | 事实                                                                                                     |
-| -------- | ------------------------------------------------------------------------------------------------------ |
-| 通道       | GLB → ③ Prefab → ④ Art → ⑥ 双端 AB                                                                       |
-| 材质球      | 已拆成独立 `.mat`（`Material/Mat_ggdddd_ID**.mat`）                                                           |
-| 贴图       | **仍嵌在** `Model/glb.glb` 子资源                                                                            |
-| 动画       | glb 内有 Take；Art `Animation/` 空；Animator.Controller 为空（另见 D14）                                          |
-| 真机       | **整模型完全洋红**（不是局部块/部分材质）                                                                                |
-| 交付 AB    | `Deliverables/ggdddd/03_assetbundles/Android/ggdddd.assetbundle` 20081400 字节；UnityFS / `2022.3.54f1c1` |
-| manifest | Class 21 Material / 28 Texture / 43 Mesh / 48 Shader 都在                                                |
-
-
-### 是不是主要是 Shader？
-
-**是。APP 不便打开材质查看时，「完全洋红、不是部分」已经够用。**
-
-
-| 观感            | 更像                                                                                   |
-| ------------- | ------------------------------------------------------------------------------------ |
-| **整片纯洋红**（本次） | 所有 Renderer 共用的 Shader 在 Player 里不可用（Missing / 管线不对 / 变体全被剥）。引擎 Error Shader 就是这一种洋红 |
-| 部分洋红、部分正常     | 只有部分材质 Shader 不对，或个别贴图/子网格坏了                                                         |
-| 灰白/黑、形状还在     | Shader 还在，主要是贴图没解出来                                                                  |
-
-
-ggdddd 的 18 个 `.mat` **全部**挂同一套 `PBRGraph`，所以会整模型一起洋红，和「包是空的」「少了几张图」对不上。
-
-
-|        | ggdddd（GLB，真机全洋红）                              | Zhi18（FBX，同工程 AB）          |
-| ------ | ---------------------------------------------- | -------------------------- |
-| Shader | UnityGLTF `**PBRGraph**`（ShaderGraph，Packages） | 内置 **Standard**            |
-| 转换工程   | Built-in（无 URP Asset）                          | 同左                         |
-| APP 目标 | 工单 **URP**                                     | Standard 在 Built-in APP 能亮 |
-
-
-Built-in 工程打进 AB 的 ShaderGraph 变体，URP Player 加载即洋红。编辑器有 UnityGLTF，所以本机看起来正常。
-
-**次因（解释不了「完全洋红」）：** 贴图仍挂 GLB 子资源。抽 png 治的是图，**不能**当洋红第一刀。不必为了定性再改 APP。
-
-### 修复方案
-
-| # | 做法 | 治洋红？ | 代价 |
-|---|---|---|---|
-| **A 已拍板** | Art `.mat` 换到 APP 已有 Shader（先 Standard 验；目标名可配） | 是 | ⑤ Material Op + ConfigData；属性对照表 |
-| B | Converter 工程改成 **专用 URP** 再打 AB（待办 B.8） | 有帮助 | 工程级；仍建议不要把 `PBRGraph` 打进 APP |
-| C | APP 带上 UnityGLTF / Always Included `PBRGraph` | 能亮 | APP 绑死 Packages；不推荐当交付契约 |
-| D | 只抽独立 png | **否** | 可后做 |
-
-
-UnityGLTF 自带的 `ShaderConverters` 主要是 **往 glTF 导**，不是交付用的「PBRGraph → URP Lit」。
-
-验收不必进 APP 材质面板：Converter 侧先把 ggdddd 材质换成现网能亮的 Shader（与 Zhi18 同款或 APP 的 URP Lit）再打一份 AB。若不再整片洋红，定性成立；若变成灰模，再补贴图映射/抽图。
-
-### 和④平铺的关系（架构）
-
-换材质**很像**平铺的一部分（都是改 Art 里的 `.mat` + 保证 Prefab 引用正确），但**不要**再开「另一条平铺管线」。
-
-
-| 做法 | 评价 |
-|---|---|
-| **并入⑤（修订推荐）** | 插件 2 Material/Shader 层；编排④后跑⑤；④⑤默认开，轻重靠子面板勾选 |
-| ~~④ 可选后置步~~ | 旧推荐；与⑤体系重复，不再作主落点 |
-| ⑥ 出包前再换 | 也能治 AB；Art 与交付易不一致 |
-| **原地改 Art 已有 `.mat`** | **合理**：④已切断外引；Prefab 已指向 Art mat |
-| 另存 mat 再改 Prefab 引用 | 多 GUID；一般不必 |
-| 整条「Shader 平铺」新管线 | 过重 |
-
-
-#### 逻辑入口：不要用「是否 GLB」
-
-
-| 判据            | 评价                                                                                                             |
-| ------------- | -------------------------------------------------------------------------------------------------------------- |
-| `扩展名 == .glb` | **过窄且易漏**。问题本质是 **材质挂了 APP 没有的 Shader**，不是格式本身                                                                 |
-| 其它格式会不会出现？    | **会**。任意导入器/插件材质（自定义 ShaderGraph、HDRP Lit、第三方包）只要进 Art 且 APP 无此 Shader，都会整片洋红。FBX 现网多是 Standard 所以「碰巧」没事       |
-| **推荐入口**      | 平铺结束、Art mat 已落盘后：扫本包 `Material/*.mat`，若 `shader` **不属于交付白名单**（如 Standard / 配置的 URP Lit 名）→ 执行属性映射烘焙到目标 Shader |
-
-
-伪流程（主路径在⑤，不在④拷贝循环里）：
-
-```text
-④ CreatePackagedAdjustedPrefab …（结构+引用收敛）
-  → [可选碰撞体等仍可留④]
-⑤ RunMasterBatch（贴图 → 材质Shader规范化 → 模型…）
-  → ⑥ AB
-```
-
-开关：Pipeline 总步④⑤；Op 轻重 → L3「主面板批量包含」+ ConfigData。**不要**写进平铺分类后缀面板。
-
-#### 「材质重映射」这个词？
-
-仓内现有 **Remap** = 引用收敛（GUID/路径改到本包副本：贴图、Prefab、动画 PPtr）。  
-本步是 **交付 Shader 规范化 / 材质烘焙**（换 Shader + 属性槽对照），**不是**同一类 Remap。文档/面板请分开叫，避免和 `RemapMaterialTexturesToArtFolder` 混谈。
-
-#### 平铺会不会膨胀？要不要拆？
-
-会有压力，但**现在不必拆第二条平铺管线**。先做**语义分层**（接口/类名分开即可，实现仍可暂住 Legacy）：
-
-| 层 | 职责 | 例子 |
-|---|---|---|
-| ① 结构平铺 | 拷依赖、分类落 Art、切断外引 | Copy / Category / objectMap |
-| ② 引用收敛 Remap | GUID/路径改到本包 | 贴图/材质/动画 PPtr Remap |
-| ③ 交付规范化（可选） | 曾设想挂④末；**修订**：Shader 烤进⑤，碰撞体可仍留④ |
-
-③ 继续堆「APP 契约后置」可以；不要把 ③ 的逻辑揉进 ① 的拷贝循环。
+**D12 已落地：** 模型扩展名对齐管线；三侧 L3 只读「资源识别」；不做专用后缀编辑器、不与④平铺后缀表合并。
 
 ---
 
-### 归插件 1 还是插件 2？（评估修订 2026-08-26）
 
-> 上一版把「⑤ 扫不到 Art」当成主顾虑，**核对后纠正**：那是把 **导入期自动** 与 **⑤ 总批量** 混在一起了。
 
-#### 事实核对
+## H. GLB 洋红（D13）— 已归档
 
-| 点 | 实际代码 |
-|---|---|
-| L1 批量路径 | `ResourceBatchFolderStore` 默认种子 **`Assets/Art`**；总面板天生对着交付区 |
-| ⑤ `RunMasterBatch` | 按批量路径 `FindAssets` 收集；**不读** `excludedPathPrefixes` |
-| `excludedPathPrefixes`（默认 `Assets/Art/`） | **只拦** 设置自动 / 后处理自动（Importer / delayCall），避免导入区钩子改交付产物 |
-| 编排时序 | Runner：④ 成功 → ⑤ → ⑥；且 `RunPostProcess = runFlatten && runPostProcess`（无④则⑤锁关） |
-| 插件 2 是否已有业务配置 | **有**。`TOol/ConfigData` 下 Texture/Model/Batch SO；压图参数等已是业务刚需 |
-| E.L1 | L2 范围/勾选 vs L3 SO 操作细则——「意向轻重」与「规则参数」可拆的钩子（低优先，方向对） |
+> **D13 已归类完成。** 调研 / 拍板 / 第一刀细节见：
+> **[d13-glb-magenta.md](./d13-glb-magenta.md)**
 
-因此：**「并入⑤、由编排保证④后执行」在架构上成立**；先前「必须留插件 1 才碰得了 Art」不成立。
 
-#### ④⑤ 默认开启（产品意向）
+| 项   | 状态                                     |
+| --- | -------------------------------------- |
+| 根因  | Art .mat 挂 UnityGLTF PBRGraph → APP 洋红 |
+| 修复  | ⑤ Material：烤到可配目标 Shader（默认 Standard）  |
+| 工程  | Op / L1 总批量 / L2 精准 / L3 高级 / ④⑤默认开    |
+| 验收  | ggdddd 安卓已能亮                           |
+| 残余  | 完整槽表、URP Lit 若需、D15 → 低优               |
 
-| 现状 | 目标 |
-|---|---|
-| `PipelineStepSettings`：`runFlatten` / `runPostProcess` **默认 false**；战略写「④⑤ 可选默认关」 | Converter 线：**④⑤ 默认开**；轻重在子面板 / L3「主面板批量包含」勾选 |
-
-合理：自动线要交付可用 AB，平铺 + Art 后处理应是默认路径；「不做压图 / 不烤 Shader」用子流程关 Op，而不是整步关掉⑤。
-
-实现时需同步改：`PipelineStepSettings` 默认值、总面板文案、strategy「可选默认关」、历史「Converter 默认④⑤ 可退化」→ 改为 **默认开、可关**。
-
-#### 并入⑤后仍要补的缝（不是归属问题）
-
-| 缝 | 说明 |
-|---|---|
-| **收集器没有 Material 层** | 现⑤只有贴图（`t:Texture2D`）+ 模型。Shader 规范化扫 `.mat` → 需 **新层**（Material/Shader Op + Collector），挂进 `RunMasterBatch` |
-| **L1 路径与单任务 Art 夹** | ②后 `SyncFolderToL1` 写的是**导入夹**；开④后⑤应对 **本次 Art 单元**（或保持 `Assets/Art` 大根）。编排在④成功后应写入 `PostProcessFolderPaths` / L1 |
-| **内嵌贴图** | GLB 贴图仍在容器内时，贴图 Op 仍可能 0 命中；与 Shader 烤 **正交** |
-| **目标 Shader 名** | 仍属 APP 契约；放 `ConfigData` 的 MaterialProcessSettings（或等价）合理；L3=规则，主批量勾选=这轮要不要跑 |
-
-### 已拍板（2026-08-26）
-
-| 项 | 决定 |
-|---|---|
-| 归属 | **⑤ 资源处理**（插件 2）；入口 = 资源总面板 / `RunMasterBatch` |
-| 是否执行 | **SO**（`ConfigData`：目标 Shader、白名单等）+ L3「主面板批量包含」勾选的 Op Id |
-| 修复方案 | **A**：Art 内不合规 `.mat` **换到 APP 已有 Shader**（先 Standard 验；目标名可配） |
-| ④ 职责 | 结构平铺 + 引用收敛；**不做** Shader 烤 |
-| 导入后处理自动 | 对未平铺资源 = **不保证成功的附属功能**，默认关；交付靠④后⑤总批量 |
-
-### 总面板如何「认识」有哪些资源操作？（扩展方式）
-
-**两层，不要混：**
-
-| 层 | 是否反射 | 现状 |
-|---|---|---|
-| **资源大类**（贴图 / 材质 / 模型） | **否** | 总面板 **写死**三块 + Prefs `MasterBatchIncludeTexture/Material/Model`。交付顺序：总批量「贴图 → 材质 → 模型」 |
-| 大类内的具体 Op | **是** | `TextureOperationRegistry` / `ModelOperationRegistry` / `MaterialOperationRegistry` 扫实现了 `I*AssetOperation` 且无参构造的类型；L3 用 Id 勾选进 `masterBatchOperationIds` / `importAutoOperationIds` |
-
-加一个**贴图/模型已有大类下的新 Op**（如再压一种图）：
-
-```text
-新建 class XxxOperation : ITextureAssetOperation（无参 ctor）
-  → 反射自动进 Registry.All
-  → L3「操作集合」勾进 masterBatchOperationIds
-  → 总批量下次就会跑（无需改总面板按钮）
-```
-
-加一个**全新资源大类**（本步：材质 / Shader 规范化）：
-
-```text
-1. IMaterialAssetOperation + MaterialOperationRegistry（反射）
-2. MaterialTargetCollector（扫 .mat）+ Runner
-3. ConfigData/MaterialProcessSettings.asset（目标 Shader、白名单、masterBatchOperationIds）
-4. 总面板：新 DrawResourceBlock("材质") + MasterBatchIncludeMaterial Prefs
-5. ResourcePostProcessService.RunMasterBatch 接入该层（建议顺序：贴图 → 材质 → 模型）
-6. Pipeline ⑤ 仍调同一 RunMasterBatch 口
-```
-
-**反射只扩展「某大类里有哪些 Op」；「总面板有几个大类按钮」要显式接线。** 这是当前架构，不是疏漏。
-
-### 仍未拍板 / 可控风险
-
-| 项 | 状态 |
-|---|---|
-| APP 目标 Shader 最终名 | **先 Standard**（对齐 FBX 能亮）。URP APP 若仍洋红 → 再改 `Universal Render Pipeline/Lit` |
-| ④⑤ Pipeline 默认开 | **已落地**：`PipelineStepSettings` `.cs` 默认 true；`.asset` 已为 1；strategy / tech-and-ops 已改 |
-| ④后 L1/`PostProcessFolderPaths` 是否改成本次 Art 单元 | **未实现**；约定直指 Art（大根）；两插件对齐说明见 tech-and-ops |
-| 属性槽对照表完整度 | **第一刀**：baseColor→`_MainTex`/`_Color` + metallic/gloss(+normal/occlusion/emission 有则搬)；完整表后补 |
-| GLB 内嵌贴图⑤压图 0 命中 | **已知、正交**；不挡 Shader 烤定性 |
-| ShaderGraph→Standard 在纯 URP APP 仍洋红 | **遇到再说**（改目标 Shader 名即可） |
-
-### 第一刀进度（工程结构）
-
-| 项 | 状态 |
-|---|---|
-| Material 层（Op/Registry/Collector/Runner/SO） | **已做** |
-| `RunMasterBatch` 贴图→材质→模型 + L1 纳入开关 | **已做** |
-| `NormalizeDeliverableShaderOperation`（PBRGraph→Standard） | **已做** |
-| Pipeline ④⑤ 默认开 | **已做** |
-| tech-and-ops ④→⑤ Art 路径对齐说明 | **已做** |
-| ggdddd Art `.mat` 实跑 + 重打 AB + APP 验 | **待本机**：工程正被 Editor 占用，batchmode 无法并行；请在已开工程跑菜单后打 AB |
-| ShaderGraph→Standard 在 URP APP 上仍洋红 | **若发生**：说明 APP 吃不下 Standard → 换 URP Lit，不是方案 A 失败 |
-
-### 第一刀
-
-菜单或临时 Op：只扫 `Art/ggdddd/Material`，不合规 → Standard 原地写回 → 打 AB。通过后按上表接进⑤ Material 层。
 
 ---
+
+
 
 ## I. 动画 / 音效 / 要不要认 Pack（D14）
 
 > 结论：**不必为 Pack 新开 ②③⑥ 管线。**
+
+
 
 ### 模型文件自己能带什么
 
@@ -418,9 +331,13 @@ UnityGLTF 自带的 `ShaderConverters` 主要是 **往 glTF 导**，不是交付
 
 ---
 
+
+
 ## 历史结束事务
 
 > 已做 / 退化 / 明确不做。文档链接保留备查。不要从这里再拉回「待开发」，除非需求翻案。
+
+
 
 ### 已做
 
@@ -435,7 +352,12 @@ UnityGLTF 自带的 `ShaderConverters` 主要是 **往 glTF 导**，不是交付
 | D8     | 直通与 BuildAbOnly 合并 Options        | `RetinarExportSettings` + `RetinarAbApi.Build`                                         |
 | D6     | UnityGLTF 去本机 `file:`，改 git 依赖    | [d6-unitygltf-docker](../04_implementation/d6-unitygltf-docker.md)；本机拉包若未做，属环境验证不是开放功能 |
 | L3     | Shared 对外 Facade                  | **已建** `Shared/Api/`                                                                   |
+| D9     | materialId 选源默认名 / 清除同步           | `PipelineMaterialId` + 面板；D10 绑定列表仅预备                                                  |
+| D12    | ⑤ 模型扩展名 + L3 识别只读展示             | `ModelProcessSettings` + `ResourceRecognitionGui` |
+| D13    | GLB 洋红 / 交付 Shader 规范化            | [d13-glb-magenta](./d13-glb-magenta.md)；Material L1/L2/L3；ggdddd APP 验通                |
 | （无 ID） | 平铺分类面板去掉「添加根 BoxCollider」         | `AddBoxCollider` 默认 false；旧 Prefs 可能仍为 true                                            |
+
+
 
 
 ### 退化（现网为准，本阶段不改）
@@ -450,9 +372,12 @@ UnityGLTF 自带的 `ShaderConverters` 主要是 **往 glTF 导**，不是交付
 自动线**默认不做**（代码暂留，不当开放事务）：
 
 - 导出确认/完成弹窗  
-- Converter 默认④⑤  
-- 全套 00–06 Deliverables  
+- 全套 00–06 Deliverables（日常走成品直达 / 管线⑥）  
 - SafeZone 硬阻断（自动线可关）
+
+> 注：Converter **④⑤ 默认开**（可关），已不在「默认不做」列。
+
+
 
 ### 取消 / 明确不做
 

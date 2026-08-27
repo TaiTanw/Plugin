@@ -55,6 +55,8 @@ public class TextureAdvancedSettingsWindow : EditorWindow
                 "「导入后处理自动」仅导入区，需总面板后处理开关。",
                 MessageType.Info);
 
+            ResourceRecognitionGui.DrawTexture();
+
             DrawConfigFoldout();
             DrawOperationsFoldout();
         }
@@ -83,7 +85,8 @@ public class TextureAdvancedSettingsWindow : EditorWindow
             EditorGUILayout.HelpBox(
                 "【配置归属】勿与「批量路径」或「批量 FBX」混为一谈：\n" +
                 "· 总面板「批量路径」→ EditorPrefs（本机），只决定扫哪些夹；\n" +
-                "· 本页「不介入的目录 / excludedPathPrefixes」→ 本 SO：设置自动与后处理自动跳过这些前缀（默认 Assets/Art/）；\n" +
+                "· 本页「不介入的目录 / excludedPathPrefixes」→ 本 SO：只拦导入期设置/后处理自动（默认 Assets/Art/）；" +
+                "L1 执行全部与管线⑤不读此列表；\n" +
                 "· 批量 FBX 的 deliveryAlertPathPrefixes → 另一份 SO：禁止把 FBX 拷进交付区。\n" +
                 "三份列表默认都写 Art，但是独立的；改交付根请三处对照（见 ARCHITECTURE.md「配置归属」）。",
                 MessageType.None);

@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
 
-/// <summary>材质 Op 批量执行。</summary>
+/// <summary>材质 Op 批量执行与扫描。</summary>
 public static class MaterialOperationRunner
 {
     private const string ProgressBarTitle = "材质处理";
@@ -112,6 +112,101 @@ public static class MaterialOperationRunner
                   "，跳过 " + summary.SkippedCount +
                   "，失败 " + summary.FailedCount +
                   (summary.Canceled ? "（已取消）" : string.Empty));
+        return summary;
+    }
+
+    /// <summary>仅扫描：Evaluate dry-run，不改文件。</summary>
+    public static AssetOperationScanSummary Scan(
+        IList<IMaterialAssetOperation> operations,
+        IList<string> assetPaths,
+        MaterialProcessSettings settings,
+        bool showDialog)
+    {
+        var summary = new AssetOperationScanSummary();
+        if (operations == null || assetPaths == null || settings == null)
+        {
+            return summary;
+        }
+
+        try
+        {
+            int total = operations.Count * Mathf.Max(assetPaths.Count, 1);
+            int done = 0;
+            for (int o = 0; o < operations.Count; o++)
+            {
+                IMaterialAssetOperation operation = operations[o];
+                if (operation == null)
+                {
+                    continue;
+                }
+
+                for (int a = 0; a < assetPaths.Count; a++)
+                {
+                    string assetPath = assetPaths[a];
+                    if (!Application.isBatchMode &&
+                        EditorUtility.DisplayCancelableProgressBar(
+                            "材质扫描",
+                            operation.DisplayName + "：" + assetPath,
+                            total > 0 ? (float)done / total : 0f))
+                    {
+                        summary.Canceled = true;
+                        break;
+                    }
+
+                    done++;
+                    if (string.IsNullOrEmpty(assetPath))
+                    {
+                        continue;
+                    }
+
+                    AssetOperationEvaluation evaluation = operation.Evaluate(assetPath, settings);
+                    string line = operation.DisplayName + " | " + assetPath + " | " + evaluation.Reason;
+                    if (evaluation.NeedsWork)
+                    {
+                        summary.NeedsWorkCount++;
+                        summary.NeedsWorkLines.Add(line);
+                    }
+                    else if (evaluation.Eligibility == AssetOperationEligibility.Skip)
+                    {
+                        summary.SkippedCount++;
+                        if (summary.SkippedLines.Count < 40)
+                        {
+                            summary.SkippedLines.Add(line);
+                        }
+                    }
+                    else
+                    {
+                        summary.NotApplicableCount++;
+                    }
+                }
+
+                if (summary.Canceled)
+                {
+                    break;
+                }
+            }
+        }
+        finally
+        {
+            EditorUtility.ClearProgressBar();
+        }
+
+        Debug.Log("[材质扫描] 需处理 " + summary.NeedsWorkCount +
+                  "，跳过 " + summary.SkippedCount +
+                  "，不适用 " + summary.NotApplicableCount +
+                  (summary.Canceled ? "（已取消）" : string.Empty));
+
+        if (showDialog && !Application.isBatchMode)
+        {
+            EditorUtility.DisplayDialog(
+                "材质扫描",
+                "需处理 " + summary.NeedsWorkCount +
+                "\n跳过 " + summary.SkippedCount +
+                "\n不适用 " + summary.NotApplicableCount +
+                (summary.Canceled ? "\n（已取消）" : string.Empty),
+                "OK");
+        }
+
         return summary;
     }
 

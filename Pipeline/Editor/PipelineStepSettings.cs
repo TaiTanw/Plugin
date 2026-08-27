@@ -22,10 +22,10 @@ public class PipelineStepSettings : ScriptableObject
     [Tooltip("③ 自动化 Prefab。")]
     public bool runPrefab = true;
 
-    [Tooltip("④ 平铺到 Art（Converter 默认开；可关）。")]
+    [Tooltip("④ 平铺到交付中间区 Art（Converter 默认开；根路径写死 Assets/Art）。")]
     public bool runFlatten = true;
 
-    [Tooltip("⑤ 资源总批量（Converter 默认开；对应「按批量路径执行全部」口；须先开④）。")]
+    [Tooltip("⑤ 资源总批量（Converter 默认开；须先开④；对中间区做压图/材质等）。")]
     public bool runPostProcess = true;
 
     [Tooltip("⑥ 仅双端 AB。")]
@@ -35,7 +35,7 @@ public class PipelineStepSettings : ScriptableObject
     public bool exportUnityPackage;
 
     [Header("导入后与 L1 的衔接")]
-    [Tooltip("导入成功后把模型所在夹写入资源处理总面板批量路径（EditorPrefs），便于日后开⑤。")]
+    [Tooltip("高级：导入成功后把模型所在夹写入资源总面板 L1 批量路径（多为 Import 区，不等于 Art 单元）。")]
     public bool syncImportFolderToResourcePanel = true;
 
     [Tooltip("禁止确认弹窗。")]

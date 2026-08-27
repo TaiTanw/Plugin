@@ -27,7 +27,7 @@ public static class RetinarDirectPackage
                 "Retinar 成品直达",
                 "请在 Project 中选中一个或多个 Prefab（可多选）。\n\n" +
                 "本入口不会平铺、不会改 Art、不会加碰撞体。\n" +
-                "未整理的外部 FBX/散落资源请走「批量汇总 > 平铺到 Art」。",
+                "未整理的外部 FBX/散落资源请走「批量汇总 > 平铺到交付中间区 Art」。",
                 "OK");
             return;
         }
@@ -42,9 +42,10 @@ public static class RetinarDirectPackage
                 "Retinar 成品直达",
                 "将对 " + prefabPaths.Count + " 个预制体打包：\n" +
                 "· Android/iOS AB" + (options.ExportUnityPackage ? " + UnityPackage" : string.Empty) + "\n" +
-                "· 交付根: " + options.NormalizedDeliverableRoot + "\n" +
+                "· 交付根: " + options.NormalizedDeliverableRoot +
+                "（RetinarExportSettings，与管线「导出路径设置」同一份）\n" +
                 "· AB 构建根: " + options.NormalizedAssetBundleRoot + "\n" +
-                "· 不修改 Prefab / 不跑门禁\n\n是否继续？",
+                "· 不修改 Prefab / 不跑门禁；本入口强制打 UnityPackage\n\n是否继续？",
                 "打包",
                 "取消"))
         {

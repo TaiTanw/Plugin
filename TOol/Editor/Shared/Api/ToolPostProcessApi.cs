@@ -6,7 +6,8 @@ using System.Collections.Generic;
 
 /// <summary>
 /// 插件 2 · 资源处理子流程对外接口。
-/// 流程编排只决定「要不要⑤」；本口按 L1 纳入开关 + L3 Op 集合执行。
+/// 与 L1「按批量路径执行全部」同一内核（手动路径，不读 excludedPathPrefixes）。
+/// 中间层⑤只是代调本口，不是导入期 AssetPostprocessor 自动流。
 /// </summary>
 public static class ToolPostProcessApi
 {

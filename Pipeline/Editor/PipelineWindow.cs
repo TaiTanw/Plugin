@@ -15,6 +15,8 @@ public class PipelineWindow : EditorWindow
     private RetinarExportSettings exportSettings;
     private string sourcePath = string.Empty;
     private string materialId = string.Empty;
+    /// <summary>上次已为 materialId 同步过的源路径；源变化时才重写默认 Id。</summary>
+    private string materialIdSyncedForSource = string.Empty;
     private string lastResultText = string.Empty;
     private Vector2 scroll;
     private Vector2 resultScroll;
@@ -50,8 +52,8 @@ public class PipelineWindow : EditorWindow
             EditorGUILayout.HelpBox(
                 "拖入一个 .fbx / .glb / .gltf / .obj（工程外或 Assets 内）。\n" +
                 "步骤开关保存在 PipelineStepSettings（SO）。\n" +
-                "「设置自动」仍由【资源处理总面板】EditorPrefs 控制，导入时靠 Unity 回调，本面板不另调。\n" +
-                "⑤ 默认关闭；需要时再勾选（调用资源总批量口）。",
+                "「设置自动」仍由【资源处理总面板】EditorPrefs 控制，导入时靠 Unity 回调，本面板不另调（导入自动流默认不碰 Art）。\n" +
+                "④⑤ Converter 默认开，可关；⑤ = 代跑资源总面板「执行全部」同一内核，不是导入钩子。开④时扫本次 Art 单元。",
                 MessageType.Info);
 
             DrawSourceSection();
@@ -59,11 +61,12 @@ public class PipelineWindow : EditorWindow
             DrawOtherStepsSection();
 
             EditorGUILayout.Space(8f);
-            materialId = EditorGUILayout.TextField("materialId（可选）", materialId);
+            materialId = EditorGUILayout.TextField("materialId（可选，可改）", materialId);
             EditorGUILayout.HelpBox(
-                "留空：用导入夹名（三层规则）作 Prefab 名。\n" +
-                "填写：③ Prefab 用该 Id；④ 通常跟 Prefab 名；⑥ 现网 AB 名仍跟资产名（契约1已退化）。\n" +
-                "开④+⑥时：⑥自动改打平铺返回的 Art Prefab，无需手填 Art 路径。",
+                "选源/拖入/浏览时自动填入默认名（三层夹名规则）；点「清除」时一并清空。\n" +
+                "可手改业务 Id。留空跑管线时 ③ 仍按三层规则算名（内核保留空判断）。\n" +
+                "填写：③ Prefab 用该 Id；④ 通常跟 Prefab 名；⑥ 现网 AB 名仍跟资产名。\n" +
+                "开④+⑥时：⑥自动改打平铺返回的交付中间区 Prefab。",
                 MessageType.None);
 
             EditorGUILayout.Space(10f);
@@ -120,7 +123,13 @@ public class PipelineWindow : EditorWindow
             HandleDrag(drop);
 
             EditorGUILayout.BeginHorizontal();
-            sourcePath = EditorGUILayout.TextField(sourcePath);
+            EditorGUI.BeginChangeCheck();
+            string edited = EditorGUILayout.TextField(sourcePath);
+            if (EditorGUI.EndChangeCheck())
+            {
+                SetSourcePath(edited);
+            }
+
             if (GUILayout.Button("浏览…", GUILayout.Width(64f)))
             {
                 string picked = EditorUtility.OpenFilePanel(
@@ -129,13 +138,13 @@ public class PipelineWindow : EditorWindow
                     "fbx,glb,gltf,obj");
                 if (!string.IsNullOrEmpty(picked))
                 {
-                    sourcePath = picked.Replace("\\", "/");
+                    SetSourcePath(picked);
                 }
             }
 
             if (GUILayout.Button("清除", GUILayout.Width(48f)))
             {
-                sourcePath = string.Empty;
+                SetSourcePath(string.Empty);
             }
 
             EditorGUILayout.EndHorizontal();
@@ -152,16 +161,20 @@ public class PipelineWindow : EditorWindow
             EditorGUI.BeginChangeCheck();
             settings.runImport = EditorGUILayout.ToggleLeft(
                 "启用② 导入（工程外拷入 Import 区）", settings.runImport);
+
+            EditorGUILayout.Space(2f);
+            EditorGUILayout.LabelField("高级操作", EditorStyles.miniBoldLabel);
             settings.syncImportFolderToResourcePanel = EditorGUILayout.ToggleLeft(
-                "导入后写入资源总面板批量路径", settings.syncImportFolderToResourcePanel);
+                "②.2 导入后写入资源总面板批量路径", settings.syncImportFolderToResourcePanel);
             if (EditorGUI.EndChangeCheck())
             {
                 EditorUtility.SetDirty(settings);
             }
 
             EditorGUILayout.HelpBox(
-                "具体「贴图/模型 · 设置自动」开关请在资源处理总面板配置（EditorPrefs）。\n" +
-                "本步只负责是否导入；导入触发后设置自动走 Unity 管线回调。",
+                "②.2 为高级操作：只把「模型所在夹」（多为 Import 区）追加进资源总面板 L1 路径，" +
+                "方便日后手动批量；不开关设置自动，也不等于⑤会扫到 Art 单元。\n" +
+                "「贴图/模型 · 设置自动」请在资源处理总面板配置；本步主开关只负责是否导入。",
                 MessageType.None);
         }
     }
@@ -174,7 +187,8 @@ public class PipelineWindow : EditorWindow
         {
             EditorGUI.BeginChangeCheck();
             settings.runPrefab = EditorGUILayout.ToggleLeft("③ Prefab（默认开）", settings.runPrefab);
-            settings.runFlatten = EditorGUILayout.ToggleLeft("④ 平铺到 Art", settings.runFlatten);
+            settings.runFlatten = EditorGUILayout.ToggleLeft(
+                "④ 平铺到交付中间区（Art）", settings.runFlatten);
             if (!settings.runFlatten && settings.runPostProcess)
             {
                 settings.runPostProcess = false;
@@ -183,12 +197,21 @@ public class PipelineWindow : EditorWindow
             using (new EditorGUI.DisabledScope(!settings.runFlatten))
             {
                 settings.runPostProcess = EditorGUILayout.ToggleLeft(
-                    "⑤ 资源总批量（须先开④）", settings.runPostProcess);
+                    "⑤ 资源总批量（须先开④；对中间区做压图/材质等）", settings.runPostProcess);
             }
+
+            EditorGUILayout.HelpBox(
+                "④ 把 Prefab 依赖收敛进交付中间区，供⑤处理与⑥出包。\n" +
+                "中间区根路径当前写死为 Assets/Art（RetinarPaths.ArtRoot / 平铺代码 const），" +
+                "本面板与 PipelineStepSettings 均不可改；单元为 Art/<名>/。\n" +
+                "开④+⑤时自动扫本次 Art 单元（含 Model/），不再只靠 L1 的 Import 夹。",
+                MessageType.None);
 
             if (!settings.runFlatten)
             {
-                EditorGUILayout.HelpBox("⑤ 依赖④：未平铺到 Art 时总批量通常无意义，故锁定关闭。", MessageType.None);
+                EditorGUILayout.HelpBox(
+                    "⑤ 依赖④：未平铺到交付中间区时总批量通常无意义，故锁定关闭。",
+                    MessageType.None);
             }
 
             settings.runAb = EditorGUILayout.ToggleLeft("⑥ 双端 AB（默认开）", settings.runAb);
@@ -199,6 +222,11 @@ public class PipelineWindow : EditorWindow
             }
 
             settings.quiet = EditorGUILayout.ToggleLeft("Quiet（无确认框）", settings.quiet);
+            EditorGUILayout.HelpBox(
+                "Quiet 只禁止弹窗，不会退出编辑器（退出是 Unity 命令行 -quit）。\n" +
+                "默认勾选：跑完只写面板「上次结果」和 Console。\n" +
+                "取消勾选：本次结束会弹出结果框（④进度条仍可能出现）。",
+                MessageType.None);
             if (EditorGUI.EndChangeCheck())
             {
                 EditorUtility.SetDirty(settings);
@@ -282,9 +310,31 @@ public class PipelineWindow : EditorWindow
         if (evt.type == EventType.DragPerform)
         {
             DragAndDrop.AcceptDrag();
-            sourcePath = candidate;
+            SetSourcePath(candidate);
             evt.Use();
             Repaint();
+        }
+    }
+
+    /// <summary>D9：改源路径时同步默认 materialId；清空源时清 Id。</summary>
+    private void SetSourcePath(string path)
+    {
+        string normalized = (path ?? string.Empty).Replace("\\", "/").Trim();
+        if (string.IsNullOrEmpty(normalized))
+        {
+            sourcePath = string.Empty;
+            materialId = string.Empty;
+            materialIdSyncedForSource = string.Empty;
+            return;
+        }
+
+        bool sourceChanged = !string.Equals(
+            materialIdSyncedForSource, normalized, System.StringComparison.OrdinalIgnoreCase);
+        sourcePath = normalized;
+        if (sourceChanged)
+        {
+            materialId = PipelineMaterialId.SuggestDefault(normalized);
+            materialIdSyncedForSource = normalized;
         }
     }
 
@@ -297,8 +347,31 @@ public class PipelineWindow : EditorWindow
             opt.MaterialId = materialId.Trim();
         }
 
+        // D10 预备：单文件也写成一条绑定，便于日后统一消费；Runner 暂不读 SourceBindings。
+        if (!string.IsNullOrWhiteSpace(sourcePath))
+        {
+            opt.SourceBindings = PipelineMaterialId.BuildSourceBindings(
+                new[] { sourcePath },
+                string.IsNullOrWhiteSpace(materialId) ? null : materialId.Trim());
+        }
+
         PipelineResult result = PipelineRunner.Run(opt);
         lastResultText = result.ToString();
         Repaint();
+
+        if (!opt.Quiet && !Application.isBatchMode)
+        {
+            string body = lastResultText;
+            const int dialogCap = 1500;
+            if (body.Length > dialogCap)
+            {
+                body = body.Substring(0, dialogCap) + "\n…其余见面板「上次结果」/ Console";
+            }
+
+            EditorUtility.DisplayDialog(
+                result.Ok ? "自动化管线完成" : "自动化管线失败",
+                body,
+                "OK");
+        }
     }
 }

@@ -86,7 +86,23 @@ public static class PipelineRunner
             result.Info("[Pipeline] ④→⑥ 改用 Art Prefab × " + prefabPaths.Count);
             for (int i = 0; i < prefabPaths.Count; i++)
             {
-                result.Info("  Art: " + prefabPaths[i]);
+                result.Info("  Art: " + artPrefabPaths[i]);
+            }
+
+            // D17：⑤ 扫本次 Art 单元（含 Model/），不依赖 L1 Prefs / ②.2 写入的 Import 夹。
+            if (options.RunPostProcess &&
+                (options.PostProcessFolderPaths == null || options.PostProcessFolderPaths.Count == 0))
+            {
+                List<string> artUnits = CollectArtUnitFolders(artPrefabPaths);
+                if (artUnits.Count > 0)
+                {
+                    options.PostProcessFolderPaths = artUnits;
+                    result.Info("[Pipeline] ④→⑤ 扫描 Art 单元 × " + artUnits.Count);
+                    for (int i = 0; i < artUnits.Count; i++)
+                    {
+                        result.Info("  ⑤: " + artUnits[i]);
+                    }
+                }
             }
         }
 
@@ -97,11 +113,16 @@ public static class PipelineRunner
             options.RunPostProcess = false;
         }
 
-        // ⑤ 后处理（默认关；不调用「设置自动」）
+        // ⑤ = 代跑 L1「按批量路径执行全部」（手动内核），不是导入期自动流。
         if (options.RunPostProcess)
         {
             string report = ToolPostProcessApi.RunMasterBatch(options.PostProcessFolderPaths);
             result.Info("[Pipeline] ⑤ PostProcess\n" + report);
+
+            // 与 UnityGLTF 菜单导出解耦：⑤ 结束后立刻报告工程内 Mesh 是否全白。
+            string diagnose = ModelVertexColorDiagnose.DiagnosePaths(options.PostProcessFolderPaths);
+            result.Info(diagnose);
+            Debug.Log(diagnose);
         }
 
         // ⑥ AB（Options：输出根 / 可选 UP）
@@ -141,6 +162,59 @@ public static class PipelineRunner
                 result.Fail(PipelineErrorCodes.AbFailed, "Build AB 全部失败");
                 LogResult(result);
                 return result;
+            }
+
+            // ⑥ 重导冲色：仍用通道 3（同一 RunMasterBatch 只跑模型），不走导入钩子打 Art。
+            if (options.RunPostProcess &&
+                options.PostProcessFolderPaths != null &&
+                options.PostProcessFolderPaths.Count > 0)
+            {
+                string postAbDiag = ModelVertexColorDiagnose.DiagnosePaths(options.PostProcessFolderPaths);
+                result.Info("[Pipeline] ⑥ 后\n" + postAbDiag);
+                Debug.Log(postAbDiag);
+
+                if (!ModelVertexColorDiagnose.AreAllWhite(options.PostProcessFolderPaths))
+                {
+                    result.Info("[Pipeline] ⑥ 后顶点色被冲掉 → 仅重跑模型刷白并重打 AB");
+                    string reWhite = ToolPostProcessApi.RunMasterBatch(
+                        options.PostProcessFolderPaths,
+                        includeTexture: false,
+                        includeMaterial: false,
+                        includeModel: true);
+                    result.Info(reWhite);
+
+                    string afterWhite = ModelVertexColorDiagnose.DiagnosePaths(options.PostProcessFolderPaths);
+                    result.Info(afterWhite);
+                    Debug.Log(afterWhite);
+
+                    if (ModelVertexColorDiagnose.AreAllWhite(options.PostProcessFolderPaths))
+                    {
+                        result.AbOutputs.Clear();
+                        RetinarAbBuildResult ab2 = RetinarAbApi.Build(prefabPaths, abOpt);
+                        if (ab2.BuiltBundleFiles != null)
+                        {
+                            result.AbOutputs.AddRange(ab2.BuiltBundleFiles);
+                        }
+
+                        result.Info("[Pipeline] ⑥ 重打 Ab 成功 " + ab2.OkNames.Count +
+                                    " 失败行 " + ab2.FailLines.Count);
+                        for (int i = 0; i < ab2.FailLines.Count; i++)
+                        {
+                            result.Info("  AB fail: " + ab2.FailLines[i]);
+                        }
+
+                        if (!ab2.PartialOk)
+                        {
+                            result.Fail(PipelineErrorCodes.AbFailed, "重打 AB 全部失败");
+                            LogResult(result);
+                            return result;
+                        }
+                    }
+                    else
+                    {
+                        result.Info("[Pipeline] 重刷白后仍非全白，未重打 AB（交付物可能仍含非白顶点色）");
+                    }
+                }
             }
         }
 
@@ -240,6 +314,43 @@ public static class PipelineRunner
         }
 
         return true;
+    }
+
+    /// <summary>
+    /// 从 Art Prefab 路径取出单元根（如 Assets/Art/某模型），供⑤扫 Model/ 与 Prefab 依赖。
+    /// </summary>
+    private static List<string> CollectArtUnitFolders(IList<string> artPrefabPaths)
+    {
+        var folders = new List<string>();
+        if (artPrefabPaths == null)
+        {
+            return folders;
+        }
+
+        string prefix = RetinarPaths.ArtRoot + "/";
+        for (int i = 0; i < artPrefabPaths.Count; i++)
+        {
+            string path = (artPrefabPaths[i] ?? string.Empty).Replace("\\", "/");
+            if (!path.StartsWith(prefix, System.StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            string relative = path.Substring(prefix.Length);
+            int slash = relative.IndexOf('/');
+            if (slash <= 0)
+            {
+                continue;
+            }
+
+            string unit = RetinarPaths.ArtRoot + "/" + relative.Substring(0, slash);
+            if (!folders.Contains(unit))
+            {
+                folders.Add(unit);
+            }
+        }
+
+        return folders;
     }
 
     private static void SyncFolderToL1(string assetModelPath, PipelineResult result)

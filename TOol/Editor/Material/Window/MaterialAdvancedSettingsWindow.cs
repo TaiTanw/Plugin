@@ -3,14 +3,17 @@ using UnityEditor;
 using UnityEngine;
 
 // =====================================================================================
-// L3 模型高级设置：子处理配置（SO）+ 操作集合（导入自动 / 主批量 Op）。
+// L3 材质高级设置：目标 Shader / 白名单（SO）+ 主批量 Op 勾选。
+// 可由 L1 总面板或 L2 精准面板直接打开。
 // =====================================================================================
-public class ModelAdvancedSettingsWindow : EditorWindow
-{
-    private const string PrefFoldConfig = "TOol.ModelAdv.Fold.Config";
-    private const string PrefFoldOps = "TOol.ModelAdv.Fold.Ops";
 
-    private ModelProcessSettings settings;
+/// <summary>材质高级设置窗。</summary>
+public class MaterialAdvancedSettingsWindow : EditorWindow
+{
+    private const string PrefFoldConfig = "TOol.MaterialAdv.Fold.Config";
+    private const string PrefFoldOps = "TOol.MaterialAdv.Fold.Ops";
+
+    private MaterialProcessSettings settings;
     private SerializedObject settingsSerialized;
     private Vector2 scroll;
     private bool foldConfig = true;
@@ -18,13 +21,13 @@ public class ModelAdvancedSettingsWindow : EditorWindow
 
     public static void ShowWindow()
     {
-        var window = GetWindow<ModelAdvancedSettingsWindow>("模型高级设置");
-        window.minSize = new Vector2(520f, 360f);
+        var window = GetWindow<MaterialAdvancedSettingsWindow>("材质高级设置");
+        window.minSize = new Vector2(520f, 320f);
     }
 
     private void OnEnable()
     {
-        settings = ModelProcessSettings.GetOrCreateAsset();
+        settings = MaterialProcessSettings.GetOrCreateAsset();
         foldConfig = EditorPrefs.GetBool(PrefFoldConfig, true);
         foldOps = EditorPrefs.GetBool(PrefFoldOps, true);
     }
@@ -40,7 +43,7 @@ public class ModelAdvancedSettingsWindow : EditorWindow
     {
         if (settings == null)
         {
-            settings = ModelProcessSettings.GetOrCreateAsset();
+            settings = MaterialProcessSettings.GetOrCreateAsset();
         }
 
         settings.EnsureMasterBatchDefaults();
@@ -50,11 +53,11 @@ public class ModelAdvancedSettingsWindow : EditorWindow
             scroll = scrollScope.scrollPosition;
             EditorGUILayout.HelpBox(
                 "本页为团队约定（ScriptableObject，进版本库）。\n" +
-                "「主面板批量包含」决定资源处理总面板执行/扫描跑哪些操作；\n" +
-                "「导入后处理自动」仅导入区，需总面板后处理开关。",
+                "「主面板批量包含」决定资源总面板 / 管线⑤跑哪些材质 Op。\n" +
+                "L2 精准面板的勾选是本机 Prefs，与本页主批量勾选是两套。",
                 MessageType.Info);
 
-            ResourceRecognitionGui.DrawModel(settings);
+            ResourceRecognitionGui.DrawMaterial();
 
             DrawConfigFoldout();
             DrawOperationsFoldout();
@@ -74,7 +77,7 @@ public class ModelAdvancedSettingsWindow : EditorWindow
         {
             using (new EditorGUILayout.HorizontalScope())
             {
-                EditorGUILayout.ObjectField(settings, typeof(ModelProcessSettings), false);
+                EditorGUILayout.ObjectField(settings, typeof(MaterialProcessSettings), false);
                 if (GUILayout.Button("在 Project 中定位", GUILayout.Width(120f)))
                 {
                     EditorGUIUtility.PingObject(settings);
@@ -82,19 +85,31 @@ public class ModelAdvancedSettingsWindow : EditorWindow
             }
 
             EditorGUILayout.HelpBox(
-                "【配置归属】勿与「批量路径」或「批量 FBX」混为一谈：\n" +
-                "· 总面板「批量路径」→ EditorPrefs（本机），只决定扫哪些夹；\n" +
-                "· 本页「不介入的目录 / excludedPathPrefixes」→ 本 SO：只拦导入期设置/后处理自动（默认 Assets/Art/）；" +
-                "L1 执行全部与管线⑤不读此列表；\n" +
-                "· 批量 FBX 的 deliveryAlertPathPrefixes → 另一份 SO：禁止把 FBX 拷进交付区。\n" +
-                "三份列表默认都写 Art，但是独立的；改交付根请三处对照（见 ARCHITECTURE.md「配置归属」）。",
+                "targetShaderName：不合规材质烤到的目标（默认 Standard）。\n" +
+                "allowedShaderNames：已合规则跳过。\n" +
+                "sourceShaderNameSubstrings：源名子串命中则烤（如 PBRGraph）。",
                 MessageType.None);
 
-            ScriptableObjectSettingsGui.Draw(settings, ref settingsSerialized);
-            if (GUI.changed)
+            if (settingsSerialized == null || settingsSerialized.targetObject != settings)
             {
-                EditorUtility.SetDirty(settings);
+                settingsSerialized = new SerializedObject(settings);
             }
+
+            settingsSerialized.Update();
+            SerializedProperty iterator = settingsSerialized.GetIterator();
+            bool enterChildren = true;
+            while (iterator.NextVisible(enterChildren))
+            {
+                enterChildren = false;
+                if (iterator.name == "m_Script" || iterator.name == "masterBatchOperationIds")
+                {
+                    continue;
+                }
+
+                EditorGUILayout.PropertyField(iterator, true);
+            }
+
+            settingsSerialized.ApplyModifiedProperties();
         }
     }
 
@@ -109,16 +124,11 @@ public class ModelAdvancedSettingsWindow : EditorWindow
 
         using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
         {
-            IList<IModelAssetOperation> operations = ModelOperationRegistry.All;
+            IList<IMaterialAssetOperation> operations = MaterialOperationRegistry.All;
             if (operations.Count == 0)
             {
-                EditorGUILayout.HelpBox("未发现 IModelAssetOperation 实现。", MessageType.Warning);
+                EditorGUILayout.HelpBox("未发现 IMaterialAssetOperation 实现。", MessageType.Warning);
                 return;
-            }
-
-            if (settings.importAutoOperationIds == null)
-            {
-                settings.importAutoOperationIds = new List<string>();
             }
 
             if (settings.masterBatchOperationIds == null)
@@ -126,18 +136,21 @@ public class ModelAdvancedSettingsWindow : EditorWindow
                 settings.masterBatchOperationIds = new List<string>();
             }
 
-            foreach (IModelAssetOperation operation in operations)
+            for (int i = 0; i < operations.Count; i++)
             {
+                IMaterialAssetOperation operation = operations[i];
                 using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
                 {
-                    EditorGUILayout.LabelField(operation.DisplayName + "  [" + operation.Id + "]", EditorStyles.boldLabel);
-                    EditorGUILayout.HelpBox(operation.Description, MessageType.None);
+                    EditorGUILayout.LabelField(
+                        operation.DisplayName + "  [" + operation.Id + "]", EditorStyles.boldLabel);
+                    EditorGUILayout.LabelField(
+                        operation.Description, EditorStyles.wordWrappedMiniLabel);
 
                     bool master = settings.masterBatchOperationIds.Contains(operation.Id);
                     bool newMaster = EditorGUILayout.ToggleLeft("主面板批量包含（SO）", master);
                     if (newMaster != master)
                     {
-                        Undo.RecordObject(settings, "修改主面板批量操作");
+                        Undo.RecordObject(settings, "修改材质主面板批量操作");
                         if (newMaster)
                         {
                             settings.masterBatchOperationIds.Add(operation.Id);
@@ -149,30 +162,7 @@ public class ModelAdvancedSettingsWindow : EditorWindow
 
                         EditorUtility.SetDirty(settings);
                     }
-
-                    bool importAuto = settings.importAutoOperationIds.Contains(operation.Id);
-                    bool newImportAuto = EditorGUILayout.ToggleLeft(
-                        "导入后处理自动（仅导入区；需总面板后处理开关）", importAuto);
-                    if (newImportAuto != importAuto)
-                    {
-                        Undo.RecordObject(settings, "修改导入自动操作");
-                        if (newImportAuto)
-                        {
-                            settings.importAutoOperationIds.Add(operation.Id);
-                        }
-                        else
-                        {
-                            settings.importAutoOperationIds.Remove(operation.Id);
-                        }
-
-                        EditorUtility.SetDirty(settings);
-                    }
                 }
-            }
-
-            if (GUI.changed)
-            {
-                AssetDatabase.SaveAssets();
             }
         }
     }

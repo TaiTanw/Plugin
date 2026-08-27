@@ -43,16 +43,26 @@
 - 禁止依赖 `Selection`、禁止卡 `DisplayDialog`。
 - 必须：路径入参、`-logFile`、进程退出码。
 
-### Art 目录边界（防隐患）
+### Art 目录边界（三条通道，勿混「自动」一词）
 
-`Assets/Art/**` = 插件 1 平铺写出的**交付单元**。插件 2 对它有**两条互不混淆的通道**：
+`Assets/Art/**` = 插件 1 平铺写出的**交付单元**。插件 2 / 中间层对它有三条通道；都叫「自动」时最容易混：
 
-| 通道 | 是否碰 Art | 机制 |
-|---|---|---|
-| 设置自动 / 后处理自动（导入期） | **否**（默认） | `excludedPathPrefixes` 含 `Assets/Art/` |
-| ⑤ 总批量 / L1 手动（平铺后） | **是**（默认路径就是 Art） | `ResourceBatchFolderStore`；**不读** exclude 列表 |
+| 通道 | 谁触发 | 是否碰 Art | 机制 |
+|---|---|---|---|
+| **1. 导入期自动流** | Unity `AssetPostprocessor`（设置自动 / 后处理自动） | **否**（正确） | `excludedPathPrefixes` 含 `Assets/Art/`。不改交付区 Importer（规则 33），钩子里也不跑 Art 的 Op |
+| **2. L1 手动总批量** | 资源处理总面板「执行全部」 | **是** | `RunMasterBatch`；**不读** exclude；`triggeredByImport: false` |
+| **3. 中间层⑤** | `PipelineRunner` 勾选⑤ | **是** | **代调通道 2 同一口**（`ToolPostProcessApi.RunMasterBatch`）。看起来像自动，但是编排在调面板手动内核，不是通道 1 |
 
-隐患：把「自动跳过」误读成「⑤ 也碰不到 Art」→ 错误地把 Shader 烤/压图塞回插件 1，或以为开⑤会空跑。细则见 `TOol/ARCHITECTURE.md`、规则 33。
+隐患：把通道 1 的「自动跳过」误读成「管线⑤ / 总批量也碰不到 Art」→ 错误地把 Shader 烤/压图塞回插件 1，或以为开⑤会空跑。  
+另一隐患：为了让管线「自动」生效，把刷白塞进 `OnPostprocessModel` 打 Art → **把通道 3 的事做成了通道 1**，违反规则 33。交付区刷白只走 2/3。
+
+细则见 `TOol/ARCHITECTURE.md`、规则 33。
+
+**顶点刷白（对照）：** Art 上要白，靠通道 2/3，不是靠导入钩子。  
+- FBX（`ModelImporter`）：⑤/手动可开 Read/Write 再写全白。  
+- GLB（UnityGLTF `ScriptedImporter`）：⑤会命中文件，但 Op **跳过**（非失败）。要白顶点需源文件已白或另做 GLB 方案。  
+曾误报 `不是 ModelImporter 资产` 为失败 → 已改为 Skip。  
+**D19：** 色写在导入结果上；⑤ 内贴图批或⑥ `BuildAssetBundles` 可能重导 FBX 冲白。补偿仍走通道 3（模型批 preserve；⑥后若 BAD 则再调同一总批量只跑模型，再重打 AB），**不**在导入钩子里对 Art 刷白。见 backlog **L**。
 
 #### ④ → ⑤ 路径约定（两插件对齐注意事项）
 
@@ -61,13 +71,53 @@
 | **⑤ 默认直指 Art** | L1 `ResourceBatchFolderStore` 种子 / 常用路径 = `Assets/Art`（大根）。平铺产物在此，Shader 烤/压图/模型 Op 都扫这里 |
 | **④ 成功后交给⑤** | Pipeline：`runFlatten && runPostProcess` 时④后调 `ToolPostProcessApi.RunMasterBatch`；⑤**不**再走导入期 exclude |
 | **两插件对齐点** | 插件 1 写 Art 单元目录结构；插件 2 ⑤ 按 L1 批量路径 `FindAssets`。当前产品约定：**路径语义就是 Art**，不要把导入夹当成⑤交付口 |
-| **单任务 Art 单元（可选加固）** | ②后 `SyncFolderToL1` 可能写导入夹；开④后更稳的是把⑤路径改成**本次 Art 单元**（`PostProcessFolderPaths`）。未实现时大根 `Assets/Art` 通常够用——属注意事项，不是归属争议 |
+| **单任务 Art 单元** | ②后 `SyncFolderToL1` 可能写导入夹；开④后 Runner **已**把本次 Art 单元写入 `PostProcessFolderPaths`（D17） |
 | **不要混的词** | 插件 1 Remap = 引用收敛；插件 2 材质层 = **交付 Shader 规范化**（换 Shader + 槽映射），不是同一类 Remap |
 
 ### Remap（插件 1）
 
 平铺时把材质/Prefab **引用改到 Art 副本路径**。  
 **不是**插件 2 的职责；插件 2 的 ③ 只生成独立 Prefab。
+
+### ⑤ 材质处理 / 交付 Shader（为何算资源处理、不归④）
+
+> 核对口径（2026-08-27）：手感像 Inspector 换 Shader；工程上仍是⑤资产 Op。细节归档见 [d13-glb-magenta](../03_open-items/d13-glb-magenta.md)。
+
+#### 关键：源资产 vs 编辑器资产
+
+| | 源侧（入库前 / 容器内） | 编辑器交付资产（Art 等） |
+|---|---|---|
+| 形态 | 磁盘 FBX/GLB、或 glb **子资源**（同 guid 不同 fileID） | 工程内独立 `.mat` / `.png` / `.prefab` / `.controller`… |
+| 谁维护 | DCC / 导入器 | Converter 规则改写后的**可出包文件** |
+| ⑤ 扫什么 | 一般不直接改「源容器」当交付契约 | **已落盘的 Unity 资产路径**（`FindAssets` → 改内容 → `SaveAssets`） |
+
+GLB 线常见：平铺后有独立 `.mat`，贴图仍可挂在 `.glb` 子资源上——材质球已是编辑器资产，贴图源仍可能嵌在容器里。
+
+#### 为何不归④平铺
+
+| | ④ 平铺 | ⑤ 材质（及压图等） |
+|---|---|---|
+| 主动作 | **复制**依赖进 Art + **改关联引用**（GUID/路径指到本包副本） | **修改**已被引用的那份资产**内容**（换 Shader、压图字节、以后改 Controller…） |
+| 引用关系 | Prefab → 新路径上的 mat/贴图 | Prefab **仍指向同一 GUID**；改的是该 GUID 指向的文件内部 |
+| 解决的问题 | 外引切断、目录规范 | APP 契约（认不认 Shader、图是否够小…） |
+
+一句话：**④ = 复制并改「指到谁」；⑤ = 改「被指着的那份东西长什么样」。**  
+不要把 Shader 烤塞进平铺拷贝循环；也不要把 Remap（引用收敛）和「交付 Shader 规范化」混称。
+
+#### 入口与做法（技术要点）
+
+- **入口不是扩展名 `.glb`**，而是 Art 里 `.mat` 的 **`material.shader.name`**：白名单精确匹配则跳过；源名子串（如 `UnityGLTF`/`PBRGraph`）或不在白名单 → 烤到 `targetShaderName`（默认 `Standard`）。
+- **做法**：读旧槽 → 换目标 Shader → 写回 `_MainTex`/`_Color`/metallic/gloss 等；有资产 IO（脏标记 + 保存），与「设置自动」改 Importer 元数据不同，与压源图同属**改资产内容**。
+- **为何治洋红**：APP 无 Packages 里的 ShaderGraph 时整片 Error Shader；换成现网能亮的 Standard（或可配 URP Lit）即可。内嵌贴图是正交问题。
+
+#### 和「设置自动」的像与不像
+
+手感都像改 Inspector；设置自动改 **Importer**；材质烤 / 压图改 **资产正文**。二者都可走资源面板，但导入期自动默认 **exclude Art**；交付靠④后⑤总批量。
+
+#### 推及：动画状态机等
+
+若改的是 Art 里已有 `.controller` / `.anim` **文件内容**，同属⑤类资产后处理（新 Op/大类即可）。  
+若要从 glb **抽出新 Clip 并改 Prefab 绑定**，更偏④增强；不必为「改状态机」单开一条平铺管线。
 
 ### GLB 内嵌贴图 / 为何能拆材质球
 
@@ -94,11 +144,10 @@ CLI `materialId` 可覆盖 Prefab 名。
 | 目的 | 操作 |
 |---|---|
 | ③ Prefab | Project 选中 `.fbx/.glb` → `Tools > 自动化预设体（选中模型）` → 看 `Assets/IncomingPrefab/`（代码：`TOol/Editor/Generated/Prefab/`） |
-| ④ 平铺 | 选 Prefab → `Tools > Retinar > 平铺到 Art`；误拷 `.glb` 到 image 时应先删再平铺（Pipeline **默认开**） |
+| ④ 平铺 | `Tools > Retinar > 批量汇总 > 平铺到交付中间区 Art`（Pipeline **默认开**；根写死 `Assets/Art`） |
 | ⑤ 总批量 | `Tools > 资源处理总面板`：路径直指 Art；顺序 **贴图 → 材质(Shader) → 模型**（Pipeline **默认开**） |
-| ⑤ 第一刀验洋红 | `Tools > 资源处理 > 规范化交付 Shader（选中夹或 ggdddd）` → 再打 AB |
-| ⑥ 规范化 | `从 Art 导出（规范化）`（全套+弹窗，人工线） |
-| ⑥ 直通 | `成品直达`（仅 AB+UP，不改 Art） |
+| ⑥ / 日常出包 | 管线⑥，或 `成品直达 > 选中预制体直通打包（推荐）`（读 `RetinarExportSettings`） |
+| 【遗产】规范化全套导出 | `批量汇总 > 【遗产】从 Art 规范化导出`（路径仍写死 `Deliverables`；后续以直达/⑥为准） |
 
 自动线目标：总面板一键 ②③④⑤⑥（④⑤ 默认开，可关），**无确认弹窗**。
 

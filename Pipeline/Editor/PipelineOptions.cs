@@ -43,6 +43,12 @@ public sealed class PipelineOptions
     /// <summary>CLI/任务 Id；非空时覆盖 Prefab 三层命名。</summary>
     public string MaterialId;
 
+    /// <summary>
+    /// D10 预备：多源 + 各自 materialId。面板/Runner 当前仍走 <see cref="SourcePath"/> + <see cref="MaterialId"/>；
+    /// 正式多选接线前可先用 <see cref="PipelineMaterialId.BuildSourceBindings"/> 生成本列表。
+    /// </summary>
+    public List<PipelineSourceBinding> SourceBindings;
+
     /// <summary>② 完成后的工程内模型路径（也可预填已导入模型）。</summary>
     public List<string> ModelPaths = new List<string>();
 

@@ -14,13 +14,15 @@ Assets/Plugin/
 └─ RetinarBatchBuilder_Share/    插件 1
 ```
 
-### Pipeline（编排）
+### Pipeline（编排 · 对外两块）
 
 | 相对路径 | 职能 |
 |---|---|
 | `Pipeline/ConfigData/` | `PipelineStepSettings` 总步骤 SO |
-| `Pipeline/Editor/PipelineWindow.cs` | `Tools > 自动化管线总面板` |
-| `Pipeline/Editor/PipelineRunner.cs` | 单文件 ②→③→⑥ 编排 |
+| `Pipeline/Editor/PipelineWindow.cs` | **(A)** 人机：`Tools > 自动化管线总面板` |
+| `Pipeline/Editor/PipelineRunner.cs` | **(A/B 共用)** 单文件 ②→③→⑥ 编排内核 |
+| `Pipeline/Editor/PipelineCli.cs` | **(B)** CLI `-executeMethod PipelineCli.Run` · 第一刀 `-source` |
+| 文档 | [pipeline-flow](../04_implementation/pipeline-flow.md) · [cli-getting-started](../04_implementation/cli-getting-started.md) |
 
 ---
 
@@ -96,7 +98,7 @@ Assets/Plugin/
 |---|---|
 | `Plugin2022/` | Unity 2022 宿主根（无整仓 Git） |
 | `Plugin2022/Packages/` | 含 UnityGLTF 等 |
-| `Plugin2022/Assets/Art/` | ④ 交付产物区。插件 2：**导入期自动跳过**；**⑤/L1 总批量默认打这里** |
+| `Plugin2022/Assets/Art/` | ④ 交付产物区。插件 2：**导入期自动流跳过**；**L1 手动总批量 / 中间层⑤**默认打这里（⑤=代跑 L1，不是导入钩子） |
 | `Plugin2022/Assets/IncomingPrefab/` | ③ 默认输出根 |
 | `Plugin2022/Deliverables/` | ⑥ 规范化/直通输出 |
 
@@ -108,5 +110,5 @@ Assets/Plugin/
 插件 2 TOol                         插件 1 Retinar
 ① 收集 / ② 导入设置 / ③ Prefab      ④ 平铺+remap / ⑥ 出包
 ⑤ 后处理 Op                         30_Business 门禁预留
-管线总面板（计划新建）                 菜单人工交付线保留
+管线总面板（已有）+ CLI 壳（D5 待建）   菜单人工交付线保留
 ```
