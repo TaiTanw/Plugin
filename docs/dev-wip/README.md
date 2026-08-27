@@ -2,7 +2,7 @@
 
 > 位置：`Assets/Plugin/docs/dev-wip/`  
 > 用途：CLI / 自动化一体流程开发中的**战略、结构、疑问、实现流程**分册；不替代 `PACKAGING_RULES.md` / `CHANGELOG.md`。  
-> 分支：`feature/cli-pipeline-2022` · 工单：[prd-docs#274](http://swm-server.local:3000/Admin/prd-docs/issues/274)
+> 推荐线：**v1.5.0**（`main` · 流程稳定）· 工单：[prd-docs#274](http://swm-server.local:3000/Admin/prd-docs/issues/274)
 
 | 分册 | 路径 | 内容 |
 |---|---|---|

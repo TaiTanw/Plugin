@@ -4,9 +4,9 @@ Unity Editor 插件集合，用于模型/贴图的**导入期处理**与**交付
 适用环境：Unity 2020.3（Built-in RP）、Windows Editor。
 
 远程仓库：`http://swm-server.local:3000/Hanson/asset-bundle.git`  
-当前版本：**v1.4.4**（`other` / `main` / 标签 `v1.4.4`）  
-**本批重点：** 修复引用拆解不完全（动画材质 PPtr / GetDependencies 补拷）；**区分 FBX 与外来预设体**（预设体套空壳、不 SafeZone 缩放；FBX 仍缩进 SafeZone）；动画循环沿用源 Clip。  
-历史：`v1.4.0` 平铺分类；`v1.3.8` 成品直通；`v1.3.5` 全流程基线
+当前版本：**v1.5.0**（`main` / 标签 `v1.5.0` · **流程稳定**）  
+**本批重点：** 自动化管线 `Pipeline`（②→③→⑥，可选④⑤）+ CLI 入口；TOol Prefab/材质窄口；Retinar AB Options（D8）。  
+历史：`v1.4.4` 平铺/动画循环；`v1.4.0` 平铺分类；`v1.3.8` 成品直通；`v1.3.5` 全流程基线
 
 ---
 
@@ -16,7 +16,7 @@ Unity Editor 插件集合，用于模型/贴图的**导入期处理**与**交付
 |------|------|----------|
 | [`Pipeline/`](./Pipeline/) | **流程编排**：步骤 SO、Runner、自动化管线总面板 | `Tools > 自动化管线总面板` |
 | [`TOol/`](./TOol/) | 批量 FBX 入库；导入期设置 + 源文件/模型后处理 | `Tools > 批量FBX导入`；`Tools > 资源处理总面板` |
-| [`RetinarBatchBuilder_Share/`](./RetinarBatchBuilder_Share/) | **插件 1（v1.4.4）**：分类平铺、引用收敛、FBX/预设体分流、成品直通 | `Tools > Retinar > 批量汇总` / `成品直达` / `打开交付文件夹` |
+| [`RetinarBatchBuilder_Share/`](./RetinarBatchBuilder_Share/) | **插件 1（v1.5.0 线）**：分类平铺、引用收敛、FBX/预设体分流、AB Options / 成品直通 | `Tools > Retinar > 批量汇总` / `成品直达` / `打开交付文件夹` |
 
 **目录边界（防混淆，三条通道）：**  
 - **导入期自动流**（设置自动 / 后处理自动，`AssetPostprocessor`）：默认**不碰** `Assets/Art/**`（`excludedPathPrefixes`），避免与插件 1 的交付 Importer 互踩（规则 33）。这是「不碰 Art」的那条，且应保持如此。  

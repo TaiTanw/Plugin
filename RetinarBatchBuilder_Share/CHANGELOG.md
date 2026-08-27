@@ -2,11 +2,24 @@
 
 记录规则：最新版本写在最上方；每次修改必须填写“原因、改动、影响、验证、回退”。
 
+## 2026-08-27 — v1.5.0：自动化管线流程稳定版
+
+- 原因：CLI / Converter 基线（②→③→⑥，可选④⑤）在宿主工程已跑通，需冻结为可分享的稳定推荐线；相对 v1.4.4 的平铺补丁线，本版以 **Pipeline 编排 + 窄口 API + 材质/后处理面板** 为主。
+- 改动：
+  1. **Pipeline**：总面板、`PipelineRunner`、步骤 SO、`PipelineCli` / materialId 辅助；Quiet 旁路确认框；④ 开时⑥ 打 Art Prefab。
+  2. **TOol**：`Generated/Prefab`、`Shared/Api`；材质标准化与材质工具窗；顶点色诊断/刷白增强（FBX 权威源导致刷白可能被重导冲掉——记为已知可选问题，需人工批处理时见提交说明）。
+  3. **Retinar**：`RetinarAbApi` + `RetinarExportSettings` / Options（D8）；直通菜单薄门面；平铺默认不加 BoxCollider。
+  4. 文档：`docs/dev-wip/` 分册；规则 33 澄清导入期自动 vs L1/⑤。
+- 影响：当前推荐线 **v1.5.0**（流程稳定）。无头 / Docker / UnityGLTF 宿主锁文件等仍按 backlog 推进，不阻断本版编辑器流程。
+- 验证：单文件 FBX/GLB 总面板基线冒烟；可选④⑤；CLI 入口可读（见 `cli-getting-started.md`）。
+- 回退：回退至标签 `v1.4.4`（不含 Pipeline 编排与本批 TOol/AB API）。
+- 关联问题：prd-docs#274；流程稳定提交 `dd65655`。
+
 ## 2026-08-21 — v1.4.4：动画循环只沿用源 Clip 设置
 
 - 原因：平铺按 Clip 文件名是否含 `once` 强制写 `m_LoopTime`。源「点扩散镜片的工作原理」Loop Time 为 0（播完停在结尾），名字不含 once，被改成循环并改名为 `_loop`。
 - 改动：`NormalizePreparedPrefabAnimations` 不再改写 Loop Time。交付 `_loop` / `_once` 后缀只读取源 Clip 的 `isLooping`。删除按名字猜测的 `ShouldLoopAnimation` / `SetClipLoopFlag`。
-- 影响：当前推荐线 **v1.4.4**。新平铺的 Clip 循环与源工程一致。已被改成循环的 Art `.anim` 不会自愈，须删 `Assets/Art/<名>/` 后从源再平铺。
+- 影响：曾为推荐线 **v1.4.4**；现由 **v1.5.0** 接替。新平铺的 Clip 循环与源工程一致。已被改成循环的 Art `.anim` 不会自愈，须删 `Assets/Art/<名>/` 后从源再平铺。
 - 验证：从源再平铺「点扩散镜片工作原理」后，Art Clip 的 `m_LoopTime` 为 0，文件名后缀 `_once`，播放停在结尾。
 - 回退：恢复按名字含 `once` 才 once、否则写 Loop Time=1。
 - 关联问题：平铺后动画变循环。
