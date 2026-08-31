@@ -9,21 +9,21 @@
 ## A. 待开发（已拍板方向）
 
 
-| ID  | 事项                                   | 优先级 | 状态                                                                                   |
-| --- | ------------------------------------ | --- | ------------------------------------------------------------------------------------ |
+| ID  | 事项                                             | 优先级 | 状态                                                                                                                                     |
+| --- | ---------------------------------------------- | --- | -------------------------------------------------------------------------------------------------------------------------------------- |
 | D5  | CLI：`PipelineCli` + `-executeMethod`；最小参数与退出码表 | P1  | **第一刀已写** `PipelineCli.Run`（`-source` / 可选 `-materialId`）→ [cli-getting-started](../04_implementation/cli-getting-started.md)；无头跑通后固化表 |
-| D16 | ⑤ 结构化结果：窄口/Runner 映射 `PostProcessFailed(50)` | P1  | CLI/面板共用；现状 `RunMasterBatch` 仅 string、Runner 不 Fail → 见 [pipeline-flow](../04_implementation/pipeline-flow.md) §4 |
-| D17 | ④成功后同步本次 Art 单元到⑤（`PostProcessFolderPaths`） | — | **已完成**：Runner ④后写 Art 单元根；见 [pipeline-flow](../04_implementation/pipeline-flow.md) |
-| D13 | GLB 通道 AB 安卓洋红（材质/Shader）            | —   | **已完成** → [d13-glb-magenta](./d13-glb-magenta.md)                                    |
-| D12 | ⑤ 模型扩展名 / L3 识别只读展示 | — | **已完成**：默认 .fbx/.glb/.gltf；L3 只读识别说明；见 **G** |
-| D9  | materialId UX：选源时填入默认名；清除源时一并清 Id    | —   | **已完成**：Pipeline 选源/清除同步；见 **F**                                                     |
-| D10 | materialId → 列表（多文件/多夹）；同夹多模型加文件名后缀  | P2  | 评估见 **F**；`SourceBindings` 已预备、**Runner 未消费**（CLI 多源依赖此项） |
-| D11 | 成功后可选清理 Incoming（缓存）；**默认不删 Art**    | P2  | 与 Quiet 无关；见 **F**                                                                   |
-| D14 | 模型自带动画/音效 vs Pack 入口                 | P2  | 评估见 **I**；**暂不新开管线**                                                                 |
-| D15 | ⑤ 扫 Art 范围：单单元路径 vs 大根；Text 标记「已处理」  | P3  | **低优**；见 **J**；暂不实现                                                                  |
-| D18 | 单文件②同目标路径「复用」：源已变仍不覆盖（静默用旧文件） | P2  | **隐患成立**；见 **K**；策略待选：覆盖 / Conflict 失败 / 内容哈希 / 版本后缀 |
-| D19 | FBX 刷白后被重导冲掉（⑤贴图批 / ⑥ AB） | P1  | 补偿走**中间层代跑 L1 总批量**（preserve + ⑥后重刷白再打 AB）；**不**在导入钩子里打 Art。见 **L** |
-| D20 | Art `Prefab/` 夹「看起来」未刷顶点色 | P3  | **可选**。色在 `Model/*.FBX` 子资产；编辑器预览常已白。不挡 CLI。见 **M** |
+| D16 | ⑤ 结构化结果：窄口/Runner 映射 `PostProcessFailed(50)`   | P1  | CLI/面板共用；现状 `RunMasterBatch` 仅 string、Runner 不 Fail → 见 [pipeline-flow](../04_implementation/pipeline-flow.md) §4                      |
+| D17 | ④成功后同步本次 Art 单元到⑤（`PostProcessFolderPaths`）    | —   | **已完成**：Runner ④后写 Art 单元根；见 [pipeline-flow](../04_implementation/pipeline-flow.md)                                                    |
+| D13 | GLB 通道 AB 安卓洋红（材质/Shader）                      | —   | **已完成** → [d13-glb-magenta](./d13-glb-magenta.md)                                                                                      |
+| D12 | ⑤ 模型扩展名 / L3 识别只读展示                            | —   | **已完成**：默认 .fbx/.glb/.gltf；L3 只读识别说明；见 **G**                                                                                           |
+| D9  | materialId UX：选源时填入默认名；清除源时一并清 Id              | —   | **已完成**：Pipeline 选源/清除同步；见 **F**                                                                                                       |
+| D10 | materialId → 列表（多文件/多夹）；同夹多模型加文件名后缀            | P2  | 评估见 **F**；`SourceBindings` 已预备、**Runner 未消费**（CLI 多源依赖此项）                                                                              |
+| D11 | 成功后可选清理 Incoming（缓存）；**默认不删 Art**              | P2  | 与 Quiet 无关；见 **F**                                                                                                                     |
+| D14 | 模型自带动画/音效 vs Pack 入口                           | P2  | 评估见 **I**；**暂不新开管线**                                                                                                                   |
+| D15 | ⑤ 扫 Art 范围：单单元路径 vs 大根；Text 标记「已处理」            | P3  | **低优**；见 **J**；暂不实现                                                                                                                    |
+| D18 | 单文件②同目标路径「复用」：源已变仍不覆盖（静默用旧文件）                  | P2  | **隐患成立**；见 **K**；策略待选：覆盖 / Conflict 失败 / 内容哈希 / 版本后缀                                                                                   |
+| D19 | FBX 刷白后被重导冲掉（⑤贴图批 / ⑥ AB）                      | P1  | 补偿走**中间层代跑 L1 总批量**（preserve + ⑥后重刷白再打 AB）；**不**在导入钩子里打 Art。见 **L**                                                                    |
+| D20 | Art `Prefab/` 夹「看起来」未刷顶点色                      | P3  | **可选**。色在 `Model/*.FBX` 子资产；编辑器预览常已白。不挡 CLI。见 **M**                                                                                    |
 
 
 ---
@@ -32,14 +32,16 @@
 
 ## K. 单文件导入同路径复用（D18）
 
-> 2026-08-27 核对：`ToolImportApi.ImportSingleModel` 对工程外源按 `Import根/三层夹名/原文件名` 落盘；**目标已存在则复用、不 `File.Copy` 覆盖**。
+> 2026-08-27 核对：`ToolImportApi.ImportSingleModel` 对工程外源按 `Import根/三层夹名/原文件名` 落盘；**目标已存在则复用、不** `File.Copy` **覆盖**。
 
-| 问 | 结论 |
-|---|---|
-| 算不算判重失败？ | **否**——有意幂等，同路径再导一次当命中 |
-| 算不算内容缓存加速？ | **否**——只按路径复用，**不比哈希/mtime** |
-| 隐患 | 同三层名 + 同文件名、源已替换 → **静默旧资产**；批量 FBX 面板更严（夹已存在 Skip/Conflict） |
-| 产品方向（待拍板） | CLI/服务器：覆盖更新 / BadArgs·Conflict / 后缀消歧；与 D11 清 Incoming 可配合 |
+
+| 问          | 结论                                                           |
+| ---------- | ------------------------------------------------------------ |
+| 算不算判重失败？   | **否**——有意幂等，同路径再导一次当命中                                       |
+| 算不算内容缓存加速？ | **否**——只按路径复用，**不比哈希/mtime**                                 |
+| 隐患         | 同三层名 + 同文件名、源已替换 → **静默旧资产**；批量 FBX 面板更严（夹已存在 Skip/Conflict） |
+| 产品方向（待拍板）  | CLI/服务器：覆盖更新 / BadArgs·Conflict / 后缀消歧；与 D11 清 Incoming 可配合  |
+
 
 **现状可接受场景：** 同一任务反复跑同一源路径。  
 **不可接受场景：** 同名新版本必须进工程。
@@ -53,15 +55,17 @@
 > 歼31：`Assets/Art/歼31-yy3d_3d/Model/fbx.FBX`  
 > ⑤末 `[顶点色诊断] OK 非白=0`；⑥ AB 后 L1 扫描又报 `33/38 非全白`。
 
-| 项 | 说明 |
-|---|---|
-| **不是** | 通道 1 exclude 挡了⑤；也不是「刷白没写上」（⑤后诊断已证明全白） |
-| **是** | 色写在 ModelImporter 导入结果上；**⑥ `BuildAssetBundles` 会依赖重导**，从 FBX 二进制重建 Mesh → 白丢（⑤内贴图批标脏也可同类冲掉） |
-| 时序 | ⑤（通道 3 代跑 L1）贴图→材质→模型→诊断 OK → ⑥ AB → 工程 Mesh 又黄 → 扫描 BAD；若未重打 AB，**交付 AB 也可能已是黄** |
-| 一刀（正确层） | ⑤模型批前 preserve + colors/colors32；⑥后若仍 BAD → **再调同一 `RunMasterBatch` 只跑模型** → 再打 AB。全部是中间层代跑手动内核 |
-| **不要** | 在 `OnPostprocessModel` 对 Art 刷白来「抗⑥重导」——那是把通道 3 做成通道 1，违反规则 33。导入期自动流继续整段跳过 Art |
-| 验收 | ⑤后诊断 OK；⑥后应再出现诊断；若曾冲掉应有「重刷白并重打 AB」且第二次诊断 OK；再扫 L1 应 Skip |
-| 非管线 | UnityGLTF 只读当前 `mesh.colors`；Export 在⑤前 = 验旧状态。导出黄 ≠ 这份 AB 黄 |
+
+| 项       | 说明                                                                                                  |
+| ------- | --------------------------------------------------------------------------------------------------- |
+| **不是**  | 通道 1 exclude 挡了⑤；也不是「刷白没写上」（⑤后诊断已证明全白）                                                              |
+| **是**   | 色写在 ModelImporter 导入结果上；**⑥** `BuildAssetBundles` **会依赖重导**，从 FBX 二进制重建 Mesh → 白丢（⑤内贴图批标脏也可同类冲掉）    |
+| 时序      | ⑤（通道 3 代跑 L1）贴图→材质→模型→诊断 OK → ⑥ AB → 工程 Mesh 又黄 → 扫描 BAD；若未重打 AB，**交付 AB 也可能已是黄**                   |
+| 一刀（正确层） | ⑤模型批前 preserve + colors/colors32；⑥后若仍 BAD → **再调同一** `RunMasterBatch` **只跑模型** → 再打 AB。全部是中间层代跑手动内核 |
+| **不要**  | 在 `OnPostprocessModel` 对 Art 刷白来「抗⑥重导」——那是把通道 3 做成通道 1，违反规则 33。导入期自动流继续整段跳过 Art                     |
+| 验收      | ⑤后诊断 OK；⑥后应再出现诊断；若曾冲掉应有「重刷白并重打 AB」且第二次诊断 OK；再扫 L1 应 Skip                                            |
+| 非管线     | UnityGLTF 只读当前 `mesh.colors`；Export 在⑤前 = 验旧状态。导出黄 ≠ 这份 AB 黄                                        |
+
 
 GLB 刷白仍暂放。通道定义见 [tech-and-ops](../01_requirements/tech-and-ops.md)「Art 目录边界」。
 
@@ -73,13 +77,15 @@ GLB 刷白仍暂放。通道定义见 [tech-and-ops](../01_requirements/tech-and
 
 > 2026-08-27：`Assets/Art/歼31-yy3d_3d/Prefab` 跑完管线后仍「未刷顶点色」；编辑器观感无明显问题。
 
-| 项 | 说明 |
-|---|---|
-| 色写在哪 | Mesh 顶点色在 **`Art/<名>/Model/*.FBX`** 子资产上，**不在** `.prefab` 文件里 |
+
+| 项              | 说明                                                                                |
+| -------------- | --------------------------------------------------------------------------------- |
+| 色写在哪           | Mesh 顶点色在 `Art/<名>/Model/*.FBX` 子资产上，**不在** `.prefab` 文件里                         |
 | 为何 Prefab 夹像没刷 | 对 Prefab 夹做「模型扫描」若只看 `.prefab`、未跟依赖到 FBX，会空或误判；Project 里点 Prefab 也看不到 Mesh.colors |
-| 编辑器为何像正常 | Prefab 实例引用同一份 FBX Mesh；诊断/Scene 看的是 Model 上已白的 Mesh |
-| 顽固点 | ⑥ 重导、UnityGLTF 另存 glb、看错夹，都可能再显得「Prefab 没白」 |
-| 本阶段 | **不挡 CLI**。要对齐观感：扫 `Model/` 或 Prefab 的 GetDependencies；不要对 Prefab 夹单独写顶点色 |
+| 编辑器为何像正常       | Prefab 实例引用同一份 FBX Mesh；诊断/Scene 看的是 Model 上已白的 Mesh                              |
+| 顽固点            | ⑥ 重导、UnityGLTF 另存 glb、看错夹，都可能再显得「Prefab 没白」                                       |
+| 本阶段            | **不挡 CLI**。要对齐观感：扫 `Model/` 或 Prefab 的 GetDependencies；不要对 Prefab 夹单独写顶点色         |
+
 
 ---
 
@@ -137,17 +143,17 @@ GLB 刷白仍暂放。通道定义见 [tech-and-ops](../01_requirements/tech-and
 ## C. 已知风险（实现时注意）
 
 
-| 风险                  | 说明                                                                     |
-| ------------------- | ---------------------------------------------------------------------- |
-| ⑥ 输入源               | 未平铺时应用**任意 Prefab**（近直通），勿写死必须 Art                                     |
-| ④ 后打 AB             | 开④时 Runner **已**改用平铺返回的 Art Prefab                                     |
-| Legacy 大函数拆 options | 易影响现有「导出全部/选中」菜单回归                                                     |
-| ⑤ + GLB 内嵌          | 压图空跑 ≠ 合规；面板需提示                                                        |
-| 总面板命名               | 勿与「资源处理总面板」混淆                                                          |
-| URP 落差 / GLB 洋红     | 见 [d13-glb-magenta](./d13-glb-magenta.md)。主因 Shader，不是空 AB             |
+| 风险                  | 说明                                                                           |
+| ------------------- | ---------------------------------------------------------------------------- |
+| ⑥ 输入源               | 未平铺时应用**任意 Prefab**（近直通），勿写死必须 Art                                           |
+| ④ 后打 AB             | 开④时 Runner **已**改用平铺返回的 Art Prefab                                           |
+| Legacy 大函数拆 options | 易影响现有「导出全部/选中」菜单回归                                                           |
+| ⑤ + GLB 内嵌          | 压图空跑 ≠ 合规；面板需提示                                                              |
+| 总面板命名               | 勿与「资源处理总面板」混淆                                                                |
+| URP 落差 / GLB 洋红     | 见 [d13-glb-magenta](./d13-glb-magenta.md)。主因 Shader，不是空 AB                   |
 | Art 通道混淆            | **导入期自动流不碰 Art** ≠ **中间层⑤/L1 不碰 Art**。⑤是代跑面板手动总批量。见 tech-and-ops「三条通道」、规则 33 |
-| 贴图抽出                | 已延后；勿当洋红 blocker。ggdddd 贴图仍嵌在 `Model/glb.glb`                          |
-| 单文件②路径复用（D18）   | 目标已存在不覆盖 → 同名新源可能静默旧文件；见 **K**                                      |
+| 贴图抽出                | 已延后；勿当洋红 blocker。ggdddd 贴图仍嵌在 `Model/glb.glb`                                |
+| 单文件②路径复用（D18）       | 目标已存在不覆盖 → 同名新源可能静默旧文件；见 **K**                                               |
 
 
 ---
@@ -250,11 +256,11 @@ P2            D10 列表（接口已预备）；D11 清 Incoming；D14 Pack/音�
 ⑤ 总批量 = 在 L1 **批量路径下递归扫文件** → 用 **扩展名** 过滤：
 
 
-| 侧   | 认什么后缀                                                       |
-| --- | ----------------------------------------------------------- |
-| 贴图  | `TextureCodecRegistry`（Codec 扩展名）；L3 只读展示 |
+| 侧   | 认什么后缀                                                         |
+| --- | ------------------------------------------------------------- |
+| 贴图  | `TextureCodecRegistry`（Codec 扩展名）；L3 只读展示                     |
 | 模型  | `supportedExtensions` 默认 `.fbx` / `.glb` / `.gltf`；L3 只读，改 SO |
-| 材质  | Unity `t:Material`（.mat）；Op 再按 Shader 名过滤；无需后缀表 |
+| 材质  | Unity `t:Material`（.mat）；Op 再按 Shader 名过滤；无需后缀表               |
 
 
 - **未知文件夹名**：一般**不用担心**——只要夹在扫描根之下且文件后缀命中，就会收到。  
@@ -268,8 +274,8 @@ P2            D10 列表（接口已预备）；D11 清 Incoming；D14 Pack/音�
 
 | 风险              | 说明                                                                                                    |
 | --------------- | ----------------------------------------------------------------------------------------------------- |
-| GLB/管线 vs 模型 Op | **已缓**：默认与 Ensure 含 `.glb`/`.gltf`；旧 SO 打开 L3/加载会追加 |
-| 子面板无「后缀编辑」      | **只读展示已做**（L3 `ResourceRecognitionGui`）；改后缀仍在 SO/Codec |
+| GLB/管线 vs 模型 Op | **已缓**：默认与 Ensure 含 `.glb`/`.gltf`；旧 SO 打开 L3/加载会追加                                                   |
+| 子面板无「后缀编辑」      | **只读展示已做**（L3 `ResourceRecognitionGui`）；改后缀仍在 SO/Codec                                                |
 | Art 排除前缀        | excludedPathPrefixes 默认含 Assets/Art/——**只拦导入自动**，不拦⑤总批量。L1 默认路径本就是 Art（见 [d13](./d13-glb-magenta.md)） |
 
 
@@ -353,7 +359,7 @@ P2            D10 列表（接口已预备）；D11 清 Incoming；D14 Pack/音�
 | D6     | UnityGLTF 去本机 `file:`，改 git 依赖    | [d6-unitygltf-docker](../04_implementation/d6-unitygltf-docker.md)；本机拉包若未做，属环境验证不是开放功能 |
 | L3     | Shared 对外 Facade                  | **已建** `Shared/Api/`                                                                   |
 | D9     | materialId 选源默认名 / 清除同步           | `PipelineMaterialId` + 面板；D10 绑定列表仅预备                                                  |
-| D12    | ⑤ 模型扩展名 + L3 识别只读展示             | `ModelProcessSettings` + `ResourceRecognitionGui` |
+| D12    | ⑤ 模型扩展名 + L3 识别只读展示               | `ModelProcessSettings` + `ResourceRecognitionGui`                                      |
 | D13    | GLB 洋红 / 交付 Shader 规范化            | [d13-glb-magenta](./d13-glb-magenta.md)；Material L1/L2/L3；ggdddd APP 验通                |
 | （无 ID） | 平铺分类面板去掉「添加根 BoxCollider」         | `AddBoxCollider` 默认 false；旧 Prefs 可能仍为 true                                            |
 
