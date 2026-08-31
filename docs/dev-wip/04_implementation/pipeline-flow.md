@@ -35,29 +35,46 @@
 
 ---
 
-## 1. 目标流程（产品）
+## 1. 目标流程（产品 · 三区）
 
 ```text
-基线（默认）：
-  ② 导入 → ③ Prefab → ⑥ 仅 Android/iOS AB（quiet）
-
-可选（面板勾选 / 将来 CLI flag）：
-  ④ 平铺 Art（含 remap）
-  ⑤ 压图 / 顶点白 / 材质规范化
-  ⑥+ UnityPackage、门禁、全套 Deliverables
+导入区    源文件
+          1 入库（无勾选：拷入 BatchFbxImportSettings 导入根 + ImportAsset）
+          2 总自动化处理（勾选 = ResourceProcessSwitches.MasterEnabled；分项在资源总面板）
+处理区    ③ Prefab → ④ 平铺 Art → ⑤ 总批量（须开前一步才能开后一步）
+输出区    ⑥ 是否导出（产物/路径读导出 SO）
 ```
+
+面板三格与 SO 连锁：关③则④⑤关；关④则⑤关。`ApplyTo` / Runner 同样约束（防手组 Options）。⑥ 不绑在③上；关③且未预填 Prefab 时⑥会 BadArgs。
 
 ---
 
 ## 2. (A) 中间层 · 步骤 → 对外窄口
 
-| 步 | 窄口（对外） | 实现落点 | 编排消费方式 |
+编排是 **本地变量接力**，不是插件互相调、也不是改 L1 Prefs。每步窄口返回路径（或结果对象），Runner 收下再传入下一步。
+
+```text
+SourcePath
+  → ② ImportSingleModel(out assetPath)     → options.ModelPaths
+  → ③ BuildPrefabs(ModelPaths)             → 局部 prefabPaths
+  → ④ FlattenPaths(prefabPaths, out art)   → 覆盖 prefabPaths = Art Prefab
+                                           → D17 PostProcessFolderPaths = Art 单元根
+  → ⑤ RunMasterBatch → ToolPostProcessResult（FailedCount + Report）
+  → ⑥ Build(prefabPaths, abOpt)            → AB 文件列表
+```
+
+| 步 | 窄口（对外） | 实现落点 | 编排消费方式（入 → 出） |
 |---|---|---|---|
-| ② | `ToolImportApi.ImportSingleModel` | TOol `Shared/Api` | `SourcePath` + `RunImport` |
-| ③ | `ToolPrefabApi.BuildPrefabs` | → `PrefabBuildService` | `ModelPaths` + `MaterialId` |
-| ④ | `RetinarFlattenApi.FlattenPaths` | Retinar `40_Api` | 返回 Art Prefab → ⑥改打这些 |
-| ⑤ | `ToolPostProcessApi.RunMasterBatch` | → L1 总批量 | `PostProcessFolderPaths` 或 L1 Store |
-| ⑥ | `RetinarAbApi.Build` / `BuildAbOnly` | Retinar `40_Api` | `AbBuildOptions` / ExportSettings |
+| 1 入库 / ② | `ToolImportApi.ImportSingleModel` | TOol `Shared/Api` | 入 `SourcePath`；出 `assetModelPath` → `ModelPaths`。总面板跑管线时始终入库 |
+| 2 总闸 | 不调窄口 | `ResourceProcessSwitches.MasterEnabled` | 只决定导入期回调进不进 `Is*Effective`；不替代 L1 分项 |
+| ③ | `ToolPrefabApi.BuildPrefabs` | → `PrefabBuildService` | 入 `ModelPaths` + `MaterialId`；出 `List` Prefab 路径 |
+| ④ | `RetinarFlattenApi.FlattenPaths` | Retinar `40_Api` | 入 ③ 的 Prefab；出 Art Prefab（`out`）覆盖后续⑥用的列表；并推 Art 单元给⑤ |
+| ⑤ | `ToolPostProcessApi.RunMasterBatch` | → L1 总批量 | 入 D17 的 `PostProcessFolderPaths`；出 `ToolPostProcessResult`（FailedCount 复用三层 Summary；细节在 Report） |
+| ⑥ | `RetinarAbApi.Build` | Retinar `40_Api` | 入当前 `prefabPaths` + `AbBuildOptions`（从导出 SO 填：根目录 / 是否 UP / 是否拷交付）；步骤 SO 只提供 `RunAb` |
+
+⑤ 不把路径交给⑥：⑥ 仍用④改写后的 Prefab 列表。⑤ 只改 Art 里 Mesh/贴图/材质；⑥ 打那份 Prefab 的依赖。
+
+**D16 失败口径：** `FailedCount > 0`（NeedsWork 之后 Execute Failed，有一条即算）→ `PostProcessFailed(50)`。Skip / NotApplicable / 未命中 / 未勾选大类 / 仅取消进度条 **不算**。报告字符串不解析。⑤ 失败后⑥ **仍跑**；若⑥再全失败则码被 60 覆盖。无 codec / 加载不到各 Op 口径不齐，**保持现状**（低优 **D21**）。
 
 ### 编排层文件（已建）
 
@@ -76,16 +93,18 @@ Assets/Plugin/Pipeline/
 **不做：** 主动调「设置自动」（那是导入期自动流，靠 Unity 回调，且默认不碰 Art）。  
 **⑤ 不是导入自动：** `ToolPostProcessApi.RunMasterBatch` = L1「按批量路径执行全部」的同一内核。中间层只是代点这个按钮；`triggeredByImport: false`，**不读** `excludedPathPrefixes`。
 
-开④+⑤时：④成功后写入本次 Art 单元到 `PostProcessFolderPaths`（D17），再调⑤。⑥后若顶点色被重导冲掉，仍用同一口只跑模型再重打 AB（D19）——同属中间层代跑手动内核。
+开④+⑤时：④成功后写入本次 Art 单元到 `PostProcessFolderPaths`（D17），再调⑤。顶点刷白 **不是**管线必要门禁（D19 已降级）；⑥后重刷白+重打 AB 若仍留在 Runner，视为遗留、不验收。需白顶点 GLB 见 backlog **L**。
 
 ### Options → Runner 要点
 
 | 字段 | 作用 |
 |---|---|
 | `SourcePath` | 单文件：工程外磁盘或 `Assets/…` |
-| `RunImport/Prefab/Flatten/PostProcess/Ab` | 步骤开关（默认来自 SO） |
+| `RunImport/Prefab/Flatten/PostProcess/Ab` | 步骤开关（来自步骤 SO；`RunAb` = 是否导出） |
+| `AbBuildOptions` | ⑥ 产物与路径：`ApplyTo` 从导出 SO 只读填入（不写回） |
+| `ExportUnityPackage` | 从导出 SO 的快照，便于日志；执行以 `AbBuildOptions` 为准 |
 | `MaterialId` | 覆盖 Prefab 三层命名 |
-| `PostProcessFolderPaths` | ⑤扫描根；null → L1 Prefs |
+| `PostProcessFolderPaths` | ⑤扫描根；开④时 D17 写入本次 Art 单元。null → L1 Prefs（编排不改这份 Prefs） |
 | `Quiet` | 禁 Dialog；**≠** 进程退出 |
 | `SourceBindings` | D10 预备；**Runner 未消费** |
 
@@ -102,7 +121,7 @@ Assets/Plugin/Pipeline/
 | 20 | `ImportFailed` | ② | ✓ |
 | 30 | `PrefabFailed` | ③ | ✓ |
 | 40 | `FlattenFailed` | ④ | ✓ |
-| 50 | `PostProcessFailed` | ⑤ | **未映射**（只打 Info，见 D16） |
+| 50 | `PostProcessFailed` | ⑤ | ✓（FailedCount&gt;0；细节在报告） |
 | 60 | `AbFailed` | ⑥ 全失败 | ✓（部分成功仍 Ok） |
 | 70 | `LicenseOrEnv` | License/环境 | **从未赋值** |
 | 80 | `Other` | 其它 | 预留 |
@@ -116,19 +135,19 @@ Assets/Plugin/Pipeline/
 | `ToolImportApi` | ✓ 单文件 | ✓ | 批量非主入口 |
 | `ToolPrefabApi` | ✓ | ✓ | 多 materialId 靠 D10 |
 | `RetinarFlattenApi` | ✓ + Art 路径 out | ✓ | — |
-| `ToolPostProcessApi` | ✓ 返回 **string** | 弱 | 无 Ok/失败码 → **D16** |
+| `ToolPostProcessApi` | ✓ 返回 **`ToolPostProcessResult`** | ✓ | FailedCount→50（D16 已做） |
 | `RetinarAbApi` | ✓ | ✓ | 部分失败策略见 D5 表 |
 | `PipelineRunner` | ✓（面板已用） | ✓ | — |
 | `PipelineCli` | ✓ `-source` / `-materialId` | ✓ | 无头验收；全 flag 表仍见 B.CLI |
 
-④→⑤：开⑤依赖开④；④成功后 **已**把本次 Art 单元写入 `PostProcessFolderPaths`（D17）。
+④→⑤：开⑤依赖开④（④依赖③）；④成功后 **已**把本次 Art 单元写入 `PostProcessFolderPaths`（D17）。⑤ `FailedCount>0` → 50（D16）。
 
 ---
 
 ## 5. (B) CLI · 指针
 
 结构、第一刀命令、退出码 → **[cli-getting-started.md](./cli-getting-started.md)**。  
-实现顺序：A 已基本完成 → **D5 第一刀已写** → 无头验收 → D16 ⑤结果码。
+实现顺序：A 已基本完成 → **D5 第一刀已写** → 无头验收。D16 ⑤结果码 **已做**。
 
 ---
 
@@ -139,6 +158,6 @@ Assets/Plugin/Pipeline/
 3. ~~实机验证 / D1 / D4~~ **已做**  
 4. ~~对外接口文档分块（A/B）~~ **本文 + CLI 文（结构整理，无代码）**  
 5. ~~**D5 CLI 第一刀**~~ **已写** `PipelineCli.Run`（待无头验收）  
-6. **D16**（⑤结果码）· ~~D17 ④→⑤ Art 单元路径~~ **已做**  
+6. ~~**D16**（⑤结果码）~~ **已做** · ~~D17 ④→⑤ Art 单元路径~~ **已做** · ~~D19 刷白门禁~~ **已降级**  
 
 结果形态：当前 `PipelineResult` + 字符串 Messages；`StepResult` 仍延后（CLI 要稳定按步失败时再加，见 smoke 文）。

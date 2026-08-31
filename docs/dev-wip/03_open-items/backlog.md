@@ -11,19 +11,15 @@
 
 | ID  | 事项                                             | 优先级 | 状态                                                                                                                                     |
 | --- | ---------------------------------------------- | --- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| D5  | CLI：`PipelineCli` + `-executeMethod`；最小参数与退出码表 | P1  | **第一刀已写** `PipelineCli.Run`（`-source` / 可选 `-materialId`）→ [cli-getting-started](../04_implementation/cli-getting-started.md)；无头跑通后固化表 |
-| D16 | ⑤ 结构化结果：窄口/Runner 映射 `PostProcessFailed(50)`   | P1  | CLI/面板共用；现状 `RunMasterBatch` 仅 string、Runner 不 Fail → 见 [pipeline-flow](../04_implementation/pipeline-flow.md) §4                      |
-| D17 | ④成功后同步本次 Art 单元到⑤（`PostProcessFolderPaths`）    | —   | **已完成**：Runner ④后写 Art 单元根；见 [pipeline-flow](../04_implementation/pipeline-flow.md)                                                    |
-| D13 | GLB 通道 AB 安卓洋红（材质/Shader）                      | —   | **已完成** → [d13-glb-magenta](./d13-glb-magenta.md)                                                                                      |
-| D12 | ⑤ 模型扩展名 / L3 识别只读展示                            | —   | **已完成**：默认 .fbx/.glb/.gltf；L3 只读识别说明；见 **G**                                                                                           |
-| D9  | materialId UX：选源时填入默认名；清除源时一并清 Id              | —   | **已完成**：Pipeline 选源/清除同步；见 **F**                                                                                                       |
-| D10 | materialId → 列表（多文件/多夹）；同夹多模型加文件名后缀            | P2  | 评估见 **F**；`SourceBindings` 已预备、**Runner 未消费**（CLI 多源依赖此项）                                                                              |
+| D5  | CLI：无头验收后固化参数/退出码表                            | P1  | 第一刀已写 `PipelineCli.Run`；见 [cli-getting-started](../04_implementation/cli-getting-started.md)                                           |
+| D10 | materialId → 列表（多文件/多夹）；同夹多模型加文件名后缀            | P2  | 评估见 **F**；`SourceBindings` 已预备、**Runner 未消费**                                                                                          |
 | D11 | 成功后可选清理 Incoming（缓存）；**默认不删 Art**              | P2  | 与 Quiet 无关；见 **F**                                                                                                                     |
 | D14 | 模型自带动画/音效 vs Pack 入口                           | P2  | 评估见 **I**；**暂不新开管线**                                                                                                                   |
 | D15 | ⑤ 扫 Art 范围：单单元路径 vs 大根；Text 标记「已处理」            | P3  | **低优**；见 **J**；暂不实现                                                                                                                    |
-| D18 | 单文件②同目标路径「复用」：源已变仍不覆盖（静默用旧文件）                  | P2  | **隐患成立**；见 **K**；策略待选：覆盖 / Conflict 失败 / 内容哈希 / 版本后缀                                                                                   |
-| D19 | FBX 刷白后被重导冲掉（⑤贴图批 / ⑥ AB）                      | P1  | 补偿走**中间层代跑 L1 总批量**（preserve + ⑥后重刷白再打 AB）；**不**在导入钩子里打 Art。见 **L**                                                                    |
-| D20 | Art `Prefab/` 夹「看起来」未刷顶点色                      | P3  | **可选**。色在 `Model/*.FBX` 子资产；编辑器预览常已白。不挡 CLI。见 **M**                                                                                    |
+| D18 | 单文件②同目标路径「复用」：源已变仍不覆盖（静默用旧文件）                  | P2  | **隐患成立**；见 **K**；策略待选                                                                                                                 |
+| D20 | Art `Prefab/` 夹「看起来」未刷顶点色                      | P3  | **可选**。见 **M**                                                                                                                         |
+| D21 | 无 codec / 加载不到：各 Op Skip vs Failed 口径不齐         | P3  | **低优**。见 **N**                                                                                                                         |
+| D22 | `.gltf` 先封装成 GLB 再②（非 DCC 重导）                   | P3  | **策略已评、未实现**。编辑器不承担 DCC；须告知存在此转换。见 **O**                                                                                       |
 
 
 ---
@@ -50,24 +46,18 @@
 
 
 
-## L. FBX 顶点刷白「⑤后 OK、⑥后/扫描又非白」（D19）
+## L. FBX 顶点色 / 导出 GLB（D19 · 已降级）
 
-> 歼31：`Assets/Art/歼31-yy3d_3d/Model/fbx.FBX`  
-> ⑤末 `[顶点色诊断] OK 非白=0`；⑥ AB 后 L1 扫描又报 `33/38 非全白`。
+> **不再作为自动化管线门禁。** 交付 AB 不以「工程 Mesh 全白」为必要。  
+> 顶点色写在 `ModelImporter` 导入结果上；⑥ `BuildAssetBundles` 或贴图批标脏重导会从 FBX 二进制重建 Mesh，白会被冲掉。这主要在 **用 UnityGLTF 把当前 Mesh 导出成 GLB** 时露出来（Export 读 `mesh.colors`）。AB 黄/不黄与菜单导出 GLB 不是同一验法。
 
+**若需要白顶点的 GLB：** 不要靠管线⑥后再导。
 
-| 项       | 说明                                                                                                  |
-| ------- | --------------------------------------------------------------------------------------------------- |
-| **不是**  | 通道 1 exclude 挡了⑤；也不是「刷白没写上」（⑤后诊断已证明全白）                                                              |
-| **是**   | 色写在 ModelImporter 导入结果上；**⑥** `BuildAssetBundles` **会依赖重导**，从 FBX 二进制重建 Mesh → 白丢（⑤内贴图批标脏也可同类冲掉）    |
-| 时序      | ⑤（通道 3 代跑 L1）贴图→材质→模型→诊断 OK → ⑥ AB → 工程 Mesh 又黄 → 扫描 BAD；若未重打 AB，**交付 AB 也可能已是黄**                   |
-| 一刀（正确层） | ⑤模型批前 preserve + colors/colors32；⑥后若仍 BAD → **再调同一** `RunMasterBatch` **只跑模型** → 再打 AB。全部是中间层代跑手动内核 |
-| **不要**  | 在 `OnPostprocessModel` 对 Art 刷白来「抗⑥重导」——那是把通道 3 做成通道 1，违反规则 33。导入期自动流继续整段跳过 Art                     |
-| 验收      | ⑤后诊断 OK；⑥后应再出现诊断；若曾冲掉应有「重刷白并重打 AB」且第二次诊断 OK；再扫 L1 应 Skip                                            |
-| 非管线     | UnityGLTF 只读当前 `mesh.colors`；Export 在⑤前 = 验旧状态。导出黄 ≠ 这份 AB 黄                                        |
+1. 资源处理总面板（或模型子面板）对 `Art/<名>/Model/*.FBX` **手动**「顶点色设为全白」。
+2. **不要**接着做会重导该 FBX 的事：不要打 AB、不要无保护 `SaveAndReimport` / Extract、不要再跑会标脏 Model 的贴图批。
+3. 在 Mesh 仍白时，用 UnityGLTF **导出 Prefab→GLB**。
 
-
-GLB 刷白仍暂放。通道定义见 [tech-and-ops](../01_requirements/tech-and-ops.md)「Art 目录边界」。
+管线里若仍留⑥后诊断/重刷白，视为遗留补偿，**不验收、不挡 CLI**。禁止把刷白塞进 `OnPostprocessModel` 打 Art（规则 33）。GLB 源文件刷白⑤仍 Skip。
 
 ---
 
@@ -105,6 +95,72 @@ GLB 刷白仍暂放。通道定义见 [tech-and-ops](../01_requirements/tech-and
 ---
 
 
+
+## N. 无 codec / 加载不到：Op 口径不齐（D21 · 低优）
+
+> D16 只认 Execute `Failed`。真解码失败（有 codec、`TryDecode` 失败）已是 Failed。灰项是「没有编解码器 / 资产加载不到」——各 Op 态度不同，**保持现状，不趁 D16 改 Op**。
+
+
+| Op | 无 codec / 加载不到时 | 会不会 50 |
+| --- | --- | --- |
+| 压图 Shrink、亮度→Alpha | Evaluate 扩展名 NotApplicable；Execute 里 `codec==null` 为 **Skip** | 多数否 |
+| TGA→PNG | Execute 缺 codec 为 **Failed** | 是 |
+| 刷白 | Evaluate 空 Mesh / 非 ModelImporter 为 **Skip**；Execute 空加载为 **Failed**（总批量先 Evaluate，常进不了 Execute） | 多数否 |
+
+
+**风险：** 敏感度两头偏。Shrink 缺 codec 静默 Skip，CLI 仍 0，可能漏报；TGA 缺 codec 直接 50，可能偏严。以后若要统一，只改这些 Execute/Evaluate 返回值，不改 D16、不解析报告字符串。
+
+**不做：** 本项不挡 CLI / D16。
+
+
+---
+
+## O. `.gltf` 先封装 GLB 再②（D22 · 已评未实现）
+
+> **产品：** 暂不把离散 `.gltf`（JSON + `.bin` + 旁路贴图）当④/⑤一等公民。入口仍是 **`.glb` 单文件**；若源是 `.gltf`，**先打成 GLB 再走现有②**。  
+> **边界：** 编辑器只做（或告知）**容器封装**；**不**承担 DCC（改拓扑、重打材质、轴向/单位、Unity 场景再 Export）。
+
+### 现网
+
+| 点 | 现状 |
+|---|---|
+| ② `ToolImportApi` | 扩展名**认** `.gltf`，但 `File.Copy` **只拷 JSON**；`ImportAsset` 缺伴生时常失败或残缺 |
+| UnityGLTF | `ScriptedImporter` 同时注册 `glb`/`gltf`；菜单 **Export GLB** = 从 Scene/Prefab **重导**，不是入库打包 |
+| `GLBBuilder.ConstructFromGLTF` | 注释写明 **Does not currently copy binary data**；**不能**当实现 |
+| ⑤ 模型 SO | 代码默认 `.gltf`；资产曾出现 `.gitf` 拼写，与②列表不是同一份 |
+
+面板 / ② 日志须**写明存在此转换策略**（见管线总面板选 `.gltf` 时的 HelpBox），即使打包代码未落地。
+
+### 预估实现（若做，只做这一刀）
+
+挂在 `ToolImportApi.ImportSingleModel`（及批量若将来认 gltf）**`File.Copy` 之前**：
+
+```text
+ext == .gltf
+  → 解析 buffers[].uri / images[].uri（相对路径、同目录 .bin、data: URI）
+  → 写成标准 GLB（JSON chunk + BIN chunk，4 字节对齐，URI 改为 bufferView）
+  → 只把 stem.glb 拷进 Import 区 → ImportAsset
+  → 日志：[②] 已将 .gltf 封装为 .glb 再导入（容器打包，非 Unity 重导出）
+缺伴生 / Draco·meshopt·KTX2 等编辑器不打算解 → Fail，文案指向 DCC 或 gltf-pipeline
+```
+
+**禁止：** `GLTFSceneExporter` / 先 Import 再 Export；禁止④把 `.gltf` 与贴图拆到不同夹还当源文件维护相对 URI。
+
+体量：常见「一 json + 一 bin + 若干 png」大约一个小工具类；完整 glTF 2.0 扩展面大，**超出则不做、让 DCC 出 GLB**。
+
+### 风险
+
+| 风险 | 说明 |
+|---|---|
+| 当成 DCC | 美术以为编辑器会「整理模型」；实际最多改容器 |
+| 半截封装 | 只写 JSON chunk、不嵌 BIN → 比现在更难查 |
+| 落盘改名 | `foo.gltf` → `foo.glb`，D18 复用键变了；旧残缺 `.gltf` 可能仍占 Import 夹 |
+| CLI | `-source *.gltf` 无头不能弹窗，只能日志 + 非 0 |
+| ⑤ | 封装后与现网 GLB 相同：刷白仍 Skip；材质烤独立 `.mat` |
+
+**现阶段推荐：** 源在 DCC / `gltf-pipeline` 转 GLB 再给 `-source`。编辑器转换未落地前不要把 `.gltf` 当可交付入口。
+
+---
 
 ## B. 仍模糊 / 未拍板
 
@@ -154,6 +210,7 @@ GLB 刷白仍暂放。通道定义见 [tech-and-ops](../01_requirements/tech-and
 | Art 通道混淆            | **导入期自动流不碰 Art** ≠ **中间层⑤/L1 不碰 Art**。⑤是代跑面板手动总批量。见 tech-and-ops「三条通道」、规则 33 |
 | 贴图抽出                | 已延后；勿当洋红 blocker。ggdddd 贴图仍嵌在 `Model/glb.glb`                                |
 | 单文件②路径复用（D18）       | 目标已存在不覆盖 → 同名新源可能静默旧文件；见 **K**                                               |
+| `.gltf`→GLB 再导入（D22）  | **容器封装 ≠ DCC 重导**。现网②只拷 JSON，旁路 `.bin`/贴图不会进工程。勿用 UnityGLTF 场景 Export 当入库转换；Unity `GLBBuilder.ConstructFromGLTF` **不拷二进制**（源码 TODO）。扩展/Draco/缺伴生应失败并让 DCC 转。落盘名变 `.glb` 与 D18 复用键交叉。见 **O** |
 
 
 ---
@@ -236,11 +293,11 @@ GLB 刷白仍暂放。通道定义见 [tech-and-ops](../01_requirements/tech-and
 ```text
 已完成        D13：见 [d13-glb-magenta](./d13-glb-magenta.md)
 文档已整理    对外接口分块 A/B → pipeline-flow + cli-getting-started（无代码）
-紧接着 P1     D5 CLI 写 PipelineCli；并行/随后 D16（⑤→50）、D17（④→⑤路径）；**D19 歼31 再验刷白**
-已完成        D9 materialId 选源/清除同步
-已完成        D12 模型扩展名 + L3 识别只读
+紧接着 P1     D5 CLI 无头验收后固化参数/退出码表
+已完成        D9 / D12 / D16 / D17；D19 **已降级**（不挡管线；见 **L**）
 P2            D10 列表（接口已预备）；D11 清 Incoming；D14 Pack/音效入口；**D18 单文件同路径复用策略**
-不要做        Quiet=退出；退出默认删 Art；为 Pack 另开一套 ②③⑥
+P3 已评        D22 `.gltf`→GLB 再②（容器封装，非 DCC）；见 **O**
+不要做        Quiet=退出；退出默认删 Art；为 Pack 另开一套 ②③⑥；用 Unity 场景 Export 当 glTF 入库
 ```
 
 ---
@@ -249,37 +306,11 @@ P2            D10 列表（接口已预备）；D11 清 Incoming；D14 Pack/音�
 
 ## G. ⑤ 资源处理：后缀 / 未知夹 / 子面板风险
 
+> **完整归档（识别表 + 加 Op / 加后缀 / 加大类）：**  
+> [04_implementation/op-recognition-and-extend.md](../04_implementation/op-recognition-and-extend.md)  
+> 此前散落在本节、[d13](./d13-glb-magenta.md)「总面板如何认识操作」、Codec 注释。
 
-
-### 行为（现状）
-
-⑤ 总批量 = 在 L1 **批量路径下递归扫文件** → 用 **扩展名** 过滤：
-
-
-| 侧   | 认什么后缀                                                         |
-| --- | ------------------------------------------------------------- |
-| 贴图  | `TextureCodecRegistry`（Codec 扩展名）；L3 只读展示                     |
-| 模型  | `supportedExtensions` 默认 `.fbx` / `.glb` / `.gltf`；L3 只读，改 SO |
-| 材质  | Unity `t:Material`（.mat）；Op 再按 Shader 名过滤；无需后缀表               |
-
-
-- **未知文件夹名**：一般**不用担心**——只要夹在扫描根之下且文件后缀命中，就会收到。  
-- **未知/未注册后缀**：会**静默跳过**（不是报「找不到夹」）。  
-- 平铺 `Unknown/`：那是④分类后缀表的事，与⑤ Codec/扩展名列表是两套。
-
-
-
-### 风险 / D12 收口
-
-
-| 风险              | 说明                                                                                                    |
-| --------------- | ----------------------------------------------------------------------------------------------------- |
-| GLB/管线 vs 模型 Op | **已缓**：默认与 Ensure 含 `.glb`/`.gltf`；旧 SO 打开 L3/加载会追加                                                   |
-| 子面板无「后缀编辑」      | **只读展示已做**（L3 `ResourceRecognitionGui`）；改后缀仍在 SO/Codec                                                |
-| Art 排除前缀        | excludedPathPrefixes 默认含 Assets/Art/——**只拦导入自动**，不拦⑤总批量。L1 默认路径本就是 Art（见 [d13](./d13-glb-magenta.md)） |
-
-
-**D12 已落地：** 模型扩展名对齐管线；三侧 L3 只读「资源识别」；不做专用后缀编辑器、不与④平铺后缀表合并。
+**D12 已落地：** 模型默认 `.fbx/.glb/.gltf`；L3 只读「资源识别」；不做专用后缀编辑器、不与④平铺后缀表合并。未知夹一般无妨；未注册后缀静默跳过。无 codec 口径不齐见 **D21**。
 
 ---
 
@@ -352,7 +383,8 @@ P2            D10 列表（接口已预备）；D11 清 Incoming；D14 Pack/音�
 | ------ | --------------------------------- | -------------------------------------------------------------------------------------- |
 | 接口+中间层 | 1/2 窄口 + `Plugin/Pipeline` Runner | 编排内核                                                                                   |
 | D3     | 自动化管线总面板                          | `Tools > 自动化管线总面板`                                                                     |
-| D2     | Runner：单文件导入、写 L1 路径、字符串结果；⑤默认关   | StepResult 延后                                                                          |
+| D2     | Runner：单文件导入、字符串结果；⑤后改默认开            | 曾含「写 L1 路径」（②.2），已删除；⑤ 靠 D17。StepResult 延后                                              |
+| （无 ID） | 删除②.2 导入后写 L1 批量路径                    | 编排不再改 `ResourceBatchFolderStore`；L1 Prefs 仅人手动批量；⑤ 仍用 D17 Art 单元                       |
 | D1     | ⑥ 契约核对（命名/压缩/main）                | 契约 1/2 **退化已锁**；文档 [d1-ab-only](../04_implementation/d1-ab-only.md)                    |
 | D4     | ② 路径入库进管线；收集认 `.glb`              | 真 `-batchmode` 留给 D5                                                                   |
 | D8     | 直通与 BuildAbOnly 合并 Options        | `RetinarExportSettings` + `RetinarAbApi.Build`                                         |
@@ -361,6 +393,9 @@ P2            D10 列表（接口已预备）；D11 清 Incoming；D14 Pack/音�
 | D9     | materialId 选源默认名 / 清除同步           | `PipelineMaterialId` + 面板；D10 绑定列表仅预备                                                  |
 | D12    | ⑤ 模型扩展名 + L3 识别只读展示               | `ModelProcessSettings` + `ResourceRecognitionGui`                                      |
 | D13    | GLB 洋红 / 交付 Shader 规范化            | [d13-glb-magenta](./d13-glb-magenta.md)；Material L1/L2/L3；ggdddd APP 验通                |
+| D16    | ⑤ `ToolPostProcessResult` + Fail(50)     | 窄口返回 FailedCount（复用三层 Summary）+ Report；有一条 Execute Failed 即 50；Skip/未命中不算。⑤失败⑥仍跑。无 codec 口径不齐见 **D21** |
+| D17    | ④成功后写本次 Art 单元到⑤扫描根               | Runner 写 `PostProcessFolderPaths`；null 才回落 L1 Prefs；编排不改 Prefs |
+| D19    | 管线⑤⑥不以顶点刷白为门禁（降级）                 | FBX 白会被重导冲掉，主要在导出 GLB 露黄。需白：人工刷 + **不要**再触发导入导出后导 GLB。见 **L** |
 | （无 ID） | 平铺分类面板去掉「添加根 BoxCollider」         | `AddBoxCollider` 默认 false；旧 Prefs 可能仍为 true                                            |
 
 
@@ -394,5 +429,6 @@ P2            D10 列表（接口已预备）；D11 清 Incoming；D14 Pack/音�
 | Quiet = 退出编辑器      | 禁止        |
 | 退出默认删 `Assets/Art` | 禁止        |
 | 为 Pack 另开一套 ②③⑥    | 禁止（见 D14） |
+| 用 UnityGLTF 场景 Export 当 `.gltf` 入库 | 禁止（DCC 重导）；入库最多做容器封装，见 **O** / D22 |
 
 

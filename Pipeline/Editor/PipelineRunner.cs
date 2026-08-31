@@ -3,7 +3,7 @@ using System.IO;
 using UnityEngine;
 
 // =====================================================================================
-// Pipeline — 编排入口（单文件 ②→③→⑥；④⑤ 可选；结果用字符串）
+// Pipeline — 编排入口（导入区② → 处理区③④⑤ → 输出区⑥）
 // =====================================================================================
 
 /// <summary>
@@ -62,6 +62,13 @@ public static class PipelineRunner
             return result;
         }
 
+        // ④ 依赖③：无 Prefab 则强制跳过（面板连锁；此处防手组 Options / CLI）
+        if (options.RunFlatten && !options.RunPrefab)
+        {
+            result.Info("[Pipeline] ④ 已请求但③未开，已跳过（④依赖③）");
+            options.RunFlatten = false;
+        }
+
         // ④ 平铺（可选）→ 成功后⑥改打 Art Prefab
         if (options.RunFlatten)
         {
@@ -89,7 +96,7 @@ public static class PipelineRunner
                 result.Info("  Art: " + artPrefabPaths[i]);
             }
 
-            // D17：⑤ 扫本次 Art 单元（含 Model/），不依赖 L1 Prefs / ②.2 写入的 Import 夹。
+            // D17：⑤ 扫本次 Art 单元（含 Model/），不读 L1 Prefs。
             if (options.RunPostProcess &&
                 (options.PostProcessFolderPaths == null || options.PostProcessFolderPaths.Count == 0))
             {
@@ -116,8 +123,8 @@ public static class PipelineRunner
         // ⑤ = 代跑 L1「按批量路径执行全部」（手动内核），不是导入期自动流。
         if (options.RunPostProcess)
         {
-            string report = ToolPostProcessApi.RunMasterBatch(options.PostProcessFolderPaths);
-            result.Info("[Pipeline] ⑤ PostProcess\n" + report);
+            ToolPostProcessResult post = ToolPostProcessApi.RunMasterBatch(options.PostProcessFolderPaths);
+            ApplyPostProcessResult(result, post, "[Pipeline] ⑤ PostProcess");
 
             // 与 UnityGLTF 菜单导出解耦：⑤ 结束后立刻报告工程内 Mesh 是否全白。
             string diagnose = ModelVertexColorDiagnose.DiagnosePaths(options.PostProcessFolderPaths);
@@ -133,12 +140,10 @@ public static class PipelineRunner
             {
                 abOpt = RetinarAbBuildOptions.FromExportSettings(
                     RetinarExportSettings.Current,
-                    options.ExportUnityPackage,
-                    options.Quiet);
+                    quietOverride: options.Quiet);
             }
             else
             {
-                abOpt.ExportUnityPackage = options.ExportUnityPackage;
                 abOpt.Quiet = options.Quiet;
             }
 
@@ -176,12 +181,12 @@ public static class PipelineRunner
                 if (!ModelVertexColorDiagnose.AreAllWhite(options.PostProcessFolderPaths))
                 {
                     result.Info("[Pipeline] ⑥ 后顶点色被冲掉 → 仅重跑模型刷白并重打 AB");
-                    string reWhite = ToolPostProcessApi.RunMasterBatch(
+                    ToolPostProcessResult reWhite = ToolPostProcessApi.RunMasterBatch(
                         options.PostProcessFolderPaths,
                         includeTexture: false,
                         includeMaterial: false,
                         includeModel: true);
-                    result.Info(reWhite);
+                    ApplyPostProcessResult(result, reWhite, "[Pipeline] ⑥后重刷白");
 
                     string afterWhite = ModelVertexColorDiagnose.DiagnosePaths(options.PostProcessFolderPaths);
                     result.Info(afterWhite);
@@ -241,12 +246,6 @@ public static class PipelineRunner
 
                 result.Info("[Pipeline] ② " + importMsg);
                 options.ModelPaths = new List<string> { assetPath };
-
-                if (options.SyncImportFolderToResourcePanel)
-                {
-                    SyncFolderToL1(assetPath, result);
-                }
-
                 return true;
             }
 
@@ -353,33 +352,29 @@ public static class PipelineRunner
         return folders;
     }
 
-    private static void SyncFolderToL1(string assetModelPath, PipelineResult result)
+    /// <summary>
+    /// D16：报告进 Messages；FailedCount&gt;0 且当前仍 Ok 时 Fail(50)。
+    /// 不覆盖已有非 0 码（如随后的 60）。取消进度条不算硬失败。
+    /// </summary>
+    private static void ApplyPostProcessResult(
+        PipelineResult result,
+        ToolPostProcessResult post,
+        string label)
     {
-        if (string.IsNullOrEmpty(assetModelPath))
+        if (post == null)
         {
             return;
         }
 
-        string folder = Path.GetDirectoryName(assetModelPath.Replace("\\", "/"));
-        if (string.IsNullOrEmpty(folder))
+        result.Info(label + " 失败条=" + post.FailedCount +
+                    (post.Canceled ? " 已取消" : string.Empty) +
+                    "\n" + post.Report);
+        if (post.HasHardFailure && result.Ok)
         {
-            return;
+            result.Fail(
+                PipelineErrorCodes.PostProcessFailed,
+                "[Pipeline] ⑤ 有 " + post.FailedCount + " 条处理失败（细节见报告）");
         }
-
-        folder = folder.Replace("\\", "/");
-        var folders = ResourceBatchFolderStore.GetMasterFolders();
-        for (int i = 0; i < folders.Count; i++)
-        {
-            if (string.Equals(folders[i], folder, System.StringComparison.OrdinalIgnoreCase))
-            {
-                result.Info("[Pipeline] 资源总面板批量路径已含: " + folder);
-                return;
-            }
-        }
-
-        folders.Insert(0, folder);
-        ResourceBatchFolderStore.SetMasterFolders(folders);
-        result.Info("[Pipeline] 已写入资源总面板批量路径: " + folder);
     }
 
     private static void LogResult(PipelineResult result)

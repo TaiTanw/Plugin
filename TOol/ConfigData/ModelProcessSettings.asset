@@ -17,7 +17,6 @@ MonoBehaviour:
   supportedExtensions:
   - .fbx
   - .glb
-  - .gltf
   importAutoOperationIds: []
   masterBatchOperationIds:
   - set_vertex_colors_white

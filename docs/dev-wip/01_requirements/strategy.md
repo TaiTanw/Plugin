@@ -43,7 +43,8 @@
 
 | 层 | 存储 | 内容 |
 |---|---|---|
-| 流程总步骤（含②开关） | `PipelineStepSettings` **SO** | runImport/Prefab/Flatten/Post/Ab、同步 L1 路径 |
+| 流程总步骤（含②开关） | `PipelineStepSettings` **SO** | runImport/Prefab/Flatten/Post/Ab、Quiet（Ab = 是否导出） |
+| 导出产物/路径 | `RetinarExportSettings` **SO** | 交付根、AB 根、是否 UP、是否拷 AB 到交付夹 |
 | 资源自动细节 | 资源总面板 **EditorPrefs** + L3 SO | 设置自动/后处理自动、Op、压缩等 |
 
 设置自动：编排**不调用**；导入触发 Unity 回调。结果汇总：暂用字符串（StepResult 延后）。D1 见 d1-ab-only（**已收口**）。
@@ -51,9 +52,9 @@
 ### ⑤ 与流程编排的数据边界（已确认）
 
 - **流程编排**决定：要不要做资源处理（总步骤 Options；Converter **④⑤ 默认开**，可关；轻重在 L1 纳入开关 + L3 Op）。  
-- **资源处理总面板（L1）**决定：做哪些资源类型批量 / 路径 / 开关；**单文件导入后可由管线写入批量路径**。  
+- **资源处理总面板（L1）**决定：人手动批量时做哪些类型 / 路径 / 开关。编排⑤**不读、不写**这份路径；开④时 Runner 传入本次 Art 单元（D17）。  
 - **设置自动**：只靠 Prefs 开关 + Unity `AssetPostprocessor`。  
-- **⑤ 总批量口**：`ToolPostProcessApi.RunMasterBatch`。  
+- **⑤ 总批量口**：`ToolPostProcessApi.RunMasterBatch` → `ToolPostProcessResult`；FailedCount&gt;0 映射 50。  
 - **StepResult**：需要按步 UI/CLI 时再加。
 
 ## 明确不做（本阶段）

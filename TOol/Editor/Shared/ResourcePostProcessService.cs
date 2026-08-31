@@ -14,14 +14,15 @@ public static class ResourcePostProcessService
 {
     /// <summary>
     /// 执行总批量。folderPaths 为 null 时用 L1 Store 当前有效路径。
-    /// 顺序：贴图 → 材质 → 模型（材质烤 Shader 宜在出包前；压图与烤正交）。
+    /// 顺序：贴图 → 材质 → 模型。FailedCount 为三层 Summary.FailedCount 之和。
     /// </summary>
-    public static string RunMasterBatch(
+    public static ToolPostProcessResult RunMasterBatch(
         IList<string> folderPaths = null,
         bool? includeTexture = null,
         bool? includeModel = null,
         bool? includeMaterial = null)
     {
+        var result = new ToolPostProcessResult();
         bool runTex = includeTexture ?? ResourceProcessSwitches.MasterBatchIncludeTexture;
         bool runMat = includeMaterial ?? ResourceProcessSwitches.MasterBatchIncludeMaterial;
         bool runModel = includeModel ?? ResourceProcessSwitches.MasterBatchIncludeModel;
@@ -43,7 +44,7 @@ public static class ResourcePostProcessService
             }
             else
             {
-                report.AppendLine(RunTextureBatch(folders));
+                report.AppendLine(RunTextureBatch(folders, result));
             }
         }
         else
@@ -61,7 +62,7 @@ public static class ResourcePostProcessService
             }
             else
             {
-                report.AppendLine(RunMaterialBatch(folders));
+                report.AppendLine(RunMaterialBatch(folders, result));
             }
         }
         else
@@ -79,7 +80,7 @@ public static class ResourcePostProcessService
             }
             else
             {
-                report.AppendLine(RunModelBatch(folders));
+                report.AppendLine(RunModelBatch(folders, result));
             }
         }
         else
@@ -87,7 +88,8 @@ public static class ResourcePostProcessService
             report.AppendLine("[总批量] 已跳过模型（未纳入）。");
         }
 
-        return report.ToString().TrimEnd();
+        result.Report = report.ToString().TrimEnd();
+        return result;
     }
 
     private static List<string> NormalizeFolders(IList<string> folderPaths)
@@ -110,7 +112,7 @@ public static class ResourcePostProcessService
         return list;
     }
 
-    private static string RunTextureBatch(IList<string> folders)
+    private static string RunTextureBatch(IList<string> folders, ToolPostProcessResult acc)
     {
         List<string> targets = TextureTargetCollector.Collect(
             TextureTargetCollector.Scope.BatchByPath, null, folders);
@@ -131,6 +133,7 @@ public static class ResourcePostProcessService
         }
 
         TextureOperationRunSummary summary = TextureOperationRunner.Run(operations, targets, settings, false);
+        Accumulate(acc, summary.FailedCount, summary.Canceled);
         return "[贴图] 批量完成：目标 " + targets.Count +
                "，改动 " + summary.ChangedCount +
                "，跳过 " + summary.SkippedCount +
@@ -138,7 +141,7 @@ public static class ResourcePostProcessService
                (summary.Canceled ? "（已取消）" : string.Empty);
     }
 
-    private static string RunMaterialBatch(IList<string> folders)
+    private static string RunMaterialBatch(IList<string> folders, ToolPostProcessResult acc)
     {
         List<string> targets = MaterialTargetCollector.CollectFromFolders(folders);
         MaterialProcessSettings settings = MaterialProcessSettings.GetOrCreateAsset();
@@ -159,6 +162,7 @@ public static class ResourcePostProcessService
         }
 
         MaterialOperationRunSummary summary = MaterialOperationRunner.Run(operations, targets, settings);
+        Accumulate(acc, summary.FailedCount, summary.Canceled);
         return "[材质] 批量完成：目标 " + targets.Count +
                "，改动 " + summary.ChangedCount +
                "，跳过 " + summary.SkippedCount +
@@ -166,7 +170,7 @@ public static class ResourcePostProcessService
                (summary.Canceled ? "（已取消）" : string.Empty);
     }
 
-    private static string RunModelBatch(IList<string> folders)
+    private static string RunModelBatch(IList<string> folders, ToolPostProcessResult acc)
     {
         List<string> targets = ModelTargetCollector.Collect(
             ModelTargetCollector.Scope.BatchByPath, null, folders);
@@ -198,10 +202,22 @@ public static class ResourcePostProcessService
         // triggeredByImport=false：与 L1/L2「手动总批量」同路径（会 EnsureModelReadable 等）。
         // 不是导入期后处理自动——后者走 AssetPostprocessor + exclude Art，本口不读 exclude。
         ModelOperationRunSummary summary = ModelOperationRunner.Run(operations, targets, settings, false);
+        Accumulate(acc, summary.FailedCount, summary.Canceled);
         return "[模型] 批量完成：目标 " + targets.Count +
                "，改动 " + summary.ChangedCount +
                "，跳过 " + summary.SkippedCount +
                "，失败 " + summary.FailedCount +
                (summary.Canceled ? "（已取消）" : string.Empty);
+    }
+
+    private static void Accumulate(ToolPostProcessResult acc, int failedCount, bool canceled)
+    {
+        if (acc == null)
+        {
+            return;
+        }
+
+        acc.FailedCount += failedCount;
+        acc.Canceled = acc.Canceled || canceled;
     }
 }

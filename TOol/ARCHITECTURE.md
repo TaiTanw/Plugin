@@ -4,7 +4,8 @@
 最近同步：2026-08-27（三条通道：导入期自动流不碰 Art；L1 手动总批量碰 Art；中间层⑤=代跑 L1，不是导入钩子）  
 适用：Unity 2020.3 / 2022.3 Editor；与 `RetinarBatchBuilder_Share`（插件 1）配合使用。
 
-本文说明目录层级、类职责、自动化两层语义，以及和打包工具的边界。便于扩展新 Operation / 新资源类型时对照。
+本文说明目录层级、类职责、自动化两层语义，以及和打包工具的边界。便于扩展新 Operation / 新资源类型时对照。  
+扩展名识别与加 Op / 加后缀 / 加大类、以及「总可处理文件 → Evaluate → Execute」数据流：[docs/dev-wip/04_implementation/op-recognition-and-extend.md](../docs/dev-wip/04_implementation/op-recognition-and-extend.md)
 
 ### 配置归属（EditorPrefs vs 三份 SO，必读）
 

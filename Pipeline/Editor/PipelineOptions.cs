@@ -25,10 +25,10 @@ public sealed class PipelineOptions
     /// <summary>⑤ 资源后处理（默认关）。</summary>
     public bool RunPostProcess;
 
-    /// <summary>⑥ 仅双端 AB（默认开）。</summary>
+    /// <summary>⑥ 是否导出（步骤开关）。产物种类/路径在 <see cref="AbBuildOptions"/> / 导出 SO。</summary>
     public bool RunAb = true;
 
-    /// <summary>⑥ 是否附带 UnityPackage。</summary>
+    /// <summary>本次从导出 SO 快照的是否打 UP；⑥ 执行以 <see cref="AbBuildOptions"/> 为准。</summary>
     public bool ExportUnityPackage;
 
     /// <summary>⑥ 详细出包选项（输出根等）。</summary>
@@ -36,9 +36,6 @@ public sealed class PipelineOptions
 
     /// <summary>禁止 DisplayDialog（编排默认 true）。</summary>
     public bool Quiet = true;
-
-    /// <summary>导入后把所在夹写入 L1 批量路径（不改 L1 自动化 Prefs 开关）。</summary>
-    public bool SyncImportFolderToResourcePanel = true;
 
     /// <summary>CLI/任务 Id；非空时覆盖 Prefab 三层命名。</summary>
     public string MaterialId;

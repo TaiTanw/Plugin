@@ -10,6 +10,7 @@
 |---|---|---|
 | 无头跑法 | Unity `-batchmode -nographics -quit -executeMethod` | 无官方「只跑插件不开工程」CLI SDK |
 | GLB 导入 | **UnityGLTF**（宿主包） | 插件可不 `using`；无包则无法导入 `.glb` |
+| `.gltf` 源（D22） | **先封装 GLB 再②**（未落地） | **容器打包 ≠ DCC**。勿用场景 Export 入库。现网②只拷 JSON。见 backlog **O** |
 | 备选 | glTFast | 导入失败样本库后再评 |
 | AB API | `BuildPipeline.BuildAssetBundles` | **已用** `ChunkBasedCompression`（LZ4）；文件名/main 见 d1 契约 1/2 |
 | Prefab 中转 | `PrefabUtility.SaveAsPrefabAsset` | ③ 已落地写盘 |
@@ -62,7 +63,7 @@
 - FBX（`ModelImporter`）：⑤/手动可开 Read/Write 再写全白。  
 - GLB（UnityGLTF `ScriptedImporter`）：⑤会命中文件，但 Op **跳过**（非失败）。要白顶点需源文件已白或另做 GLB 方案。  
 曾误报 `不是 ModelImporter 资产` 为失败 → 已改为 Skip。  
-**D19：** 色写在导入结果上；⑤ 内贴图批或⑥ `BuildAssetBundles` 可能重导 FBX 冲白。补偿仍走通道 3（模型批 preserve；⑥后若 BAD 则再调同一总批量只跑模型，再重打 AB），**不**在导入钩子里对 Art 刷白。见 backlog **L**。
+**D19（已降级，非管线门禁）：** 色写在导入结果上；⑥ `BuildAssetBundles` 或贴图批标脏会重导 FBX、冲掉白顶点。这主要在 **UnityGLTF 导出 GLB** 时露出来。交付 AB **不以**工程 Mesh 全白为必要。若要白 GLB：人工对 `Model/*.FBX` 刷白，且**不要**再打 AB / 无保护重导后再导出。禁止把刷白塞进导入钩子打 Art。见 backlog **L**。
 
 #### ④ → ⑤ 路径约定（两插件对齐注意事项）
 
@@ -71,7 +72,7 @@
 | **⑤ 默认直指 Art** | L1 `ResourceBatchFolderStore` 种子 / 常用路径 = `Assets/Art`（大根）。平铺产物在此，Shader 烤/压图/模型 Op 都扫这里 |
 | **④ 成功后交给⑤** | Pipeline：`runFlatten && runPostProcess` 时④后调 `ToolPostProcessApi.RunMasterBatch`；⑤**不**再走导入期 exclude |
 | **两插件对齐点** | 插件 1 写 Art 单元目录结构；插件 2 ⑤ 按 L1 批量路径 `FindAssets`。当前产品约定：**路径语义就是 Art**，不要把导入夹当成⑤交付口 |
-| **单任务 Art 单元** | ②后 `SyncFolderToL1` 可能写导入夹；开④后 Runner **已**把本次 Art 单元写入 `PostProcessFolderPaths`（D17） |
+| **单任务 Art 单元** | 编排不改 L1 Prefs。开④后 Runner 把本次 Art 单元写入 `PostProcessFolderPaths`（D17） |
 | **不要混的词** | 插件 1 Remap = 引用收敛；插件 2 材质层 = **交付 Shader 规范化**（换 Shader + 槽映射），不是同一类 Remap |
 
 ### Remap（插件 1）

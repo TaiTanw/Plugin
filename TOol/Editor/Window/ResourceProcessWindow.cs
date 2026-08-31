@@ -40,7 +40,8 @@ public class ResourceProcessWindow : EditorWindow
 
             EditorGUILayout.LabelField("自动化开关（本机 EditorPrefs，不进版本库）", EditorStyles.boldLabel);
             EditorGUILayout.HelpBox(
-                "总开关：关掉后设置自动/后处理自动都不跑；手动「执行全部」不受影响。\n" +
+                "总开关：关掉后设置自动/后处理自动都不跑；手动「执行全部」不受影响。" +
+                "与【自动化管线】导入区「总自动化处理」是同一 Prefs。\n" +
                 "设置自动：导入前改 Importer（导入区建议按需开启；Art 被 exclude，不会改交付 Importer）。\n" +
                 "后处理自动：导入后跑 Operation——默认跳过 Art，不保证交付生效；" +
                 "内嵌贴图/顶点色须平铺后再用下方批量路径（默认 Art）点「执行全部」。" +
@@ -302,7 +303,7 @@ public class ResourceProcessWindow : EditorWindow
 
     private void RunMasterBatch()
     {
-        lastBatchMessage = ResourcePostProcessService.RunMasterBatch();
+        lastBatchMessage = ResourcePostProcessService.RunMasterBatch().Report;
         Repaint();
     }
 

@@ -70,8 +70,8 @@ Unity.exe
 
 - 入口必须是 Editor 程序集里 **`public static void` 无参**方法。
 - CLI **强制** `Quiet=true`（batchmode 禁 Dialog）。**Quiet ≠ `-quit`**。
-- 退出码 = `PipelineResult.ExitCode`。缺 `-source` → `10`（BadArgs）。未捕获异常 → `80`（Other）。
-- `70` LicenseOrEnv **预留，本入口不赋值**。⑤ 失败暂不映射 `50`（D16）。⑥ 部分成功仍可能 `0`。
+- 退出码 = `PipelineResult.ExitCode`。缺 `-source` → `10`（BadArgs）。⑤ `FailedCount>0` → `50`。未捕获异常 → `80`（Other）。
+- `70` LicenseOrEnv **预留，本入口不赋值**。⑥ 部分成功仍可能 `0`。
 
 ---
 
@@ -79,7 +79,7 @@ Unity.exe
 
 | 参数 | 必填 | 映射 Options | 说明 |
 |---|---|---|---|
-| `-source <path>` 或 `-source=` | 是 | `SourcePath` | 工程外 .glb/.fbx 或 `Assets/…` |
+| `-source <path>` 或 `-source=` | 是 | `SourcePath` | 工程外 **.glb/.fbx** 或 `Assets/…`。**.gltf 请先在 DCC/gltf-pipeline 转 GLB**（D22 编辑器封装未落地；②若直接收 gltf 只拷 JSON） |
 | `-materialId <name>` | 否 | `MaterialId` | 覆盖 Prefab 三层命名 |
 
 步骤开关全部跟 `PipelineStepSettings` SO，不做 flag 覆盖。
@@ -116,6 +116,7 @@ Unity.exe
 | 产物 | `AssetBundles/Android` 与 `iOS`（或 ExportSettings 根下）有包 |
 | 洋红 | **不**算 CLI 失败（D13） |
 | Prefab 夹顶点色 | **不**算 CLI 失败（可选 D20；色在 `Model/*.FBX`） |
+| FBX 刷白 / 导出 GLB 黄 | **不**算 CLI 失败（D19 已降级；需白 GLB 见 backlog **L**） |
 
 先回切工程等 `PipelineCli` 编译进 Editor 程序集，再跑无头命令。
 
@@ -126,9 +127,8 @@ Unity.exe
 | 缺口 | 影响 CLI？ | 代办 |
 |---|---|---|
 | 参数格式未钉死全表 | 第一刀已死 `-source` | backlog **B.CLI** |
-| ⑤ 仅 string；不 Fail(50) | ⑤挂了仍可能 exit 0 | **D16** |
 | `SourceBindings` Runner 未消费 | 多文件 CLI 不可用 | **D10** |
 | `LicenseOrEnv(70)` | 表有洞 | 预留 |
 | ⑥ 部分失败仍 Ok | CI 语义 | 随错误码表拍板 |
 
-**已复用：** `PipelineOptions.FromSettings`、`PipelineRunner`、窄口、D17 Art 单元路径。
+**已复用：** `PipelineOptions.FromSettings`、`PipelineRunner`、窄口、D17 Art 单元路径、D16 `ToolPostProcessResult`。

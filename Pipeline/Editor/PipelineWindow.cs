@@ -7,7 +7,7 @@ using UnityEngine;
 // =====================================================================================
 
 /// <summary>
-/// 流程编排人机入口。与「资源处理总面板」分工：本窗管总步骤；资源窗管具体自动设置 Prefs。
+/// 流程编排人机入口。导入区 1 入库无开关、2 总闸=MasterEnabled；分项自动在资源处理总面板。
 /// </summary>
 public class PipelineWindow : EditorWindow
 {
@@ -31,10 +31,6 @@ public class PipelineWindow : EditorWindow
     {
         settings = PipelineStepSettings.GetOrCreateAsset();
         exportSettings = RetinarExportSettings.GetOrCreateAsset();
-        if (settings != null && exportSettings != null)
-        {
-            settings.exportUnityPackage = exportSettings.exportUnityPackage;
-        }
     }
 
     private void OnGUI()
@@ -50,24 +46,15 @@ public class PipelineWindow : EditorWindow
 
             EditorGUILayout.LabelField("自动化管线（单文件）", EditorStyles.boldLabel);
             EditorGUILayout.HelpBox(
-                "拖入一个 .fbx / .glb / .gltf / .obj（工程外或 Assets 内）。\n" +
-                "步骤开关保存在 PipelineStepSettings（SO）。\n" +
-                "「设置自动」仍由【资源处理总面板】EditorPrefs 控制，导入时靠 Unity 回调，本面板不另调（导入自动流默认不碰 Art）。\n" +
-                "④⑤ Converter 默认开，可关；⑤ = 代跑资源总面板「执行全部」同一内核，不是导入钩子。开④时扫本次 Art 单元。",
+                "三区：导入（1 入库 / 2 总自动化）→ 处理（③④⑤）→ 输出（⑥）。\n" +
+                "处理区须开前一步才能开后一步：③开才能④，④开才能⑤。\n" +
+                "导入区 2 只开总闸（与资源总面板「总开关」同一 Prefs）；" +
+                "哪些资源、设置自动/后处理自动仍在资源总面板。",
                 MessageType.Info);
 
-            DrawSourceSection();
-            DrawStep2Section();
-            DrawOtherStepsSection();
-
-            EditorGUILayout.Space(8f);
-            materialId = EditorGUILayout.TextField("materialId（可选，可改）", materialId);
-            EditorGUILayout.HelpBox(
-                "选源/拖入/浏览时自动填入默认名（三层夹名规则）；点「清除」时一并清空。\n" +
-                "可手改业务 Id。留空跑管线时 ③ 仍按三层规则算名（内核保留空判断）。\n" +
-                "填写：③ Prefab 用该 Id；④ 通常跟 Prefab 名；⑥ 现网 AB 名仍跟资产名。\n" +
-                "开④+⑥时：⑥自动改打平铺返回的交付中间区 Prefab。",
-                MessageType.None);
+            DrawImportZone();
+            DrawProcessZone();
+            DrawOutputZone();
 
             EditorGUILayout.Space(10f);
             using (new EditorGUI.DisabledScope(string.IsNullOrWhiteSpace(sourcePath)))
@@ -112,151 +99,210 @@ public class PipelineWindow : EditorWindow
 
     private void DrawSourceSection()
     {
-        EditorGUILayout.Space(8f);
-        EditorGUILayout.LabelField("输入（单文件）", EditorStyles.boldLabel);
-        using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
+        Rect drop = GUILayoutUtility.GetRect(0f, 56f, GUILayout.ExpandWidth(true));
+        GUI.Box(drop, string.IsNullOrEmpty(sourcePath)
+            ? "拖放模型文件到此处"
+            : Path.GetFileName(sourcePath));
+        HandleDrag(drop);
+
+        EditorGUILayout.BeginHorizontal();
+        EditorGUI.BeginChangeCheck();
+        string edited = EditorGUILayout.TextField(sourcePath);
+        if (EditorGUI.EndChangeCheck())
         {
-            Rect drop = GUILayoutUtility.GetRect(0f, 56f, GUILayout.ExpandWidth(true));
-            GUI.Box(drop, string.IsNullOrEmpty(sourcePath)
-                ? "拖放模型文件到此处"
-                : Path.GetFileName(sourcePath));
-            HandleDrag(drop);
-
-            EditorGUILayout.BeginHorizontal();
-            EditorGUI.BeginChangeCheck();
-            string edited = EditorGUILayout.TextField(sourcePath);
-            if (EditorGUI.EndChangeCheck())
-            {
-                SetSourcePath(edited);
-            }
-
-            if (GUILayout.Button("浏览…", GUILayout.Width(64f)))
-            {
-                string picked = EditorUtility.OpenFilePanel(
-                    "选择模型",
-                    string.IsNullOrEmpty(sourcePath) ? "" : Path.GetDirectoryName(sourcePath),
-                    "fbx,glb,gltf,obj");
-                if (!string.IsNullOrEmpty(picked))
-                {
-                    SetSourcePath(picked);
-                }
-            }
-
-            if (GUILayout.Button("清除", GUILayout.Width(48f)))
-            {
-                SetSourcePath(string.Empty);
-            }
-
-            EditorGUILayout.EndHorizontal();
+            SetSourcePath(edited);
         }
+
+        if (GUILayout.Button("浏览…", GUILayout.Width(64f)))
+        {
+            string picked = EditorUtility.OpenFilePanel(
+                "选择模型",
+                string.IsNullOrEmpty(sourcePath) ? "" : Path.GetDirectoryName(sourcePath),
+                "fbx,glb,gltf,obj");
+            if (!string.IsNullOrEmpty(picked))
+            {
+                SetSourcePath(picked);
+            }
+        }
+
+        if (GUILayout.Button("清除", GUILayout.Width(48f)))
+        {
+            SetSourcePath(string.Empty);
+        }
+
+        EditorGUILayout.EndHorizontal();
     }
 
-    /// <summary>② 独立一层（SO）。</summary>
-    private void DrawStep2Section()
+    /// <summary>导入区：1 入库（无勾选）+ 2 总自动化处理（MasterEnabled）。</summary>
+    private void DrawImportZone()
     {
         EditorGUILayout.Space(8f);
-        EditorGUILayout.LabelField("步骤② 导入（总调度 SO）", EditorStyles.boldLabel);
+        EditorGUILayout.LabelField("导入区", EditorStyles.boldLabel);
         using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
         {
-            EditorGUI.BeginChangeCheck();
-            settings.runImport = EditorGUILayout.ToggleLeft(
-                "启用② 导入（工程外拷入 Import 区）", settings.runImport);
+            DrawSourceSection();
 
-            EditorGUILayout.Space(2f);
-            EditorGUILayout.LabelField("高级操作", EditorStyles.miniBoldLabel);
-            settings.syncImportFolderToResourcePanel = EditorGUILayout.ToggleLeft(
-                "②.2 导入后写入资源总面板批量路径", settings.syncImportFolderToResourcePanel);
-            if (EditorGUI.EndChangeCheck())
-            {
-                EditorUtility.SetDirty(settings);
-            }
-
+            EditorGUILayout.Space(4f);
+            EditorGUILayout.LabelField("1 入库（导入器，无开关）", EditorStyles.miniBoldLabel);
+            BatchFbxImportSettings importSettings = BatchFbxImportSettings.Current;
+            string importRoot = importSettings != null
+                ? importSettings.NormalizedImportRoot
+                : "Assets/Incoming";
             EditorGUILayout.HelpBox(
-                "②.2 为高级操作：只把「模型所在夹」（多为 Import 区）追加进资源总面板 L1 路径，" +
-                "方便日后手动批量；不开关设置自动，也不等于⑤会扫到 Art 单元。\n" +
-                "「贴图/模型 · 设置自动」请在资源处理总面板配置；本步主开关只负责是否导入。",
+                "工程外文件始终拷入导入根并 ImportAsset（已在 Assets 内则复用、不拷）。\n" +
+                "导入根 / 禁止写入 Art：与【批量 FBX 导入】同一份 BatchFbxImportSettings，本区不改。\n" +
+                "当前导入根：" + importRoot,
                 MessageType.None);
+
+            EditorGUILayout.Space(4f);
+            EditorGUILayout.LabelField("2 自动化设置", EditorStyles.miniBoldLabel);
+            bool master = EditorGUILayout.ToggleLeft(
+                "总自动化处理（导入期回调总闸）", ResourceProcessSwitches.MasterEnabled);
+            if (master != ResourceProcessSwitches.MasterEnabled)
+            {
+                ResourceProcessSwitches.MasterEnabled = master;
+            }
+
+            if (!ResourceProcessSwitches.MasterEnabled)
+            {
+                EditorGUILayout.HelpBox(
+                    "总闸已关：ImportAsset 仍会入库，但设置自动 / 后处理自动回调里直接 return，不改 Importer、不跑导入期 Op。\n" +
+                    "资源总面板里的分项勾选此时无效。⑤ 手动总批量不受此闸影响。",
+                    MessageType.Warning);
+            }
+            else
+            {
+                EditorGUILayout.HelpBox(
+                    "总闸已开。随后由【资源处理总面板】决定：贴图/模型谁开、是「设置自动」还是「后处理自动」。\n" +
+                    "现状（只读）：贴图 设置" +
+                    (ResourceProcessSwitches.TextureSettingsAuto ? "开" : "关") +
+                    " / 后处理" +
+                    (ResourceProcessSwitches.TexturePostProcessAuto ? "开" : "关") +
+                    "；模型 设置" +
+                    (ResourceProcessSwitches.ModelSettingsAuto ? "开" : "关") +
+                    " / 后处理" +
+                    (ResourceProcessSwitches.ModelPostProcessAuto ? "开" : "关") +
+                    "。改分项请打开资源总面板。",
+                    MessageType.None);
+            }
+
+            if (IsGltfSourcePath(sourcePath))
+            {
+                EditorGUILayout.HelpBox(
+                    "源是 .gltf（JSON + 旁路 .bin/贴图）。应先封装成 GLB 再入库（容器打包，非 DCC / 非场景 Export）。\n" +
+                    "编辑器暂不执行此转换；请用 DCC 或 gltf-pipeline。直接入库目前只会拷贝 JSON。",
+                    MessageType.Warning);
+            }
         }
     }
 
-    private void DrawOtherStepsSection()
+    /// <summary>处理区：③→④→⑤ 连锁。</summary>
+    private void DrawProcessZone()
     {
         EditorGUILayout.Space(8f);
-        EditorGUILayout.LabelField("其它总步骤（SO）", EditorStyles.boldLabel);
+        EditorGUILayout.LabelField("处理区", EditorStyles.boldLabel);
         using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
         {
             EditorGUI.BeginChangeCheck();
-            settings.runPrefab = EditorGUILayout.ToggleLeft("③ Prefab（默认开）", settings.runPrefab);
-            settings.runFlatten = EditorGUILayout.ToggleLeft(
-                "④ 平铺到交付中间区（Art）", settings.runFlatten);
-            if (!settings.runFlatten && settings.runPostProcess)
+            settings.runPrefab = EditorGUILayout.ToggleLeft("③ Prefab", settings.runPrefab);
+            if (!settings.runPrefab)
+            {
+                settings.runFlatten = false;
+                settings.runPostProcess = false;
+            }
+
+            using (new EditorGUI.DisabledScope(!settings.runPrefab))
+            {
+                settings.runFlatten = EditorGUILayout.ToggleLeft(
+                    "④ 平铺到交付中间区（Art）", settings.runFlatten);
+            }
+
+            if (!settings.runFlatten)
             {
                 settings.runPostProcess = false;
             }
 
-            using (new EditorGUI.DisabledScope(!settings.runFlatten))
+            using (new EditorGUI.DisabledScope(!settings.runPrefab || !settings.runFlatten))
             {
                 settings.runPostProcess = EditorGUILayout.ToggleLeft(
-                    "⑤ 资源总批量（须先开④；对中间区做压图/材质等）", settings.runPostProcess);
+                    "⑤ 资源总批量（压图 / 材质 / 刷顶点色）", settings.runPostProcess);
+            }
+
+            if (EditorGUI.EndChangeCheck())
+            {
+                EditorUtility.SetDirty(settings);
             }
 
             EditorGUILayout.HelpBox(
-                "④ 把 Prefab 依赖收敛进交付中间区，供⑤处理与⑥出包。\n" +
-                "中间区根路径当前写死为 Assets/Art（RetinarPaths.ArtRoot / 平铺代码 const），" +
-                "本面板与 PipelineStepSettings 均不可改；单元为 Art/<名>/。\n" +
-                "开④+⑤时自动扫本次 Art 单元（含 Model/），不再只靠 L1 的 Import 夹。",
+                "须开前一步才能开后一步。④ 根路径写死 Assets/Art；开④+⑤时扫本次 Art 单元（D17）。",
                 MessageType.None);
 
-            if (!settings.runFlatten)
-            {
-                EditorGUILayout.HelpBox(
-                    "⑤ 依赖④：未平铺到交付中间区时总批量通常无意义，故锁定关闭。",
-                    MessageType.None);
-            }
+            EditorGUILayout.Space(4f);
+            materialId = EditorGUILayout.TextField("materialId（可选）", materialId);
+            EditorGUILayout.HelpBox(
+                "选源时自动填三层名；③ 用该 Id；④ 通常跟 Prefab 名。留空则③按三层规则算名。",
+                MessageType.None);
+        }
+    }
 
-            settings.runAb = EditorGUILayout.ToggleLeft("⑥ 双端 AB（默认开）", settings.runAb);
-            using (new EditorGUI.DisabledScope(!settings.runAb))
-            {
-                settings.exportUnityPackage = EditorGUILayout.ToggleLeft(
-                    "⑥ 附带 UnityPackage", settings.exportUnityPackage);
-            }
-
+    /// <summary>输出区：⑥。</summary>
+    private void DrawOutputZone()
+    {
+        EditorGUILayout.Space(8f);
+        EditorGUILayout.LabelField("输出区", EditorStyles.boldLabel);
+        using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
+        {
+            EditorGUI.BeginChangeCheck();
+            settings.runAb = EditorGUILayout.ToggleLeft("⑥ 导出", settings.runAb);
             settings.quiet = EditorGUILayout.ToggleLeft("Quiet（无确认框）", settings.quiet);
             EditorGUILayout.HelpBox(
-                "Quiet 只禁止弹窗，不会退出编辑器（退出是 Unity 命令行 -quit）。\n" +
-                "默认勾选：跑完只写面板「上次结果」和 Console。\n" +
-                "取消勾选：本次结束会弹出结果框（④进度条仍可能出现）。",
+                "⑥ 只决定这次跑不跑导出。打 AB / 是否 UP / 交付根与 AB 根都在导出 SO。\n" +
+                "开④+⑥时打的是平铺返回的 Art Prefab。Quiet 只禁弹窗，不是 -quit。",
                 MessageType.None);
             if (EditorGUI.EndChangeCheck())
             {
                 EditorUtility.SetDirty(settings);
-                if (exportSettings != null)
-                {
-                    exportSettings.exportUnityPackage = settings.exportUnityPackage;
-                    EditorUtility.SetDirty(exportSettings);
-                }
             }
 
             EditorGUILayout.Space(4f);
-            if (GUILayout.Button("导出路径设置…（交付根 / AB 根）", GUILayout.Height(26f)))
-            {
-                if (exportSettings == null)
-                {
-                    exportSettings = RetinarExportSettings.GetOrCreateAsset();
-                }
-
-                Selection.activeObject = exportSettings;
-                EditorGUIUtility.PingObject(exportSettings);
-            }
-
-            if (exportSettings != null)
-            {
-                EditorGUILayout.LabelField(
-                    "交付根: " + exportSettings.deliverableRoot +
-                    "  |  AB根: " + exportSettings.assetBundleRoot,
-                    EditorStyles.miniLabel);
-            }
+            DrawExportSettingsSummary();
         }
+    }
+
+    private void DrawExportSettingsSummary()
+    {
+        if (exportSettings == null)
+        {
+            exportSettings = RetinarExportSettings.GetOrCreateAsset();
+        }
+
+        if (GUILayout.Button("打开导出 SO（产物 / 路径）", GUILayout.Height(26f)))
+        {
+            Selection.activeObject = exportSettings;
+            EditorGUIUtility.PingObject(exportSettings);
+        }
+
+        if (exportSettings == null)
+        {
+            return;
+        }
+
+        string products = "Android/iOS AB";
+        if (exportSettings.copyAbToDeliverables)
+        {
+            products += " → 交付夹";
+        }
+
+        if (exportSettings.exportUnityPackage)
+        {
+            products += " + UnityPackage";
+        }
+
+        EditorGUILayout.LabelField(
+            "交付根: " + exportSettings.deliverableRoot +
+            "  |  AB根: " + exportSettings.assetBundleRoot,
+            EditorStyles.miniLabel);
+        EditorGUILayout.LabelField("产物: " + products, EditorStyles.miniLabel);
     }
 
     private void HandleDrag(Rect dropArea)
@@ -316,6 +362,12 @@ public class PipelineWindow : EditorWindow
         }
     }
 
+    private static bool IsGltfSourcePath(string path)
+    {
+        return !string.IsNullOrEmpty(path) &&
+               string.Equals(Path.GetExtension(path), ".gltf", System.StringComparison.OrdinalIgnoreCase);
+    }
+
     /// <summary>D9：改源路径时同步默认 materialId；清空源时清 Id。</summary>
     private void SetSourcePath(string path)
     {
@@ -342,6 +394,8 @@ public class PipelineWindow : EditorWindow
     {
         AssetDatabase.SaveAssets();
         PipelineOptions opt = PipelineOptions.FromSettings(settings, sourcePath);
+        // 导入区 1 无勾选：本面板跑管线时始终入库（工程外拷入；已在 Assets 则复用）。
+        opt.RunImport = true;
         if (!string.IsNullOrWhiteSpace(materialId))
         {
             opt.MaterialId = materialId.Trim();

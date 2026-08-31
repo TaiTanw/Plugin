@@ -14,6 +14,7 @@
 | **4c. 冒烟·单文件·结果** | [04_implementation/smoke-and-results.md](./04_implementation/smoke-and-results.md) | 本轮核对：输入与错误码分层 |
 | **4d. D6 UnityGLTF** | [04_implementation/d6-unitygltf-docker.md](./04_implementation/d6-unitygltf-docker.md) | git 依赖替换 file:；人工步骤 |
 | **4e. D5 CLI 入口（B）** | [04_implementation/cli-getting-started.md](./04_implementation/cli-getting-started.md) | `PipelineCli.Run` 第一刀已写；无头验收 |
+| **4f. Op 识别与扩展** | [04_implementation/op-recognition-and-extend.md](./04_implementation/op-recognition-and-extend.md) | ⑤ 扩展名识别；加 Op / 加后缀 / 加大类 |
 
 历史长文归档入口（将逐步以本目录为准）：[`../CLI_AUTOMATION_DEV.md`](../CLI_AUTOMATION_DEV.md)
 
@@ -25,6 +26,6 @@
 **可选：** ④ 平铺、⑤ 压图/刷白、⑥ 门禁/扩展产物  
 **优先已做：** 窄口 + Runner + D3 总面板 + D2 单文件 + **D1 契约收口** + **D4 GLB 入库**  
 **GLB 样例：** `Assets/Art/ggdddd` 编辑器内已跑通；洋红 **D13 已归档**  
-**下一步：** 回切后无头跑通 **D5**（`PipelineCli.Run`）；⑤结果码 **D16**。Prefab 夹顶点色观感 **D20 可选**  
+**下一步：** 无头跑通 **D5**（`PipelineCli.Run`）。Prefab 夹顶点色观感 **D20 可选**。顶点刷白 **D19 已降级**（不挡管线；需白 GLB 见 backlog **L**）。⑤ 结果码 **D16 已做**。  
 **对外接口：** (A) 中间层已可用 · (B) CLI 第一刀已写 → [cli-getting-started](./04_implementation/cli-getting-started.md)  
 **配置分层：** 总步骤 → Pipeline SO；资源自动细节 → 资源总面板 Prefs

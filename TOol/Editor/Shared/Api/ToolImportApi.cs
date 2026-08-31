@@ -48,6 +48,14 @@ public static class ToolImportApi
             return false;
         }
 
+        if (string.Equals(ext, ".gltf", StringComparison.OrdinalIgnoreCase))
+        {
+            Debug.LogWarning(
+                "[②导入] 源是 .gltf。策略是先封装成 .glb 再入库（容器打包，不是 DCC，也不是 UnityGLTF 场景 Export）。" +
+                "编辑器暂不执行此转换（D22）。当前只拷贝 JSON，旁路 .bin/贴图不会进工程。" +
+                "请用 DCC 或 gltf-pipeline 转成 .glb 再导入。");
+        }
+
         if (TryAsExistingAssetPath(normalized, out assetModelPath))
         {
             if (AssetDatabase.LoadMainAssetAtPath(assetModelPath) == null)
@@ -122,6 +130,7 @@ public static class ToolImportApi
 
         try
         {
+            // D22：若源是 .gltf，应在此之前封装为 .glb 再 Copy（容器打包，禁止走 GLTFSceneExporter）。
             File.Copy(fullDisk, destFull, false);
         }
         catch (Exception ex)

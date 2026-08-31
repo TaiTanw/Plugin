@@ -19,24 +19,17 @@ public class PipelineStepSettings : ScriptableObject
     [Tooltip("② 导入：工程外路径拷入 Import 区并 ImportAsset；已在 Assets 内则复用。")]
     public bool runImport = true;
 
-    [Tooltip("③ 自动化 Prefab。")]
+    [Tooltip("③ 自动化 Prefab。处理区第一步；关掉则④⑤一并关。")]
     public bool runPrefab = true;
 
-    [Tooltip("④ 平铺到交付中间区 Art（Converter 默认开；根路径写死 Assets/Art）。")]
+    [Tooltip("④ 平铺到 Art。须先开③；关掉则⑤一并关。根路径写死 Assets/Art。")]
     public bool runFlatten = true;
 
-    [Tooltip("⑤ 资源总批量（Converter 默认开；须先开④；对中间区做压图/材质等）。")]
+    [Tooltip("⑤ 资源总批量。须先开④（因而也须开③）。")]
     public bool runPostProcess = true;
 
-    [Tooltip("⑥ 仅双端 AB。")]
+    [Tooltip("⑥ 是否导出。产物种类与路径读 RetinarExportSettings，本开关不选文件类型。")]
     public bool runAb = true;
-
-    [Tooltip("⑥ 额外打 UnityPackage（读/写与 RetinarExportSettings.exportUnityPackage 同步）。")]
-    public bool exportUnityPackage;
-
-    [Header("导入后与 L1 的衔接")]
-    [Tooltip("高级：导入成功后把模型所在夹写入资源总面板 L1 批量路径（多为 Import 区，不等于 Art 单元）。")]
-    public bool syncImportFolderToResourcePanel = true;
 
     [Tooltip("禁止确认弹窗。")]
     public bool quiet = true;
@@ -97,28 +90,24 @@ public class PipelineStepSettings : ScriptableObject
 
         options.RunImport = runImport;
         options.RunPrefab = runPrefab;
-        options.RunFlatten = runFlatten;
-        options.RunPostProcess = runFlatten && runPostProcess;
+        options.RunFlatten = runPrefab && runFlatten;
+        options.RunPostProcess = runPrefab && runFlatten && runPostProcess;
         options.RunAb = runAb;
-        options.ExportUnityPackage = exportUnityPackage;
         options.Quiet = quiet;
-        options.SyncImportFolderToResourcePanel = syncImportFolderToResourcePanel;
 
         RetinarExportSettings export = RetinarExportSettings.Current;
         if (export != null)
         {
-            // 步骤勾选与导出 SO 双向：以步骤 SO 为准写回 export 的 UP 开关
-            export.exportUnityPackage = exportUnityPackage;
+            options.ExportUnityPackage = export.exportUnityPackage;
             options.AbBuildOptions = RetinarAbBuildOptions.FromExportSettings(
                 export,
-                exportUnityPackageOverride: exportUnityPackage,
                 quietOverride: quiet);
         }
         else
         {
             options.AbBuildOptions = RetinarAbBuildOptions.CreateDefaultAbOnly();
-            options.AbBuildOptions.ExportUnityPackage = exportUnityPackage;
             options.AbBuildOptions.Quiet = quiet;
+            options.ExportUnityPackage = options.AbBuildOptions.ExportUnityPackage;
         }
     }
 

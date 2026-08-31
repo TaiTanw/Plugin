@@ -149,7 +149,7 @@ UnityGLTF 自带的 `ShaderConverters` 主要是 **往 glTF 导**，不是交付
 | 缝 | 说明 |
 |---|---|
 | **收集器没有 Material 层** | 现⑤只有贴图（`t:Texture2D`）+ 模型。Shader 规范化扫 `.mat` → 需 **新层**（Material/Shader Op + Collector），挂进 `RunMasterBatch` |
-| **L1 路径与单任务 Art 夹** | ②后 `SyncFolderToL1` 写的是**导入夹**；开④后 Runner **已**把本次 Art 单元写入 `PostProcessFolderPaths`（D17） |
+| **L1 路径与单任务 Art 夹** | 编排不改 L1 Prefs（人手动批量用）。开④后 Runner **已**把本次 Art 单元写入 `PostProcessFolderPaths`（D17） |
 | **内嵌贴图** | GLB 贴图仍在容器内时，贴图 Op 仍可能 0 命中；与 Shader 烤 **正交** |
 | **目标 Shader 名** | 仍属 APP 契约；放 `ConfigData` 的 MaterialProcessSettings（或等价）合理；L3=规则，主批量勾选=这轮要不要跑 |
 
@@ -164,6 +164,8 @@ UnityGLTF 自带的 `ShaderConverters` 主要是 **往 glTF 导**，不是交付
 | 导入后处理自动 | 对未平铺资源 = **不保证成功的附属功能**，默认关；交付靠④后⑤总批量 |
 
 ### 总面板如何「认识」有哪些资源操作？（扩展方式）
+
+> 完整归档（含扩展名识别）：[op-recognition-and-extend.md](../04_implementation/op-recognition-and-extend.md)
 
 **两层，不要混：**
 
@@ -200,7 +202,7 @@ UnityGLTF 自带的 `ShaderConverters` 主要是 **往 glTF 导**，不是交付
 |---|---|
 | APP 目标 Shader 最终名 | **先 Standard**（对齐 FBX 能亮）。URP APP 若仍洋红 → 再改 `Universal Render Pipeline/Lit` |
 | ④⑤ Pipeline 默认开 | **已落地**：`PipelineStepSettings` `.cs` 默认 true；`.asset` 已为 1；strategy / tech-and-ops 已改 |
-| ④后 L1/`PostProcessFolderPaths` 是否改成本次 Art 单元 | **未实现**；约定直指 Art（大根）；两插件对齐说明见 tech-and-ops |
+| ④后 L1/`PostProcessFolderPaths` 是否改成本次 Art 单元 | **已做（D17）**：Runner 写本次 Art 单元；编排不改 L1 Prefs |
 | 属性槽对照表完整度 | **第一刀**：baseColor→`_MainTex`/`_Color` + metallic/gloss(+normal/occlusion/emission 有则搬)；完整表后补 |
 | GLB 内嵌贴图⑤压图 0 命中 | **已知、正交**；不挡 Shader 烤定性 |
 | ShaderGraph→Standard 在纯 URP APP 仍洋红 | **遇到再说**（改目标 Shader 名即可） |

@@ -22,7 +22,7 @@ public class RetinarExportSettings : ScriptableObject
     public string assetBundleRoot = RetinarPaths.AssetBundleRoot;
 
     [Header("产物")]
-    [Tooltip("管线⑥默认是否打 UnityPackage；直通菜单强制打 UP 时可覆盖。")]
+    [Tooltip("⑥ 是否额外打 UnityPackage 到 Deliverables/<名>/02_unity。管线面板不另设勾选，只读本字段。")]
     public bool exportUnityPackage;
 
     [Tooltip("是否把 AB 拷到 Deliverables/<名>/03_assetbundles。")]

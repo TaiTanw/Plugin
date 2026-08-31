@@ -13,8 +13,9 @@ public static class ToolPostProcessApi
 {
     /// <summary>
     /// 跑总批量（贴图→材质→模型）。folders 为 null 时用 L1 当前批量路径。
+    /// 返回轻量结果：FailedCount 复用各层 Summary；细节在 Report。
     /// </summary>
-    public static string RunMasterBatch(
+    public static ToolPostProcessResult RunMasterBatch(
         IList<string> folders = null,
         bool? includeTexture = null,
         bool? includeModel = null,

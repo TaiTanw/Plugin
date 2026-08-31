@@ -64,7 +64,7 @@ public static class PipelineCli
             code = PipelineErrorCodes.Other;
         }
 
-        // LicenseOrEnv(70) 预留，本入口不赋值。⑤ 失败暂不映射 50（D16）。
+        // LicenseOrEnv(70) 预留，本入口不赋值。⑤ FailedCount>0 → 50（D16）。
         EditorApplication.Exit(code);
     }
 
