@@ -4,7 +4,9 @@ Unity Editor 插件集合，用于模型/贴图的**导入期处理**与**交付
 适用环境：Unity 2020.3（Built-in RP）、Windows Editor。
 
 远程仓库：`http://swm-server.local:3000/Hanson/asset-bundle.git`  
-当前版本：**v1.4.4**（`other` / `main` / 标签 `v1.4.4`）  
+> **仓库默认分支仍是 `other` 时，首页会停在本版。** 当前发布请看 [`main`](http://swm-server.local:3000/Hanson/asset-bundle/src/branch/main) / 标签 **[v1.5.3](http://swm-server.local:3000/Hanson/asset-bundle/releases/tag/v1.5.3)**。
+
+当前版本（本分支）：**v1.4.4**（历史线 `other`）。推荐线已迁到 `main`。  
 **本批重点：** 修复引用拆解不完全（动画材质 PPtr / GetDependencies 补拷）；**区分 FBX 与外来预设体**（预设体套空壳、不 SafeZone 缩放；FBX 仍缩进 SafeZone）；动画循环沿用源 Clip。  
 历史：`v1.4.0` 平铺分类；`v1.3.8` 成品直通；`v1.3.5` 全流程基线
 
