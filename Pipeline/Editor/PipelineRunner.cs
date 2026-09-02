@@ -84,6 +84,10 @@ public static class PipelineRunner
             List<string> artPrefabPaths;
             RetinarFlattenOptions flattenOpt = PipelineFlattenBridge.ToFlattenOptions(options.JobContext);
             int n = RetinarFlattenApi.FlattenPaths(prefabPaths, quiet, flattenOpt, out artPrefabPaths);
+            if (flattenOpt != null && flattenOpt.ClearDestinationArtFolder)
+            {
+                result.Info("[Pipeline] ④ 清空本次 Art/<名>/ 再写（不扫整棵 Art）");
+            }
             if (flattenOpt != null && flattenOpt.SkipDependencySplit)
             {
                 result.Info("[Pipeline] ④ SkipDependencySplit + B′ 原子搬迁 Art/<名>/<名>/");

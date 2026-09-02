@@ -47,6 +47,7 @@ Prefab 的 GetDependencies（每个被引用的文件）
 
 | 序 | 能力名（薄） | 现网函数（主） | 现网是否总跑 | D23b 闸 |
 |---|---|---|---|---|
+| 0 | 清本次 Art 单元夹 | `TryClearArtUnitFolderIfRequested` → `AssetUnitFolder` | 管线④是；菜单否 | `ClearDestinationArtFolder`；只删 `Art/<名>/` |
 | A | 写 Art Prefab | `PreparePackagePrefab`（拷或原地）+ Unpack 嵌套 | 是 | 仅 `RunFlatten` |
 | B | 按后缀拆依赖 | **`CopyAdjustedPrefabDependencies`**（拷贝循环） | 是 | **仅 `!HasExternalUris`** |
 | B′ | 原子搬迁 | `RelocateAtomicPackage` → `Art/<名>/<名>/` | Skip 时跑 | **仅 `HasExternalUris`**；须交路径表 |
@@ -122,4 +123,5 @@ C 在 `image/Texture/` 的副本与 B′ 子树里那份**并存**：前者给 U
 - ctx.Build；`SkipDependencySplit` 不跑拷贝循环。  
 - B′：`RelocateAtomicPackage` → `Art/<名>/<名>/`，交出路径表。  
 - ② 工程外 `.gltf` 入库时按同一 Scan 拷伴生。  
+- 管线④ `ClearDestinationArtFolder`：只清本次 `Art/<名>/`（菜单 Default 不清）。  
 - 探测扩展见 [pipeline-job-context §7](./pipeline-job-context.md#7-probe-extend)。

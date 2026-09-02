@@ -7,7 +7,7 @@
 > **状态（2026-09-02）：本刀已落，编辑器实跑已通。**  
 > `直18.gltf` 全流程 `exit=0`；B′ 10 条 → `Assets/Art/Desktop_D001_ZHI18/Desktop_D001_ZHI18`。  
 > **D22 封装成 GLB 仍不开发。** `-source` 可直接给 `.gltf`；转 GLB 可选。  
-> **下一步不在本刀：** D5 无头验收；**D18** 同路径不覆盖（gltf 更新会被卡住）。
+> **下一步不在本刀：** D5 无头验收。D18 管线夹级清空已落（见 [4-1](#4-1)）。
 
 ---
 
@@ -15,7 +15,7 @@
 
 **0. 相关文档（总目录定位）**
 
-文档根：[README.md](../README.md)。编号即总目录行。建议顺序：本文 → [4g](./pipeline-job-context.md) → [4i](./pipeline-flatten-capabilities.md) → [4h](./pipeline-phase-io.md) → [3 K D18](../03_open-items/backlog.md#d18-k)。
+文档根：[README.md](../README.md)。编号即总目录行。建议顺序：本文 → [4g](./pipeline-job-context.md) → [4i](./pipeline-flatten-capabilities.md) → [4h](./pipeline-phase-io.md) → [D18 d18k](../03_open-items/backlog.md#d18k)。
 
 链接请点下面列表（不要点表格里的链接：编辑器对表内 href 经常不跳）。
 
@@ -28,7 +28,7 @@
 - **4f** [op-recognition-and-extend.md](./op-recognition-and-extend.md)
 - **2** [overview.md](../02_structure/overview.md) · D23 类见本文 [§2](#2-code-structure)
 - **3 A** [backlog 表 A](../03_open-items/backlog.md#a-open-items) · D18 状态一行
-- **3 K** [backlog `#d18-k`](../03_open-items/backlog.md#d18-k) · D18 正文
+- **3 K** [D18 d18k](../03_open-items/backlog.md#d18k)
 - **3 O** [backlog `#d22-o`](../03_open-items/backlog.md#d22-o) · D22 搁置
 - **3 L** [backlog `#d19-l`](../03_open-items/backlog.md#d19-l) · D19 顶点色
 - **3 M** [backlog `#d20-m`](../03_open-items/backlog.md#d20-m) · D20 Prefab 夹观感
@@ -52,7 +52,7 @@
 | 编辑器实跑 | **已通**（`直18.gltf` → `exit=0`） |
 | D22 | **不开发** |
 | D5 无头 | **未验收**（CLI 入口已有；Fix All 不会卡住 CLI） |
-| D18 | **隐患仍在**；gltf 整包后更显眼 |
+| D18 | **管线已落**（夹级清空再写；唯一定位暂放） |
 
 D18 交叉见 [§4](#4-notes)。
 
@@ -104,13 +104,14 @@ Runner 用 `PipelineFlattenBridge.ToFlattenOptions` 把事实映射成平铺开�
 | 探测 | `Pipeline/Editor/PipelineGltfUriProbe.cs` | 填 ctx；转调 Scan |
 | 探测核 | `TOol/Editor/Shared/GltfPackageFiles.cs` | `Scan()`：当前正则 `"uri":"..."`，跳过 `data:`。**换解析器只改这里** |
 | 映射 | `Pipeline/Editor/PipelineFlattenBridge.cs` | **仅④用。** 事实 → `RetinarFlattenOptions` |
-| ④ 闸 | `RetinarBatchBuilder_Share/.../40_Api/RetinarFlattenOptions.cs` | `SkipDependencySplit` + `PrimaryAssetPath` / `SidecarPaths` |
+| ④ 闸 | `RetinarBatchBuilder_Share/.../40_Api/RetinarFlattenOptions.cs` | `SkipDependencySplit` + `ClearDestinationArtFolder` + 主文件/伴生 |
 | ④ 门面 | `RetinarBatchBuilder_Share/.../40_Api/RetinarFlattenApi.cs` | 编排只调这个窄口 |
 | ④ B | `RetinarBatchModelBuilder.CopyAdjustedPrefabDependencies` | 拷贝循环，**内部未改** |
 | ④ B′ | `RetinarBatchBuilder_Share/.../RetinarBatchModelBuilder.AtomicRelocate.cs` | `RelocateAtomicPackage` → `Art/<名>/<名>/` |
-| ② 落盘 | `TOol/Editor/Shared/Api/ToolImportApi.cs` | 目标已存在则**复用不覆盖**（D18）；新拷时 `CopyGltfSidecarsBeside` |
+| ② 落盘 | `TOol/Editor/Shared/Api/ToolImportApi.cs` | 管线：先清本趟 `Incoming/<三层>/` 再拷（D18）；`CopyGltfSidecarsBeside` |
+| 删单元夹 | `TOol/Editor/Shared/AssetUnitFolder.cs` | 只删 `parent/单段`；② Incoming、④ Art 共用 |
 
-**菜单平铺**仍走 `RetinarFlattenOptions.Default`（按后缀拆），**不走 B′**。管线④才接 ctx。
+**菜单平铺**仍走 `RetinarFlattenOptions.Default`（按后缀拆、**不清 Art**），**不走 B′**。管线④才接 ctx 与 `ClearDestinationArtFolder`。
 
 ---
 
@@ -140,15 +141,15 @@ Runner 用 `PipelineFlattenBridge.ToFlattenOptions` 把事实映射成平铺开�
 
 ## 4-1
 
-**4.1 D18 · 同路径复用不覆盖**
+**4.1 D18 · 同路径重名（管线夹级清空）**
 
-现网：`Incoming/<三层>/<文件名>` 已存在则复用；gltf 伴生也不再拷。B′ 只搬 Incoming 里已有的树。无头同样静默。策略（双重定位 / 覆盖）见 [K `#d18-k`](../03_open-items/backlog.md#d18-k)，此处不重复。
+管线已落：② 只删 `Incoming/<三层>/`，④ 只删本次 `Art/<名>/`，再按现网拷。不扫整棵 Incoming/Art。菜单 Default 仍 Skip。唯一定位暂放。正文 [D18 d18k](../03_open-items/backlog.md#d18k)。
 
 | 场景 | 后果 |
 |---|---|
-| 同一任务反复跑同一源 | 现网可接受（路径幂等） |
-| 同名新版本 / 换了 `.bin` 图 | 静默旧包 |
-| D22 若改落盘 `.glb` | 复用键变；仍见 [O](../03_open-items/backlog.md#d22-o) |
+| 同一任务反复跑同一源 | 槽被清空再写（内容更新） |
+| 同名新版本 / 换了 `.bin` 图 | 管线会更新该槽；菜单平铺仍 Skip |
+| D22 若改落盘 `.glb` | 落盘扩展名变；仍见 [O](../03_open-items/backlog.md#d22-o) |
 
 ### 4.2 ⑤ 扫不到 gltf 模型（和 D19 / D20 / D15 同源）
 
@@ -174,7 +175,7 @@ B′ 把容器放在 `Art/<名>/<名>/`，**不进 `Model/`**（为⑥干净：�
 
 **5. 余量（不挡本刀收口）**
 
-- **D18** 策略未拍（覆盖 vs 复用）。gltf 整包后，**同名源文件更新**是最容易踩的坑。  
+- **D18** 管线夹级清空已落；唯一定位仍暂放。  
 - ⑤ 仍按文件夹 Collector，不读 ctx。  
-- **D5** 无头验收未做；CLI 不会被 Fix All 卡住，但 D18 在无头下同样静默旧文件。  
-- 不要开工：D22、delayCall-before-③、插件 1 flatten 整包迁出。
+- **D5** 无头验收未做。  
+- 不要开工：D22、delayCall-before-③、插件 1 flatten 整包迁出、唯一定位。

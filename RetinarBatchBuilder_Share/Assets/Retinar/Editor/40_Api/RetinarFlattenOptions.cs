@@ -22,4 +22,10 @@ public sealed class RetinarFlattenOptions
 
     /// <summary>相对主文件的伴生（.bin / 外图等）。菜单 Default 为空。</summary>
     public List<string> SidecarPaths = new List<string>();
+
+    /// <summary>
+    /// true：平铺前只删本次 <c>Art/&lt;名&gt;/</c>，再按现网拷。菜单 Default 为 false（不清 Art）。
+    /// 不扫整棵 <c>Assets/Art</c>。
+    /// </summary>
+    public bool ClearDestinationArtFolder;
 }

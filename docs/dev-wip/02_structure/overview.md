@@ -42,7 +42,8 @@ Assets/Plugin/
 | `Editor/Window/ResourceProcessWindow.cs` | L1 资源处理总面板（路径×Op；⑤ 子流程对外口） |
 | `Editor/Shared/` | 横切：开关、批量路径、排除、导入后调度 |
 | `Editor/Shared/GltfPackageFiles.cs` | gltf URI `Scan`（② 伴生拷 + ctx 探测共用；换解析器只改这里） |
-| `Editor/Shared/Api/` | **对外窄口**：Import / Prefab / PostProcess；② 同路径复用 = **D18** |
+| `Editor/Shared/Api/` | **对外窄口**：Import / Prefab / PostProcess；管线②夹级清空 = **D18** |
+| `Editor/Shared/AssetUnitFolder.cs` | 只删 `parent/单段`（② Incoming、④ Art） |
 | `Editor/Generated/` | 中间资产能力（非 Art、非⑤原地改） |
 | `Editor/Generated/Prefab/` | **③ 自动 Prefab**（Config / Layout / Service / 菜单） |
 | `Editor/Generated/Prefab/.../PrefabBuildService.cs` | 写盘 `SaveAsPrefabAsset` |

@@ -11,10 +11,12 @@ public static class PipelineFlattenBridge
 {
     /// <summary>
     /// HasExternalUris → SkipDependencySplit + 主文件/伴生路径（供 B′）。
+    /// 管线④始终清本次 Art/&lt;名&gt;/；菜单 Default 不清。
     /// </summary>
     public static RetinarFlattenOptions ToFlattenOptions(PipelineJobContext ctx)
     {
         var options = new RetinarFlattenOptions();
+        options.ClearDestinationArtFolder = true;
         if (ctx == null)
         {
             return options;

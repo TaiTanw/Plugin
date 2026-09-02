@@ -6,7 +6,7 @@
 
 编辑器点链接只认**标题英文 slug**（与 GitHub 相同算法：小写、去标点、空格变 `-`）。空的 `<a id>`、中文标题锚点都会点不动。各节标题已改成 id 本身。
 
-节：[A](#a-open-items) · [B](#b-unresolved) · [C](#c-known-risks) · [E](#e-low-priority) · [F](#d11-f) · [G](#g-op-recognition) · [H](#h-d13-archived) · [I](#d14-i) · [J](#d15-j) · [K](#d18-k) · [L](#d19-l) · [M](#d20-m) · [N](#d21-n) · [O](#d22-o) · [已结束](#closed-history)
+节：[A](#a-open-items) · [B](#b-unresolved) · [C](#c-known-risks) · [E](#e-low-priority) · [F](#d11-f) · [G](#g-op-recognition) · [H](#h-d13-archived) · [I](#d14-i) · [J](#d15-j) · [K d18k](#d18k) · [L](#d19-l) · [M](#d20-m) · [N](#d21-n) · [O](#d22-o) · [已结束](#closed-history)
 
 ---
 
@@ -22,7 +22,7 @@
 | D11 | 成功后可选清理 Incoming（缓存）；**默认不删 Art**       | P2  | 与 Quiet 无关；见 [F](#d11-f) |
 | D14 | 模型自带动画/音效 vs Pack 入口                    | P2  | 评估见 [I](#d14-i)；**暂不新开管线** |
 | D15 | ⑤ 扫 Art 范围：单单元路径 vs 大根；Text 标记「已处理」     | P3  | **低优**；见 [J](#d15-j)；暂不实现 |
-| D18 | 单文件②同路径复用；拟改为路径键+用户 ID 双重定位           | P2  | **隐患成立**。见 [K](#d18-k) |
+| D18 | 同路径重名：夹级清空再写；唯一定位暂放                  | P2  | **管线已落**（② 清 Incoming 本趟夹；④ 清 Art 本趟夹）。见 [d18k](#d18k) |
 | D23 | 导入 ctx + ④ B′ 原子搬迁                      | P2  | **编辑器实跑已通**。见 [d23-slice-report](../04_implementation/d23-slice-report.md) |
 | D20 | Art `Prefab/` 夹「看起来」未刷顶点色               | P3  | **可选**。见 [M](#d20-m) |
 | D21 | 无 codec / 加载不到：各 Op Skip vs Failed 口径不齐 | P3  | **低优**。见 [N](#d21-n) |
@@ -33,31 +33,19 @@
 
 
 
-## d18-k
+## d18k
 
-**K. Incoming 复用 / 双重定位（D18）** · 未拍板、未开发。现网事实见下「现网」；策略见「草稿」。
+**K. Incoming 复用 / 双重定位（D18）** · 唯一定位**暂放**。管线重名：目标夹清空再写，不膨胀策略模块。**已开发（管线②④）。**
 
 ### 现网
 
-`ImportSingleModel`：`Incoming/<三层名>/<原文件名>` 已存在则**复用、不覆盖**（伴生也不再拷）。③ Prefab 名 = `materialId` 或 Incoming 第一段。④ Art 夹 = Prefab **文件名**。不是内容缓存、不比哈希/mtime。gltf 更新会静默旧树 → [报告 4-1](../04_implementation/d23-slice-report.md#4-1)。
+管线② `ImportSingleModel`：工程外源 → **只删** `Incoming/<三层名>/` 再拷主文件+伴生（不扫整棵 Incoming）。源已在 Assets 则跳过拷贝、**不清夹**。③ Prefab 名 = `materialId` 或 Incoming 第一段。④ 管线 `ClearDestinationArtFolder`：**只删** `Art/<名>/` 再平铺（不扫整棵 Art）。菜单 Default 仍 Skip。批量导入面板仍 Skip/Conflict。不是内容缓存、不比哈希/mtime。唯一定位仍暂放。
 
-有意幂等 = 同槽再跑一次当命中。现网把「同路径」当成槽，所以**换内容不换路径**会用旧文件。
+有意幂等 = 同槽再跑一次当覆盖写新内容。换内容不换路径会更新该槽。
 
 ### 报告里已写、本稿仍成立（勿当新发现）
 
-- ④⑥ **不读** Incoming 外层；只跟 Prefab 文件名。导入区区分 ≠ 交付区区分。
-- 同用户 ID、Prefab 仍叫 `Chair.prefab` → Art/AB 仍一份。
-- 覆盖必须 **清空内层再写**（gltf 旧 `.bin`/图）。
-- 多一层夹必须改 `TryGetIncomingImportFolderName`（现网取第一段）。
-- 人工批量面板本刀不对齐。
-
-### CLI 在服务器上能拿到什么
-
-工具只认 argv：`-source`、可选 `-materialId`。没有客户原机路径、没有上传 jobId，除非外壳写进这两个参数。
-
-`-source` = **Unity 那台机器上的路径**（拷到工程旁 / 容器工作目录之后）。网页上传常见是固定落盘：`/work/in/model.gltf`、`/tmp/upload/a.gltf`。此时「路径+文件名+后缀」对每个客户都一样，**编码出来的父夹 ID 会撞**。客户磁盘上的 `D:\项目\三层\foo.gltf` 默认到不了 Unity。
-
-要双重定位，外壳必须另给稳定键，例如：`-materialId`（用户名）+ `-sourceKey`/`-jobId`（任务键），或把 jobId 编进 `-source` 的目录（`/work/{jobId}/model.gltf`）。不要假设 `-source` 字符串等于客户侧唯一路径。
+- ④⑥ 只跟 Prefab 文件名；覆盖须清空内层；多一层须改第一段启发式。
 
 ### 「内容哈希」是什么（和路径编码不是一回事）
 
@@ -71,28 +59,73 @@
 
 短 ID：不要「16 进制 / 32 进制」混谈。常见是 **SHA256 的十六进制截断**（每字符 4 bit）。12～16 个 hex（48～64 bit）够文件夹名；8 个 hex 太短。Base32 更省长度，但实现成本高于截断 hex。不要用 Adler/GetHashCode。
 
-### 草稿评估
+### 网页任务时 `-source` 实际是什么
+
+现网 CLI **不会**接到浏览器里的盘符。典型链路（V1.2 外壳，本仓未做）：
 
 ```text
-Incoming/<路径指纹>/
-    <用户ID>/                 ← materialId，空则需规定默认（勿再假装三层唯一）
-        文件（相对 URI 不变）
-IncomingPrefab/<路径指纹>_<用户ID>.prefab
-Art/<路径指纹>_<用户ID>/      ← ④ 读 Prefab 文件名，现网已如此
+网页拖入/选模型
+  → 上传到 API/COS（对象键自定，常带 jobId）
+  → 工人把对象下到 Unity 机器磁盘
+  → Unity.exe … -source <这份本地路径> [-materialId <网页填的名>]
+  → 退出码 + AB 文件回传
 ```
 
-双重 ID 都对上 → Incoming 内层清空再写；Prefab `SaveAsPrefabAsset` 覆盖；Art 同名夹视为同槽覆盖。
+| 路径 | 谁有 | 会不会进 `-source` |
+|---|---|---|
+| 用户电脑 `D:\项目\【m2222】歼15\fbx\a.FBX` | 仅浏览器；最多当「原始文件名」元数据 | **默认不会** |
+| COS 对象键 `jobs/{jobId}/a.gltf` | 服务器 | 不会，除非先下载 |
+| 下载后本地路径 | Unity 工人决定 | **这就是 `-source`** |
 
-**和上一稿「外层三层、Prefab 只用用户 ID」的差别：** 你现在把路径键编进 Prefab 名，交付区也会分开。这是上一稿选项 C，不是重复，是改交付槽定义。
+工人若写成 `/tmp/in/a.gltf`（每单覆盖同一文件），则三层、路径指纹**全员相同**。应写成 `/work/jobs/{jobId}/a.gltf`（或另传 `-sourceKey {jobId}`）。网页侧的 ID2 ≈ `-materialId`（展示名/SKU），没有则需规定默认。
 
-| 问 | 结论 |
+### 草稿（本机可见名 + 指纹；Prefab 带双键）
+
+```text
+Incoming/<三层>_<路径指纹>/<ID2>/文件
+IncomingPrefab/<ID2>_<路径指纹>.prefab
+Art/<ID2>_<路径指纹>/          ← ④ 仍用 Prefab 文件名，编排不变
+```
+
+合理处：导入区还能看见三层；唯一性靠指纹；交付槽 = ID2+指纹（④⑥会跟着 Prefab 名走）。同双键 → 清空覆盖。③ 必须收到 ID2，勿靠 Incoming 第一段（第一段已是 `三层_指纹`）。夹名注意 80 字截断。
+
+不合理处（服务器）：三层是从 `-source` 的父目录算的，网页任务里那是 `/work/jobs/xxx`，**不是**美术目录。指纹若哈希这份临时路径，没有 jobId 时会撞。本机面板：`-source` 仍是真实工程外路径，三层有意义。
+
+**建议：** 网页用 `jobId` 当指纹输入（或直接当外层名），不要哈希 `/tmp/in/a.gltf`。本机可继续 `三层_指纹(本地路径)`。ID2 = 网页名称。AB 文件名会变成 `ID2_指纹.assetbundle`，回传按 job 目录取，不要假定还叫用户中文名。**本节草稿暂放，不挡下面重名策略。**
+
+### 现网 Skip 怎么来的（写死，不是系统默认）
+
+Unity `File.Copy` / `CopyAsset` **没有**「重名则跳过」的导入默认。现网是代码主动短路：
+
+| 处 | 行为 |
 |---|---|
-| ④ 读 Prefab 名当 Art 夹，流程不变？ | **编排不变**（仍 Flatten(Prefab) → Art 夹=stem → ⑥ 打这份）。**交付文件名变了**：AB 现网跟资产名（D1 退化）。APP 若按 `Chair.assetbundle` 取包，改成带指纹的名字要外壳/APP 一起认。 |
-| 父夹用路径指纹、子夹用户 ID？ | 可以。指纹对人不可读，手动端 Incoming 会变「哈希树」。面板若仍要三层可见，CLI 与面板不要混用同一套外层规则。 |
-| 只编码 `-source`？ | 服务器固定落盘则指纹无意义。优先 jobId/sourceKey；没有则退化为「用户 ID 单键 + 覆盖」（回到 SKU 槽）。 |
-| gltf | 指纹若按主文件路径，伴生仍靠相对 URI 拷进同一内层；覆盖仍要整包清空。 |
+| ② `ImportSingleModel` | **管线已改**：先清本趟 `Incoming/<三层>/` 再拷。源已在 Assets 仍跳过、不清夹 |
+| ② `CopyGltfSidecarsBeside` | 每个伴生 `if (!File.Exists) Copy`，已有则跳过（夹清空后通常打不中） |
+| ④ B `CopyAssetToExactPath` | 目标已有资产 → **return 旧路径**（贴图另有 mtime 覆盖）。菜单仍走这条；管线④先清 `Art/<名>/` |
+| ④ B′ | `if (!File.Exists) File.Copy(..., false)`。管线④先清单元夹 |
+| ③ Prefab | `SaveAsPrefabAsset` 同路径会覆盖，与上面不是同一套 |
 
-**建议默认（未拍）：** 服务器键 = `sourceKey`（jobId，外壳给）+ `materialId`。本机面板可继续三层当 **显示名**，不要当唯一键。同双键 → 清空覆盖。不要在 Unity 里对上传临时路径做路径哈希当全局唯一。
+批量导入面板另有夹已存在 Skip/Conflict，不管线单文件。
+
+### 重名：不要策略模块（夹级清空）
+
+讨论的是 **整个导入夹 / Art 单元夹** 是否占用，不是按贴图逐文件精细策略。等价于人手删掉该夹再导。GUID 不必保：② 之后仍跑 ③④⑥，Prefab/Art/AB 都是新写。
+
+因此 **不必** ctx 分发、不必三动作枚举、不必 SO。② 在 ctx 之前，若还要 Scan 再分支，收益薄。有外 URI 和单文件对「删掉目标夹再拷」结果一样。
+
+管线已做：目标夹存在则 `AssetDatabase.DeleteAsset` 整夹，再按现网拷贝。② 清 `Incoming/<三层>/`；④ 清本次 `Art/<名>/`（辅助函数拒绝非「父夹/单段」）。菜单平铺不接，避免手点清 Art。与 D11「成功后可选清 Incoming 缓存」不是同一刀。
+
+一小段删夹辅助函数即可，不要「文件策略模块」。哈希/逐文件以后再说。
+
+### AB 改为 `{materialId}_android.assetbundle`
+
+现网：`AssetBundles/{Android,iOS}/{stem}.assetbundle`，stem = Prefab 文件名小写；`assetBundleName` 同 stem。平台靠**文件夹**区分，文件名两端一样。D1 契约 1 已按此锁给 APP。
+
+改成文件名带平台后缀：**中等、局部**。主改 `RetinarAbApi.BuildAndCopyAssetBundles`（已按平台循环，每趟可换名）+ `BuildBundleFileName(assetName, platform)` + 交付拷贝。不必改②③④。`materialId` 须在⑥能拿到：Prefab 已按 Id 命名则用 stem 即可；否则要 `AbBuildOptions` 增加字段，Runner 从 `Options.MaterialId` 填入。
+
+注意：Unity 输出是 `{assetBundleName}.{variant}` → 名用 `chair_android`、variant 仍 `assetbundle`。中文 Id 仍走 `MakeSafeName`。菜单直通/规范化导出若共用 AbApi 会一起变。
+
+真正成本是 **APP 取包契约**（现认 `name.assetbundle` + 平台夹）。若 APP 已按目录分平台，加 `_android` 是重复；若要单目录混放才有必要。未改 APP 前不要切默认。
 
 ---
 
@@ -189,7 +222,7 @@ Art/<路径指纹>_<用户ID>/      ← ④ 读 Prefab 文件名，现网已如�
 
 | 点                              | 现状                                                                                    |
 | ------------------------------ | ------------------------------------------------------------------------------------- |
-| ② `ToolImportApi`              | 扩展名认 `.gltf`；**现网已整包拷**（JSON + Scan 到的相对 URI 伴生）。目标已存在则 **D18 复用、连伴生也不再拷**            |
+| ② `ToolImportApi`              | 扩展名认 `.gltf`；**现网已整包拷**（JSON + Scan 到的相对 URI 伴生）。管线②先清本趟 Incoming 夹再拷（D18）            |
 | UnityGLTF                      | `ScriptedImporter` 同时注册 `glb`/`gltf`；菜单 **Export GLB** = 从 Scene/Prefab **重导**，不是入库打包 |
 | `GLBBuilder.ConstructFromGLTF` | 注释写明 **Does not currently copy binary data**；**不能**当实现                                |
 | ⑤ 模型 SO                        | 代码默认 `.gltf`；资产曾出现 `.gitf` 拼写，与②列表不是同一份                                               |
@@ -283,7 +316,7 @@ ext == .gltf
 | URP 落差 / GLB 洋红      | 见 [d13-glb-magenta](./d13-glb-magenta.md)。主因 Shader，不是空 AB                                                 |
 | Art 通道混淆             | **导入期自动流不碰 Art** ≠ **中间层⑤/L1 不碰 Art**。⑤是代跑面板手动总批量。见 tech-and-ops「三条通道」、规则 33                               |
 | 贴图抽出                 | 已延后；勿当洋红 blocker。ggdddd 贴图仍嵌在 `Model/glb.glb`                                                              |
-| 单文件②路径复用（D18）        | 目标已存在不覆盖 → 同名新源静默旧文件；gltf **伴生也不再拷**，B′ 会搬旧树。见 [K](#d18-k)、[d23 报告 §4](../04_implementation/d23-slice-report.md) |
+| 单文件②路径重名（D18）        | **管线已落**：② 只清 `Incoming/<三层>/`，④ 只清 `Art/<名>/`，再拷。菜单/批量面板仍 Skip。唯一定位暂放。见 [d18k](#d18k) |
 | `.gltf`→GLB 再导入（D22） | **搁置、当前不开发。** `.gltf` 已可整包② + ④ B′。容器封装 ≠ DCC 重导；勿用场景 Export 当入库。若将来落盘改 `.glb` 仍与 D18 复用键交叉。见 [O](#d22-o) |
 
 
@@ -373,7 +406,7 @@ ext == .gltf
 文档已整理    对外接口分块 A/B → pipeline-flow + cli-getting-started（无代码）
 紧接着 P1     D5 CLI 无头验收后固化参数/退出码表
 已完成        D9 / D12 / D16 / D17；D19 **已降级**（不挡管线；见 [L](#d19-l)）
-P2            D10 列表（接口已预备）；D11 清 Incoming；D14 Pack/音效入口；**D18 单文件同路径复用策略**
+P2            D10 列表（接口已预备）；D11 清 Incoming；D14 Pack/音效入口；**D18 管线夹级清空已落**（唯一定位暂放）
 P3 已评        D22 `.gltf`→GLB 再②（容器封装，非 DCC）；见 [O](#d22-o)
 不要做        Quiet=退出；退出默认删 Art；为 Pack 另开一套 ②③⑥；用 Unity 场景 Export 当 glTF 入库
 ```

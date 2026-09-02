@@ -635,6 +635,11 @@ public static partial class RetinarBatchModelBuilder
 
         string assetName = MakeSafeName(Path.GetFileNameWithoutExtension(sourcePath));
         string assetFolder = ArtRoot + "/" + assetName;
+        if (!TryClearArtUnitFolderIfRequested(assetFolder, sourcePath, flattenOptions))
+        {
+            return GeneratedAsset.Invalid;
+        }
+
         string modelFolder = FlattenLayout.ModelFolder(assetFolder);
         string textureFolder = FlattenLayout.TextureFolder(assetFolder);
         string prefabFolder = FlattenLayout.PrefabFolder(assetFolder);
@@ -755,6 +760,11 @@ public static partial class RetinarBatchModelBuilder
         string assetName;
         string assetFolder;
         ResolvePackagedAssetIdentity(sourcePath, out assetName, out assetFolder);
+        if (!TryClearArtUnitFolderIfRequested(assetFolder, sourcePath, flattenOptions))
+        {
+            return GeneratedAsset.Invalid;
+        }
+
         string prefabFolder = FlattenLayout.PrefabFolder(assetFolder);
         string animationFolder = FlattenLayout.AnimationFolder(assetFolder);
         EnsureStandardAssetFolders(assetFolder);
@@ -893,6 +903,44 @@ public static partial class RetinarBatchModelBuilder
 
         assetName = MakeSafeName(Path.GetFileNameWithoutExtension(sourcePath));
         assetFolder = ArtRoot + "/" + assetName;
+    }
+
+    /// <summary>
+    /// 管线④：只删本次 Art/&lt;名&gt;/。源已在该夹内则不清，避免删掉正在平铺的 Prefab。
+    /// 不扫整棵 Assets/Art。菜单 Default 不调用。
+    /// </summary>
+    private static bool TryClearArtUnitFolderIfRequested(
+        string assetFolder,
+        string sourcePath,
+        RetinarFlattenOptions flattenOptions)
+    {
+        if (flattenOptions == null || !flattenOptions.ClearDestinationArtFolder)
+        {
+            return true;
+        }
+
+        string folder = (assetFolder ?? string.Empty).Replace("\\", "/");
+        while (folder.EndsWith("/", System.StringComparison.Ordinal) && folder.Length > 1)
+        {
+            folder = folder.Substring(0, folder.Length - 1);
+        }
+
+        string src = (sourcePath ?? string.Empty).Replace("\\", "/");
+        if (!string.IsNullOrEmpty(src) &&
+            (src.Equals(folder, System.StringComparison.OrdinalIgnoreCase) ||
+             src.StartsWith(folder + "/", System.StringComparison.OrdinalIgnoreCase)))
+        {
+            Debug.LogWarning("[Retinar] 源已在本次 Art 单元内，跳过清夹: " + sourcePath);
+            return true;
+        }
+
+        if (!AssetUnitFolder.TryDeleteImmediateChildFolder(ArtRoot, folder))
+        {
+            Debug.LogError("[Retinar] 无法清空 Art 单元夹: " + folder);
+            return false;
+        }
+
+        return true;
     }
 
     /// <summary>

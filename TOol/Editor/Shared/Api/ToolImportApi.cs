@@ -16,7 +16,7 @@ public static class ToolImportApi
     };
 
     /// <summary>
-    /// 单文件导入：工程外则拷入 Import 区并 ImportAsset；已在 Assets 则原样返回。
+    /// 单文件导入：工程外则先清本趟 Incoming/&lt;三层&gt;/ 再拷入并 ImportAsset；已在 Assets 则原样返回（不清夹）。
     /// 设置自动依赖 Unity 导入回调，本方法不另调设置逻辑。
     /// </summary>
     /// <param name="sourcePath">磁盘绝对路径或 Assets/…</param>
@@ -96,19 +96,11 @@ public static class ToolImportApi
             return false;
         }
 
-        // 已存在则复用（单文件编排，不强制 Conflict 失败）
-        if (AssetDatabase.LoadMainAssetAtPath(targetAsset) != null ||
-            File.Exists(AssetPathUtility.ToFullPath(targetAsset)))
+        // 管线单文件：只清本趟 Incoming/<三层>/，再拷。不扫整棵 Incoming。源已在 Assets 时上面已 return。
+        if (!AssetUnitFolder.TryDeleteImmediateChildFolder(settings.NormalizedImportRoot, targetFolder))
         {
-            assetModelPath = targetAsset;
-            message = "目标已存在，复用: " + targetAsset +
-                      (string.IsNullOrEmpty(warning) ? string.Empty : "（" + warning + "）");
-            if (AssetDatabase.LoadMainAssetAtPath(targetAsset) == null)
-            {
-                AssetDatabase.ImportAsset(targetAsset, ImportAssetOptions.ForceUpdate);
-            }
-
-            return AssetDatabase.LoadMainAssetAtPath(targetAsset) != null;
+            message = "无法清空导入单元夹: " + targetFolder;
+            return false;
         }
 
         EnsureAssetFolder(settings.NormalizedImportRoot);
