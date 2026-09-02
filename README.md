@@ -4,9 +4,12 @@ Unity Editor 插件集合，用于模型/贴图的**导入期处理**与**交付
 适用环境：Unity 2020.3（Built-in RP）、Windows Editor。
 
 远程仓库：`http://swm-server.local:3000/Hanson/asset-bundle.git`  
-当前版本：**v1.5.3**（`main` / 标签 `v1.5.3` · **gltf 整包 + 管线重名覆盖**）  
-**本批重点：** `.gltf` B′ 原子平铺；管线只清本趟 Incoming/Art 单元夹；开发日志。  
-历史：`v1.5.0` 流程稳定；`v1.4.4` 平铺/动画循环；`v1.4.0` 平铺分类；`v1.3.8` 成品直通；`v1.3.5` 全流程基线
+
+> **仓库默认分支仍是 `other` 时，首页会停在本版。** 当前发布请看 [`main`](http://swm-server.local:3000/Hanson/asset-bundle/src/branch/main) / 标签 **[v1.5.3](http://swm-server.local:3000/Hanson/asset-bundle/releases/tag/v1.5.3)**。
+
+当前版本（本分支）：**v1.4.4**（历史线 `other`）。推荐线已迁到 `main`。  
+**本批重点：** 修复引用拆解不完全（动画材质 PPtr / GetDependencies 补拷）；**区分 FBX 与外来预设体**（预设体套空壳、不 SafeZone 缩放；FBX 仍缩进 SafeZone）；动画循环沿用源 Clip。  
+历史：`v1.4.0` 平铺分类；`v1.3.8` 成品直通；`v1.3.5` 全流程基线
 
 ---
 
@@ -14,15 +17,10 @@ Unity Editor 插件集合，用于模型/贴图的**导入期处理**与**交付
 
 | 目录 | 定位 | 菜单入口 |
 |------|------|----------|
-| [`Pipeline/`](./Pipeline/) | **流程编排**：步骤 SO、Runner、自动化管线总面板 | `Tools > 自动化管线总面板` |
 | [`TOol/`](./TOol/) | 批量 FBX 入库；导入期设置 + 源文件/模型后处理 | `Tools > 批量FBX导入`；`Tools > 资源处理总面板` |
-| [`RetinarBatchBuilder_Share/`](./RetinarBatchBuilder_Share/) | **插件 1（v1.5.3 线）**：分类平铺、gltf B′、AB Options / 成品直通 | `Tools > Retinar > 批量汇总` / `成品直达` / `打开交付文件夹` |
+| [`RetinarBatchBuilder_Share/`](./RetinarBatchBuilder_Share/) | **插件 1（v1.4.4）**：分类平铺、引用收敛、FBX/预设体分流、成品直通 | `Tools > Retinar > 批量汇总` / `成品直达` / `打开交付文件夹` |
 
-**目录边界（防混淆，三条通道）：**  
-- **导入期自动流**（设置自动 / 后处理自动，`AssetPostprocessor`）：默认**不碰** `Assets/Art/**`（`excludedPathPrefixes`），避免与插件 1 的交付 Importer 互踩（规则 33）。这是「不碰 Art」的那条，且应保持如此。  
-- **L1 手动总批量**（资源处理总面板「执行全部」）：路径默认就是 `Assets/Art`，**故意**对交付区压图、刷顶点色。  
-- **中间层⑤**（自动化管线勾选⑤）：**代调上一行同一内核**，不是导入期自动流。看起来像自动，但是编排在点面板按钮。  
-两边不得同时改同一 Importer 属性。详见 [`PACKAGING_RULES.md`](./RetinarBatchBuilder_Share/PACKAGING_RULES.md) 规则 33、[`TOol/ARCHITECTURE.md`](./TOol/ARCHITECTURE.md)。  
+**目录边界：** 自动处理流默认不碰 `Assets/Art/**`（交付产物区由打包工具管理）。两边不得同时改同一 Importer 属性。详见 [`RetinarBatchBuilder_Share/PACKAGING_RULES.md`](./RetinarBatchBuilder_Share/PACKAGING_RULES.md) 规则 33。  
 插件 1 Editor 阅读地图：[`RetinarBatchBuilder_Share/Assets/Retinar/Editor/README_EDITOR.md`](./RetinarBatchBuilder_Share/Assets/Retinar/Editor/README_EDITOR.md)。  
 **v1.4.0 Art 结构：** `Assets/Art/<名>/image/Texture`（默认贴图）、`image/UI`（Sprite）等单元目录；未知依赖进 `Unknown/`。
 
@@ -43,7 +41,7 @@ Unity Editor 插件集合，用于模型/贴图的**导入期处理**与**交付
 - 简要：[TOol/README.md](./TOol/README.md)
 - 结构与扩展：[TOol/ARCHITECTURE.md](./TOol/ARCHITECTURE.md)
 
-### Retinar（插件 1，v1.5.3）
+### Retinar（插件 1，v1.4.4）
 
 1. 确认工程内存在 Retinar Editor 脚本并可编译。
 2. （可选）打开 **`批量汇总 > 平铺分类面板`**：勾选大类、改后缀；可选根 BoxCollider。
@@ -79,7 +77,7 @@ Unity Editor 插件集合，用于模型/贴图的**导入期处理**与**交付
 
 ## 协作说明
 
-- **迭代重心（v1.5.x）：** 自动化管线（②③⑥，可选④⑤）+ gltf 整包；插件 1 平铺/AB 仍在 Retinar。
+- **迭代重心（v1.4.x）：** 插件 1——引用收敛、FBX/预设体分流、平铺/导出模块化；插件 2 以稳定维护为主。
 - 开发在独立分支进行，通过合并请求（PR）合入；任务用平台 **工单（Issue）** 跟踪。
 - 敏感信息（账号、Token、密码）只放本地 `.env` 或环境变量，**禁止提交**。仓库已忽略 `.env`。
 - 本地可同时保留 GitHub `origin` 与团队远程 `team`（指向本仓库）。
@@ -88,6 +86,5 @@ Unity Editor 插件集合，用于模型/贴图的**导入期处理**与**交付
 
 ## 分支提示
 
-当前发布看 **`main` / 标签 `v1.5.3`**。Gitea 仓库**默认分支若仍是 `other`**，首页 README 会停在 **v1.4.4**；左上角改选 `main` 即是现网文档。  
-命令行自动化一体流程（2022 / GLB）开发备忘见 [`docs/dev-wip/`](./docs/dev-wip/README.md)（入口 [`docs/CLI_AUTOMATION_DEV.md`](./docs/CLI_AUTOMATION_DEV.md)）。  
-**开发日志**（提交次第 / 工单对齐）：[`docs/dev-wip/05_dev-log/timeline.md`](./docs/dev-wip/05_dev-log/timeline.md)。
+当前常用功能分支为 `other`；`main` 为基线分支。浏览代码时请在网页左上角选择对应分支。  
+命令行自动化一体流程（2022 / GLB）开发说明见 [`docs/CLI_AUTOMATION_DEV.md`](./docs/CLI_AUTOMATION_DEV.md)（分支 `feature/cli-pipeline-2022`）。
