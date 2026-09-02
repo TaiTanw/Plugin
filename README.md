@@ -89,4 +89,5 @@ Unity Editor 插件集合，用于模型/贴图的**导入期处理**与**交付
 ## 分支提示
 
 当前常用功能分支为 `other`；`main` 为基线分支。浏览代码时请在网页左上角选择对应分支。  
-命令行自动化一体流程（2022 / GLB）开发备忘见 [`docs/dev-wip/`](./docs/dev-wip/README.md)（入口 [`docs/CLI_AUTOMATION_DEV.md`](./docs/CLI_AUTOMATION_DEV.md)；分支 `feature/cli-pipeline-2022`）。
+命令行自动化一体流程（2022 / GLB）开发备忘见 [`docs/dev-wip/`](./docs/dev-wip/README.md)（入口 [`docs/CLI_AUTOMATION_DEV.md`](./docs/CLI_AUTOMATION_DEV.md)）。  
+**开发日志**（提交次第 / 工单对齐）：[`docs/dev-wip/05_dev-log/timeline.md`](./docs/dev-wip/05_dev-log/timeline.md)。

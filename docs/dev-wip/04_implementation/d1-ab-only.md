@@ -3,7 +3,8 @@
 返回 [实现流程](./pipeline-flow.md) · [待办](../03_open-items/backlog.md)
 
 > **状态：已收口（2026-08-26）。** 文档保留备查。  
-> 实机样例：`Assets/Art/ggdddd`（GLB 通道出双端 AB）。安卓洋红不属本项，见待办 D13。
+> 实机样例：`Assets/Art/ggdddd`（GLB 通道出双端 AB）。安卓洋红不属本项，见待办 D13。  
+> **2026-09-02：** 工单文件名仍未改代码。意向 = **夹名不变**（`Android`/`iOS`），夹内改为 `{id}_android.assetbundle` + `{id}_ios.assetbundle`。真正成本是重开契约 1（APP 取包）。#274 在 [YuWu 14305](http://swm-server.local:3000/Admin/prd-docs/issues/274#issuecomment-14305) 之后只移出 milestone 49，无 APP 书面改名。未改 APP 不切默认。见 [开发日志 §2](../05_dev-log/timeline.md#2-issue-274)。
 
 ## 已锁定（本阶段）
 
@@ -16,7 +17,7 @@
 | 落盘 | `AssetBundles/{Android,iOS}` + 拷到 `Deliverables/<名>/03_assetbundles` |
 | API | `RetinarAbApi.BuildAbOnly` |
 | 压缩 | **`ChunkBasedCompression`（LZ4）** |
-| 契约 1 文件名 | **退化/现网**：保持 `name.assetbundle` + 平台文件夹（APP 已按此取包） |
+| 契约 1 文件名 | **退化/现网** `name.assetbundle` + 平台夹。工单两文件名 = **评估未开发**（见文首 2026-09-02） |
 | 契约 2 包内 main | **退化/现网**：不强制改 `main` |
 
 ---
@@ -24,6 +25,8 @@
 ## 契约 1 / 2（已确认可退化）
 
 以现网 APP 为准，本阶段**不改**命名与包内主资源名。若日后 V1.2 要统一，再开专项。
+
+插件改名范围小（`RetinarAbApi` 按平台循环已具备）；直通会跟着变；规范化导出旧路径不会自动变。契约 2（`main`）不要绑进文件名这一刀。上传层改名仍是备选（你在 #274 的回复已写过）。
 
 ---
 

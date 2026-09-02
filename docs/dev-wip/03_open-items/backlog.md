@@ -121,11 +121,13 @@ Unity `File.Copy` / `CopyAsset` **没有**「重名则跳过」的导入默认�
 
 现网：`AssetBundles/{Android,iOS}/{stem}.assetbundle`，stem = Prefab 文件名小写；`assetBundleName` 同 stem。平台靠**文件夹**区分，文件名两端一样。D1 契约 1 已按此锁给 APP。
 
-改成文件名带平台后缀：**中等、局部**。主改 `RetinarAbApi.BuildAndCopyAssetBundles`（已按平台循环，每趟可换名）+ `BuildBundleFileName(assetName, platform)` + 交付拷贝。不必改②③④。`materialId` 须在⑥能拿到：Prefab 已按 Id 命名则用 stem 即可；否则要 `AbBuildOptions` 增加字段，Runner 从 `Options.MaterialId` 填入。
+**2026-09-02 评估（未开发）：** 夹名仍 `Android`/`iOS`，夹内改为工单两个文件 `{id}_android.assetbundle` + `{id}_ios.assetbundle`。#274 在你回复（上传层可改名）之后只移出 milestone 49，无 APP 改名确认。见 [开发日志 §2](../05_dev-log/timeline.md#2-issue-274)。
 
-注意：Unity 输出是 `{assetBundleName}.{variant}` → 名用 `chair_android`、variant 仍 `assetbundle`。中文 Id 仍走 `MakeSafeName`。菜单直通/规范化导出若共用 AbApi 会一起变。
+改文件名：**中等、局部**。主改 `RetinarAbApi.BuildAndCopyAssetBundles`（已按平台循环）+ `BuildBundleFileName(assetName, platform)` + 交付拷贝。不必改②③④。填了 `materialId` 则 Prefab stem 已是 Id。旧槽 `name.assetbundle` 只删本趟平台夹里该文件，不扫整棵 `AssetBundles/`。
 
-真正成本是 **APP 取包契约**（现认 `name.assetbundle` + 平台夹）。若 APP 已按目录分平台，加 `_android` 是重复；若要单目录混放才有必要。未改 APP 前不要切默认。
+Unity 输出 `{assetBundleName}.{variant}` → 名用 `chair_android`、variant 仍 `assetbundle`。直通共用 AbApi 会一起变；规范化导出旧路径不会自动变。契约 2（`main`）不绑本刀。
+
+真正成本是 **重开 D1 契约 1**。未改 APP 前不要切默认；上传层改名仍是备选。
 
 ---
 
@@ -526,7 +528,7 @@ P3 已评        D22 `.gltf`→GLB 再②（容器封装，非 DCC）；见 [O](
 | ID        | 事项                                         | 说明                                      |
 | --------- | ------------------------------------------ | --------------------------------------- |
 | D7        | 与 APP 书面确认 `main` 名、LZ4、`.assetbundle` 文件名 | **可退化**（现网取包）；LZ4 已采用                   |
-| D1 契约 1/2 | AB 文件名 / 包内 main                           | 保持 `name.assetbundle` + 平台夹；不强制改 `main` |
+| D1 契约 1/2 | AB 文件名 / 包内 main                           | **仍退化。** 文件名重开须 APP；夹不变、夹内两工单名 = 评估未开发。`main` 不绑。见 [日志 §2](../05_dev-log/timeline.md#2-issue-274) |
 
 
 自动线**默认不做**（代码暂留，不当开放事务）：

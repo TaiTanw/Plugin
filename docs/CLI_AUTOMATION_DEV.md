@@ -12,5 +12,6 @@
 | 代码结构 | [dev-wip/02_structure/overview.md](./dev-wip/02_structure/overview.md) |
 | 待处理/模糊 | [dev-wip/03_open-items/backlog.md](./dev-wip/03_open-items/backlog.md) |
 | 实现流程 | [dev-wip/04_implementation/pipeline-flow.md](./dev-wip/04_implementation/pipeline-flow.md) |
+| 开发日志 | [dev-wip/05_dev-log/timeline.md](./dev-wip/05_dev-log/timeline.md) |
 
-分支：`feature/cli-pipeline-2022` · 工单：http://swm-server.local:3000/Admin/prd-docs/issues/274
+分支：后续已合入 `main`（原 `feature/cli-pipeline-2022`）· 工单：http://swm-server.local:3000/Admin/prd-docs/issues/274

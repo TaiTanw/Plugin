@@ -160,7 +160,7 @@ CLI `materialId` 可覆盖 Prefab 名。
 
 | 契约 | 倾向 |
 |---|---|
-| 输出名 | 现状 `name.assetbundle`+平台夹；工单倾向 `{id}_android` — **待 APP**（契约1） |
+| 输出名 | 现状 `name.assetbundle`+平台夹。工单要 `{id}_android` / `{id}_ios`（**夹名可不变**）。改插件易，改契约 1 须 APP — **待 APP**（契约1） |
 | AB 内主资源名 | 建议 `main` — **待 APP**（契约2） |
 | 压缩 | LZ4 ChunkBased（**已采用**） |
 | 成功 | 双端文件 + 退出码 0 |
