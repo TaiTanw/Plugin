@@ -43,7 +43,7 @@ Unity Editor 插件集合，用于模型/贴图的**导入期处理**与**交付
 - 简要：[TOol/README.md](./TOol/README.md)
 - 结构与扩展：[TOol/ARCHITECTURE.md](./TOol/ARCHITECTURE.md)
 
-### Retinar（插件 1，v1.4.4）
+### Retinar（插件 1，v1.5.3）
 
 1. 确认工程内存在 Retinar Editor 脚本并可编译。
 2. （可选）打开 **`批量汇总 > 平铺分类面板`**：勾选大类、改后缀；可选根 BoxCollider。
@@ -79,7 +79,7 @@ Unity Editor 插件集合，用于模型/贴图的**导入期处理**与**交付
 
 ## 协作说明
 
-- **迭代重心（v1.4.x）：** 插件 1——引用收敛、FBX/预设体分流、平铺/导出模块化；插件 2 以稳定维护为主。
+- **迭代重心（v1.5.x）：** 自动化管线（②③⑥，可选④⑤）+ gltf 整包；插件 1 平铺/AB 仍在 Retinar。
 - 开发在独立分支进行，通过合并请求（PR）合入；任务用平台 **工单（Issue）** 跟踪。
 - 敏感信息（账号、Token、密码）只放本地 `.env` 或环境变量，**禁止提交**。仓库已忽略 `.env`。
 - 本地可同时保留 GitHub `origin` 与团队远程 `team`（指向本仓库）。
@@ -88,6 +88,6 @@ Unity Editor 插件集合，用于模型/贴图的**导入期处理**与**交付
 
 ## 分支提示
 
-当前常用功能分支为 `other`；`main` 为基线分支。浏览代码时请在网页左上角选择对应分支。  
+当前发布看 **`main` / 标签 `v1.5.3`**。Gitea 仓库**默认分支若仍是 `other`**，首页 README 会停在 **v1.4.4**；左上角改选 `main` 即是现网文档。  
 命令行自动化一体流程（2022 / GLB）开发备忘见 [`docs/dev-wip/`](./docs/dev-wip/README.md)（入口 [`docs/CLI_AUTOMATION_DEV.md`](./docs/CLI_AUTOMATION_DEV.md)）。  
 **开发日志**（提交次第 / 工单对齐）：[`docs/dev-wip/05_dev-log/timeline.md`](./docs/dev-wip/05_dev-log/timeline.md)。
