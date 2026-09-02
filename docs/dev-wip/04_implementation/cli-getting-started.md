@@ -79,7 +79,7 @@ Unity.exe
 
 | 参数 | 必填 | 映射 Options | 说明 |
 |---|---|---|---|
-| `-source <path>` 或 `-source=` | 是 | `SourcePath` | 工程外 **.glb/.fbx** 或 `Assets/…`。**.gltf 请先在 DCC/gltf-pipeline 转 GLB**（D22 编辑器封装未落地；②若直接收 gltf 只拷 JSON） |
+| `-source <path>` 或 `-source=` | 是 | `SourcePath` | 工程外 **.glb/.fbx/.gltf/.obj** 或 `Assets/…`。`.gltf` 会整包入库（旁路一起拷）；不必先转 GLB |
 | `-materialId <name>` | 否 | `MaterialId` | 覆盖 Prefab 三层命名 |
 
 步骤开关全部跟 `PipelineStepSettings` SO，不做 flag 覆盖。

@@ -57,6 +57,11 @@ public sealed class PipelineOptions
     /// <summary>⑤ 扫描文件夹；null 则用 L1 Store。</summary>
     public List<string> PostProcessFolderPaths;
 
+    /// <summary>
+    /// ② 成功后的导入事实（文件归类）。不是步骤开关。平铺侧不读本字段。
+    /// </summary>
+    public PipelineJobContext JobContext;
+
     /// <summary>从 SO 填充步骤开关，并带上单文件源。</summary>
     public static PipelineOptions FromSettings(PipelineStepSettings settings, string sourcePath = null)
     {

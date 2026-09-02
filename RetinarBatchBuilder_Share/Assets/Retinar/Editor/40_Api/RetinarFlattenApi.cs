@@ -22,8 +22,21 @@ public static class RetinarFlattenApi
     /// </summary>
     public static int FlattenPaths(IList<string> sourcePaths, bool quiet, out List<string> artPrefabPaths)
     {
+        return FlattenPaths(sourcePaths, quiet, RetinarFlattenOptions.Default, out artPrefabPaths);
+    }
+
+    /// <summary>
+    /// 带执行闸的平铺。不读 PipelineJobContext；闸由调用方映射后传入。
+    /// </summary>
+    public static int FlattenPaths(
+        IList<string> sourcePaths,
+        bool quiet,
+        RetinarFlattenOptions flattenOptions,
+        out List<string> artPrefabPaths)
+    {
         List<string> unknownLines;
-        return RetinarBatchModelBuilder.FlattenSourcePaths(sourcePaths, quiet, out unknownLines, out artPrefabPaths);
+        return RetinarBatchModelBuilder.FlattenSourcePaths(
+            sourcePaths, quiet, flattenOptions, out unknownLines, out artPrefabPaths);
     }
 
     /// <summary>菜单兼容：选中项平铺（可弹窗）。</summary>

@@ -189,9 +189,9 @@ public class PipelineWindow : EditorWindow
             if (IsGltfSourcePath(sourcePath))
             {
                 EditorGUILayout.HelpBox(
-                    "源是 .gltf（JSON + 旁路 .bin/贴图）。应先封装成 GLB 再入库（容器打包，非 DCC / 非场景 Export）。\n" +
-                    "编辑器暂不执行此转换；请用 DCC 或 gltf-pipeline。直接入库目前只会拷贝 JSON。",
-                    MessageType.Warning);
+                    "源是 .gltf（JSON + 旁路 .bin/贴图）。管线会整包入库，④ 按原子夹搬迁，不必先转 GLB。\n" +
+                    "转成 GLB 仍可用（DCC / gltf-pipeline），不是必须。编辑器不会做 DCC 重导。",
+                    MessageType.Info);
             }
         }
     }

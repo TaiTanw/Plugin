@@ -27,8 +27,9 @@
 | 可选步骤 | **④ 平铺、⑤ 后处理**（默认关，flag/面板勾选） |
 | ⑥ 基线产物 | **仅双端 AB** + quiet 日志/退出码 |
 | ⑥ 可选 | 门禁/弹窗提示；UnityPackage；全套 Deliverables |
-| 平铺归属 | **暂留插件 1**；③ Prefab 在插件 2；不整包迁平铺到插件 2 |
+| 平铺归属 | **暂留插件 1**；③ Prefab 在插件 2；不整包迁平铺到插件 2。能力拆开后可薄化 `40_Api`，不是搬家 → [flatten-capabilities §4](../04_implementation/pipeline-flatten-capabilities.md) |
 | GLB 贴图抽出 | **可延后**（④⑤ 可选后非 blocker） |
+| 导入信息 ctx（D23） | **中间层事实**；B′ 已接。D22 **不开发** → [d23-slice-report](../04_implementation/d23-slice-report.md) |
 | 自动转换上云 | 产品 **V1.2**；V1.0 人工传 AB（Issue #274） |
 
 ## 插件分工（目标态）

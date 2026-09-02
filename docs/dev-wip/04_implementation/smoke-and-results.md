@@ -1,6 +1,6 @@
 # 核对：冒烟 · 单文件输入 · 结果/错误码
 
-返回 [总目录](../README.md) · [待办](../03_open-items/backlog.md)
+返回 [总目录](../README.md) · [待办](../03_open-items/backlog.md) · [各相位入参/返回值](./pipeline-phase-io.md)
 
 > 结论已按 2026-08-26 回复更新。
 
@@ -63,7 +63,9 @@
 
 ---
 
-## 4. 要不要加 `StepResult`？（具体情况）
+## 4. StepResult
+
+**要不要加 `StepResult`？（具体情况）**
 
 ### 先说结论
 

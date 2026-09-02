@@ -50,10 +50,9 @@ public static class ToolImportApi
 
         if (string.Equals(ext, ".gltf", StringComparison.OrdinalIgnoreCase))
         {
-            Debug.LogWarning(
-                "[②导入] 源是 .gltf。策略是先封装成 .glb 再入库（容器打包，不是 DCC，也不是 UnityGLTF 场景 Export）。" +
-                "编辑器暂不执行此转换（D22）。当前只拷贝 JSON，旁路 .bin/贴图不会进工程。" +
-                "请用 DCC 或 gltf-pipeline 转成 .glb 再导入。");
+            Debug.Log(
+                "[②导入] 源是 .gltf。将连同旁路 .bin/贴图整包入库；④ 有外 URI 时走原子搬迁。" +
+                "不必先转 GLB（D22 封装仍可选，编辑器不做 DCC 重导）。");
         }
 
         if (TryAsExistingAssetPath(normalized, out assetModelPath))
@@ -130,8 +129,9 @@ public static class ToolImportApi
 
         try
         {
-            // D22：若源是 .gltf，应在此之前封装为 .glb 再 Copy（容器打包，禁止走 GLTFSceneExporter）。
+            // .gltf：下面 CopyGltfSidecarsBeside 会跟拷相对 URI 伴生。禁止用 GLTFSceneExporter 当入库。
             File.Copy(fullDisk, destFull, false);
+            CopyGltfSidecarsBeside(fullDisk, destFull);
         }
         catch (Exception ex)
         {
@@ -139,6 +139,7 @@ public static class ToolImportApi
             return false;
         }
 
+        AssetDatabase.Refresh();
         AssetDatabase.ImportAsset(targetAsset, ImportAssetOptions.ForceUpdate);
         assetModelPath = targetAsset;
 
@@ -257,5 +258,76 @@ public static class ToolImportApi
 
             current = next;
         }
+    }
+
+    /// <summary>
+    /// .gltf 入库时把相对 URI 伴生拷到同一导入夹（保持相对路径），再让 Import 能找到 .bin/图。
+    /// </summary>
+    static void CopyGltfSidecarsBeside(string sourceGltfFull, string destGltfFull)
+    {
+        if (string.IsNullOrEmpty(sourceGltfFull) ||
+            !sourceGltfFull.EndsWith(".gltf", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        GltfExternalScan scan = GltfPackageFiles.Scan(sourceGltfFull);
+        string destRoot = Path.GetDirectoryName(destGltfFull);
+        if (string.IsNullOrEmpty(destRoot))
+        {
+            return;
+        }
+
+        for (int i = 0; i < scan.SidecarFullPaths.Count; i++)
+        {
+            string srcFull = scan.SidecarFullPaths[i];
+            string rel = GltfPackageFiles.MakeRelativeToGltfDir(sourceGltfFull, srcFull);
+            string destFull = Path.GetFullPath(Path.Combine(destRoot, rel)).Replace("\\", "/");
+            string destDir = Path.GetDirectoryName(destFull);
+            try
+            {
+                if (!string.IsNullOrEmpty(destDir) && !Directory.Exists(destDir))
+                {
+                    Directory.CreateDirectory(destDir);
+                }
+
+                if (!File.Exists(destFull))
+                {
+                    File.Copy(srcFull, destFull, false);
+                }
+
+                string destAsset = FullPathUnderAssets(destFull);
+                if (!string.IsNullOrEmpty(destAsset))
+                {
+                    AssetDatabase.ImportAsset(destAsset, ImportAssetOptions.ForceUpdate);
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning("[②导入] 伴生拷贝失败: " + srcFull + " → " + destFull + " " + ex.Message);
+            }
+        }
+
+        if (scan.MissingUris.Count > 0)
+        {
+            Debug.LogWarning("[②导入] gltf 缺伴生 × " + scan.MissingUris.Count + "（ctx 会记 Warnings）");
+        }
+    }
+
+    static string FullPathUnderAssets(string fullPath)
+    {
+        if (string.IsNullOrEmpty(fullPath))
+        {
+            return null;
+        }
+
+        string full = fullPath.Replace("\\", "/");
+        string data = Application.dataPath.Replace("\\", "/");
+        if (full.StartsWith(data + "/", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Assets" + full.Substring(data.Length);
+        }
+
+        return null;
     }
 }

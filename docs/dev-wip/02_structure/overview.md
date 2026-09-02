@@ -20,9 +20,13 @@ Assets/Plugin/
 |---|---|
 | `Pipeline/ConfigData/` | `PipelineStepSettings` 总步骤 SO |
 | `Pipeline/Editor/PipelineWindow.cs` | **(A)** 人机：`Tools > 自动化管线总面板` |
-| `Pipeline/Editor/PipelineRunner.cs` | **(A/B 共用)** 单文件 ②→③→⑥ 编排内核 |
+| `Pipeline/Editor/PipelineRunner.cs` | **(A/B 共用)** ②→③→④→⑤→⑥；② 后 `AttachJobContext`（不调③） |
+| `Pipeline/Editor/PipelineJobContext.cs` | D23 事实：外 URI / 伴生 / `MainAssetOk` |
+| `Pipeline/Editor/PipelineOptions.cs` | 步骤开关；字段 `JobContext`（③⑤⑥ 不读） |
+| `Pipeline/Editor/PipelineFlattenBridge.cs` | **仅④**读 ctx → FlattenOptions（类型不互相引用） |
+| `Pipeline/Editor/PipelineGltfUriProbe.cs` | ② 后探测；转调 `GltfPackageFiles.Scan` |
 | `Pipeline/Editor/PipelineCli.cs` | **(B)** CLI `-executeMethod PipelineCli.Run` · 第一刀 `-source` |
-| 文档 | [pipeline-flow](../04_implementation/pipeline-flow.md) · [cli-getting-started](../04_implementation/cli-getting-started.md) |
+| 文档 | [d23 报告](../04_implementation/d23-slice-report.md) · [pipeline-flow](../04_implementation/pipeline-flow.md) · [cli-getting-started](../04_implementation/cli-getting-started.md) |
 
 ---
 
@@ -37,7 +41,8 @@ Assets/Plugin/
 | `Editor/Window/BatchFbxImportWindow.cs` | 批量 FBX 导入窗口 |
 | `Editor/Window/ResourceProcessWindow.cs` | L1 资源处理总面板（路径×Op；⑤ 子流程对外口） |
 | `Editor/Shared/` | 横切：开关、批量路径、排除、导入后调度 |
-| `Editor/Shared/Api/` | **对外窄口**：Import / Prefab / PostProcess |
+| `Editor/Shared/GltfPackageFiles.cs` | gltf URI `Scan`（② 伴生拷 + ctx 探测共用；换解析器只改这里） |
+| `Editor/Shared/Api/` | **对外窄口**：Import / Prefab / PostProcess；② 同路径复用 = **D18** |
 | `Editor/Generated/` | 中间资产能力（非 Art、非⑤原地改） |
 | `Editor/Generated/Prefab/` | **③ 自动 Prefab**（Config / Layout / Service / 菜单） |
 | `Editor/Generated/Prefab/.../PrefabBuildService.cs` | 写盘 `SaveAsPrefabAsset` |
@@ -68,6 +73,7 @@ Assets/Plugin/
 | `.../20_Package/RetinarDirectPackage.cs` | ⑥ 直通：仅 AB+UP，不改 Art |
 | `Assets/Retinar/Editor/30_Business/` | 门禁/输出**接口种子**（未接线） |
 | `Assets/Retinar/Editor/RetinarBatchModelBuilder*.cs` | Legacy 巨型内核：④ 平铺 + ⑥ 规范化导出 |
+| `.../RetinarBatchModelBuilder.AtomicRelocate.cs` | ④ B′：`RelocateAtomicPackage` → `Art/<名>/<名>/` |
 | `PACKAGING_RULES.md` | 交付硬规则 |
 | `Assets/Retinar/Editor/README_EDITOR.md` | Editor 阅读地图 |
 

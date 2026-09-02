@@ -29,6 +29,8 @@ public static class PipelineRunner
             return result;
         }
 
+        AttachJobContext(options, result);
+
         // ③ Prefab
         List<string> prefabPaths = options.PrefabPaths != null
             ? new List<string>(options.PrefabPaths)
@@ -80,7 +82,12 @@ public static class PipelineRunner
             }
 
             List<string> artPrefabPaths;
-            int n = RetinarFlattenApi.FlattenPaths(prefabPaths, quiet, out artPrefabPaths);
+            RetinarFlattenOptions flattenOpt = PipelineFlattenBridge.ToFlattenOptions(options.JobContext);
+            int n = RetinarFlattenApi.FlattenPaths(prefabPaths, quiet, flattenOpt, out artPrefabPaths);
+            if (flattenOpt != null && flattenOpt.SkipDependencySplit)
+            {
+                result.Info("[Pipeline] ④ SkipDependencySplit + B′ 原子搬迁 Art/<名>/<名>/");
+            }
             result.Info("[Pipeline] ④ Flatten " + n + " / " + prefabPaths.Count);
             if (n <= 0 || artPrefabPaths == null || artPrefabPaths.Count == 0)
             {
@@ -282,6 +289,27 @@ public static class PipelineRunner
         }
 
         return true;
+    }
+
+    /// <summary>② 后建 ctx。不调用平铺；平铺只收 FlattenOptions。</summary>
+    private static void AttachJobContext(PipelineOptions options, PipelineResult result)
+    {
+        if (options.ModelPaths == null || options.ModelPaths.Count == 0)
+        {
+            return;
+        }
+
+        options.JobContext = PipelineJobContext.Build(options.ModelPaths[0]);
+        if (options.JobContext == null)
+        {
+            return;
+        }
+
+        result.Info(options.JobContext.ToLogString());
+        if (!options.JobContext.MainAssetOk && options.RunPrefab)
+        {
+            result.Info("[Pipeline] ctx.MainAssetOk=false → ③ 空列表仍映射 PrefabFailed(30)（默认，不改 20）");
+        }
     }
 
     private static bool IsExternalDiskPath(string path)

@@ -47,11 +47,16 @@
 
 面板三格与 SO 连锁：关③则④⑤关；关④则⑤关。`ApplyTo` / Runner 同样约束（防手组 Options）。⑥ 不绑在③上；关③且未预填 Prefab 时⑥会 BadArgs。
 
+gltf / 多文件包：同一编排；② 后建 ctx，**仅④**经 Bridge 消费（B′）。③ 不读 ctx。→ [pipeline-job-context](./pipeline-job-context.md) · [d23 报告](./d23-slice-report.md)。
+
 ---
 
-## 2. (A) 中间层 · 步骤 → 对外窄口
+## 2. A steps to APIs
 
-编排是 **本地变量接力**，不是插件互相调、也不是改 L1 Prefs。每步窄口返回路径（或结果对象），Runner 收下再传入下一步。
+**(A) 中间层 · 步骤 → 对外窄口**
+
+编排是 **本地变量接力**，不是插件互相调、也不是改 L1 Prefs。每步窄口返回路径（或结果对象），Runner 收下再传入下一步。  
+各相位入参 / 返回值 / 关步行为 → 专文 [pipeline-phase-io](./pipeline-phase-io.md)。
 
 ```text
 SourcePath

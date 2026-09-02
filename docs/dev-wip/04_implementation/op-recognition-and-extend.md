@@ -18,7 +18,7 @@
 | **材质** | `t:Material` 且路径 `.mat` | **不用后缀表** | Op 按 Shader 名 / 白名单 Skip |
 
 ② 导入另有一套：`ToolImportApi` 写死 `.fbx/.glb/.gltf/.obj`，与模型 Op 的 SO 列表独立。  
-**`.gltf`：** 扩展名认，但②目前只拷 JSON。策略是 **封装成 GLB 再导入**（D22，未落地；非 DCC 重导）。见 backlog **O**。
+**`.gltf`：** 扩展名认；② 整包拷（JSON + 相对 URI 伴生）；④ 有外 URI 时原子搬迁。转 GLB **可选**（D22 不开发）。见 backlog **O**。
 
 L3 窗口：`ResourceRecognitionGui`（贴图 Codec 探测、模型 SO 列表、材质说明）。**不做专用后缀编辑器。**
 

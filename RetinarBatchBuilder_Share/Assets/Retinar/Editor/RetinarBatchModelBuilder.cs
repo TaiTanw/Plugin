@@ -113,7 +113,7 @@ public static partial class RetinarBatchModelBuilder
     {
         List<string> unknownLines;
         List<string> artPrefabPaths;
-        return FlattenSourcePaths(sourcePaths, quiet, out unknownLines, out artPrefabPaths);
+        return FlattenSourcePaths(sourcePaths, quiet, RetinarFlattenOptions.Default, out unknownLines, out artPrefabPaths);
     }
 
     /// <summary>按路径平铺；返回成功数，并输出未归类清单与 Art Prefab 路径。</summary>
@@ -123,6 +123,18 @@ public static partial class RetinarBatchModelBuilder
         out List<string> unknownLines,
         out List<string> artPrefabPaths)
     {
+        return FlattenSourcePaths(sourcePaths, quiet, RetinarFlattenOptions.Default, out unknownLines, out artPrefabPaths);
+    }
+
+    /// <summary>带执行闸的平铺。菜单路径请传 Default。</summary>
+    public static int FlattenSourcePaths(
+        IList<string> sourcePaths,
+        bool quiet,
+        RetinarFlattenOptions flattenOptions,
+        out List<string> unknownLines,
+        out List<string> artPrefabPaths)
+    {
+        flattenOptions = flattenOptions ?? RetinarFlattenOptions.Default;
         unknownLines = new List<string>();
         artPrefabPaths = new List<string>();
         if (sourcePaths == null || sourcePaths.Count == 0)
@@ -160,7 +172,7 @@ public static partial class RetinarBatchModelBuilder
                         (float)i / sourcePaths.Count);
                 }
 
-                GeneratedAsset asset = CreateNormalizedPrefab(sourcePath);
+                GeneratedAsset asset = CreateNormalizedPrefab(sourcePath, flattenOptions);
                 if (asset.IsValid)
                 {
                     generatedCount++;
@@ -606,11 +618,12 @@ public static partial class RetinarBatchModelBuilder
         SaveAndReimportPreservingMeshVertexColors(importer);
     }
 
-    private static GeneratedAsset CreateNormalizedPrefab(string sourcePath)
+    private static GeneratedAsset CreateNormalizedPrefab(string sourcePath, RetinarFlattenOptions flattenOptions = null)
     {
+        flattenOptions = flattenOptions ?? RetinarFlattenOptions.Default;
         if (Path.GetExtension(sourcePath).ToLowerInvariant() == ".prefab")
         {
-            return CreatePackagedAdjustedPrefab(sourcePath);
+            return CreatePackagedAdjustedPrefab(sourcePath, flattenOptions);
         }
 
         GameObject source = AssetDatabase.LoadAssetAtPath<GameObject>(sourcePath);
@@ -719,8 +732,9 @@ public static partial class RetinarBatchModelBuilder
         return generated;
     }
 
-    private static GeneratedAsset CreatePackagedAdjustedPrefab(string sourcePath)
+    private static GeneratedAsset CreatePackagedAdjustedPrefab(string sourcePath, RetinarFlattenOptions flattenOptions = null)
     {
+        flattenOptions = flattenOptions ?? RetinarFlattenOptions.Default;
         string sourceModelPath = FindMainModelDependency(sourcePath);
         if (string.IsNullOrEmpty(sourceModelPath))
         {
@@ -751,8 +765,26 @@ public static partial class RetinarBatchModelBuilder
         AssetDatabase.SaveAssets();
         AssetDatabase.Refresh();
 
-        Dictionary<string, string> copiedDependencies = CopyAdjustedPrefabDependencies(prefabPath, assetFolder);
-        FlattenModelCompanionFolders(assetFolder);
+        Dictionary<string, string> copiedDependencies;
+        if (flattenOptions.SkipDependencySplit)
+        {
+            copiedDependencies = RelocateAtomicPackage(
+                assetFolder, assetName, flattenOptions, sourceModelPath);
+            if (copiedDependencies.Count == 0)
+            {
+                Debug.LogError("[Retinar] B′ 原子搬迁未写入文件: " + sourcePath);
+                return GeneratedAsset.Invalid;
+            }
+        }
+        else
+        {
+            copiedDependencies = CopyAdjustedPrefabDependencies(prefabPath, assetFolder);
+        }
+
+        if (!flattenOptions.SkipDependencySplit)
+        {
+            FlattenModelCompanionFolders(assetFolder);
+        }
         FlattenCopyRunner.LogUnknownIfAny(assetFolder, assetName);
         AssetDatabase.SaveAssets();
         AssetDatabase.Refresh();

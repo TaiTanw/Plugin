@@ -10,7 +10,7 @@
 |---|---|---|
 | 无头跑法 | Unity `-batchmode -nographics -quit -executeMethod` | 无官方「只跑插件不开工程」CLI SDK |
 | GLB 导入 | **UnityGLTF**（宿主包） | 插件可不 `using`；无包则无法导入 `.glb` |
-| `.gltf` 源（D22） | **先封装 GLB 再②**（未落地） | **容器打包 ≠ DCC**。勿用场景 Export 入库。现网②只拷 JSON。见 backlog **O** |
+| `.gltf` 源（D22） | **直接整包② + ④ B′**；转 GLB 可选 | 编辑器不做 DCC 重导。见 backlog **O** |
 | 备选 | glTFast | 导入失败样本库后再评 |
 | AB API | `BuildPipeline.BuildAssetBundles` | **已用** `ChunkBasedCompression`（LZ4）；文件名/main 见 d1 契约 1/2 |
 | Prefab 中转 | `PrefabUtility.SaveAsPrefabAsset` | ③ 已落地写盘 |
