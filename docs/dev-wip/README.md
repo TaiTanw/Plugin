@@ -2,7 +2,7 @@
 
 > 位置：`Assets/Plugin/docs/dev-wip/`  
 > 用途：CLI / 自动化一体流程开发中的**战略、结构、疑问、实现流程**分册；不替代 `PACKAGING_RULES.md` / `CHANGELOG.md`。  
-> 推荐线：**v1.5.0**（`main` · 流程稳定）· 工单：[prd-docs#274](http://swm-server.local:3000/Admin/prd-docs/issues/274)
+> 推荐线：**v1.5.3**（`main` · gltf 整包 + D18）· 工单：[prd-docs#274](http://swm-server.local:3000/Admin/prd-docs/issues/274)
 
 | 分册 | 路径 | 内容 |
 |---|---|---|
@@ -33,6 +33,6 @@ D18 正文（勿点表内链接）：[d18k](./03_open-items/backlog.md#d18k) · 
 **可选：** ④ 平铺、⑤ 压图/刷白、⑥ 门禁/扩展产物  
 **优先已做：** 窄口 + Runner + D3 总面板 + D2 单文件 + **D1 契约收口** + **D4 GLB 入库**  
 **GLB 样例：** `Assets/Art/ggdddd` 编辑器内已跑通；洋红 **D13 已归档**  
-**下一步：** 无头跑通 **D5**。gltf B′ / D18 已落。AB 文件名仍退化，评估见 [开发日志 §2](./05_dev-log/timeline.md#2-issue-274)。  
+**下一步：** 无头跑通 **D5**。本版 **v1.5.3**。AB 文件名仍退化，评估见 [开发日志 §2](./05_dev-log/timeline.md#2-issue-274)。  
 **对外接口：** (A) 中间层已可用 · (B) CLI 第一刀已写 → [cli-getting-started](./04_implementation/cli-getting-started.md)  
 **配置分层：** 总步骤 → Pipeline SO；资源自动细节 → 资源总面板 Prefs
