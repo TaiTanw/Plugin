@@ -9,7 +9,7 @@ using UnityEngine;
 
 /// <summary>
 /// Unity 无头入口：<c>-executeMethod PipelineCli.Run</c>。
-/// 第一刀：必填 <c>-source</c>，可选 <c>-materialId</c>；步骤开关跟 <see cref="PipelineStepSettings"/>。
+/// D5 已验收：必填 <c>-source</c>，可选 <c>-materialId</c>；步骤开关跟 <see cref="PipelineStepSettings"/>。
 /// </summary>
 public static class PipelineCli
 {
@@ -37,9 +37,13 @@ public static class PipelineCli
                 opt.MaterialId = materialId.Trim();
             }
 
-            opt.SourceBindings = PipelineMaterialId.BuildSourceBindings(
-                new[] { source },
-                string.IsNullOrWhiteSpace(materialId) ? null : materialId.Trim());
+            opt.SourceBindings = PipelineMaterialId.SuggestBindingsForSelection(new[] { source });
+            if (!string.IsNullOrWhiteSpace(materialId) &&
+                opt.SourceBindings != null &&
+                opt.SourceBindings.Count > 0)
+            {
+                opt.SourceBindings[0].MaterialId = materialId.Trim();
+            }
 
             Debug.Log("[PipelineCli] source=" + source +
                       (string.IsNullOrWhiteSpace(opt.MaterialId) ? string.Empty : " materialId=" + opt.MaterialId));
@@ -125,6 +129,7 @@ public static class PipelineCli
 
         if (string.Equals(a, flag, StringComparison.OrdinalIgnoreCase))
         {
+            //index+1为参数具体值：此处必须保证值存在或不以-开头
             if (index + 1 >= args.Length || string.IsNullOrEmpty(args[index + 1]) || args[index + 1].StartsWith("-"))
             {
                 return false;

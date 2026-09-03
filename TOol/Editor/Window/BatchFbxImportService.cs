@@ -147,12 +147,17 @@ public static class BatchFbxImportService
         return s;
     }
 
+    /// <summary>
+    /// 拖入路径收集模型。allowedExtensions：null = 内核全表；空列表 = 一个都不收。
+    /// </summary>
     public static List<ImportItem> CollectFromDroppedPaths(
         IEnumerable<string> droppedPaths,
-        BatchFbxImportSettings settings)
+        BatchFbxImportSettings settings,
+        IList<string> allowedExtensions = null)
     {
-        var fbxFiles = new List<string>();
+        var files = new List<string>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        IList<string> allowed = NormalizeAllowedExtensions(allowedExtensions);
 
         if (droppedPaths != null)
         {
@@ -166,17 +171,17 @@ public static class BatchFbxImportService
                 string path = Path.GetFullPath(raw);
                 if (Directory.Exists(path))
                 {
-                    CollectFbxUnderDirectory(path, fbxFiles, seen);
+                    CollectModelsUnderDirectory(path, files, seen, allowed);
                 }
-                else if (File.Exists(path) && IsFbxFile(path) && seen.Add(path))
+                else if (File.Exists(path) && IsAllowedModelFile(path, allowed) && seen.Add(path))
                 {
-                    fbxFiles.Add(path);
+                    files.Add(path);
                 }
             }
         }
 
-        fbxFiles.Sort(StringComparer.OrdinalIgnoreCase);
-        return BuildItems(fbxFiles, settings);
+        files.Sort(StringComparer.OrdinalIgnoreCase);
+        return BuildItems(files, settings);
     }
 
     public static List<ImportItem> RebuildItems(IList<ImportItem> existing, BatchFbxImportSettings settings)
@@ -349,7 +354,7 @@ public static class BatchFbxImportService
         if (!File.Exists(item.SourceFbxPath))
         {
             item.Status = ItemStatus.Failed;
-            item.Message = "源 FBX 不存在。";
+            item.Message = "源文件不存在。";
             return;
         }
 
@@ -388,6 +393,15 @@ public static class BatchFbxImportService
         }
 
         File.Copy(item.SourceFbxPath, destFull, false);
+        if (item.SourceFbxPath.EndsWith(".gltf", StringComparison.OrdinalIgnoreCase))
+        {
+            ToolImportApi.CopyGltfSidecarsBeside(item.SourceFbxPath, destFull);
+        }
+        else if (item.SourceFbxPath.EndsWith(".obj", StringComparison.OrdinalIgnoreCase))
+        {
+            ToolImportApi.CopyObjSidecarsBeside(item.SourceFbxPath, destFull);
+        }
+
         AssetDatabase.ImportAsset(item.TargetFbxAssetPath, ImportAssetOptions.ForceUpdate);
         item.Status = ItemStatus.Success;
         item.Message = "已导入。";
@@ -506,7 +520,7 @@ public static class BatchFbxImportService
 
             if (item.UsedFbxNameDisambiguation)
             {
-                warnParts.Add("同夹多 FBX，已追加文件名消歧：" + item.FolderName);
+                warnParts.Add("同夹多模型，已追加文件名消歧：" + item.FolderName);
             }
 
             if (warnParts.Count > 0)
@@ -524,7 +538,11 @@ public static class BatchFbxImportService
         return items;
     }
 
-    private static void CollectFbxUnderDirectory(string directory, List<string> into, HashSet<string> seen)
+    private static void CollectModelsUnderDirectory(
+        string directory,
+        List<string> into,
+        HashSet<string> seen,
+        IList<string> allowed)
     {
         string[] files;
         try
@@ -533,13 +551,13 @@ public static class BatchFbxImportService
         }
         catch (Exception ex)
         {
-            Debug.LogWarning("[BatchFbxImport] 无法扫描目录: " + directory + " — " + ex.Message);
+            Debug.LogWarning("[BatchModelImport] 无法扫描目录: " + directory + " — " + ex.Message);
             return;
         }
 
         foreach (string file in files)
         {
-            if (!IsFbxFile(file))
+            if (!IsAllowedModelFile(file, allowed))
             {
                 continue;
             }
@@ -552,9 +570,59 @@ public static class BatchFbxImportService
         }
     }
 
-    private static bool IsFbxFile(string path)
+    private static IList<string> NormalizeAllowedExtensions(IList<string> allowedExtensions)
     {
-        return Path.GetExtension(path).Equals(".fbx", StringComparison.OrdinalIgnoreCase);
+        if (allowedExtensions == null)
+        {
+            return ToolImportApi.GetSupportedModelExtensions();
+        }
+
+        var list = new List<string>();
+        for (int i = 0; i < allowedExtensions.Count; i++)
+        {
+            string ext = allowedExtensions[i];
+            if (string.IsNullOrEmpty(ext))
+            {
+                continue;
+            }
+
+            if (!ext.StartsWith(".", StringComparison.Ordinal))
+            {
+                ext = "." + ext;
+            }
+
+            ext = ext.ToLowerInvariant();
+            if (ToolImportApi.IsSupportedExtension(ext) && !list.Contains(ext))
+            {
+                list.Add(ext);
+            }
+        }
+
+        return list;
+    }
+
+    private static bool IsAllowedModelFile(string path, IList<string> allowed)
+    {
+        string ext = Path.GetExtension(path ?? string.Empty).ToLowerInvariant();
+        if (allowed == null)
+        {
+            return ToolImportApi.IsSupportedExtension(ext);
+        }
+
+        if (allowed.Count == 0)
+        {
+            return false;
+        }
+
+        for (int i = 0; i < allowed.Count; i++)
+        {
+            if (ext == allowed[i])
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static void EnsureAssetFolder(string folderPath)

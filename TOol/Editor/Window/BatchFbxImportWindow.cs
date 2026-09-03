@@ -1,11 +1,13 @@
+using System;
 using System.Collections.Generic;
 using System.IO;
 using UnityEditor;
 using UnityEngine;
 
 // =====================================================================================
-// 批量 FBX 导入窗口：拖入外部文件夹→检索 FBX→面板标重名→无冲突时统一执行。
-// 边界：只把 FBX 干净送进导入区；不建 Prefab / 不平铺 / 不导出。
+// 批量模型导入：收集 / Conflict 警告 / 执行入库，或把筛选结果输出到编排面板。
+// 「执行导入」= 只做 1 入库（人工单步）。「输出到编排」= 不拷贝，填路径+ID2。
+// 后缀筛选只缩小本次列表，不改内核识别、不影响 CLI。
 // =====================================================================================
 public class BatchFbxImportWindow : EditorWindow
 {
@@ -13,6 +15,11 @@ public class BatchFbxImportWindow : EditorWindow
     private SerializedObject settingsSerialized;
     private readonly List<BatchFbxImportService.ImportItem> items =
         new List<BatchFbxImportService.ImportItem>();
+    private readonly HashSet<string> enabledExtensions =
+        new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    private bool filterInitialized;
+    /// <summary>本次拖入/浏览的根路径。改勾选时按当前后缀重新收集，而不是从列表里删死。</summary>
+    private readonly List<string> collectRoots = new List<string>();
     private Vector2 mainScroll;
     private Vector2 listScroll;
     private string lastSummary;
@@ -21,12 +28,13 @@ public class BatchFbxImportWindow : EditorWindow
     [MenuItem("Tools/批量FBX导入")]
     public static void ShowWindow()
     {
-        GetWindow<BatchFbxImportWindow>("批量FBX导入").minSize = new Vector2(640f, 420f);
+        GetWindow<BatchFbxImportWindow>("批量模型导入").minSize = new Vector2(640f, 460f);
     }
 
     private void OnEnable()
     {
         settings = BatchFbxImportSettings.GetOrCreateAsset();
+        EnsureFilterDefaults();
     }
 
     private void OnDisable()
@@ -46,12 +54,15 @@ public class BatchFbxImportWindow : EditorWindow
             mainScroll = scroll.scrollPosition;
 
             EditorGUILayout.HelpBox(
-                "本面板只负责把外部 FBX 干净送进导入区（一 FBX 一夹）。\n" +
-                "夹名 = 自身向上连续 3 层目录名，斜杠位用下划线拼接（如 飞机模型待处理_模型名_fbx）；\n" +
-                "不足 3 层用全路径消毒名（Warning，不禁用执行）。\n" +
-                "同夹多 FBX：夹名自动追加无扩展文件名（Warning，允许导入）；追加后仍撞名、目标已存在或落在交付区才 Conflict。\n" +
-                "导入成功后该项会移出列表；交付文件名仍以人工改好的 Prefab 名为准；不自动建预设体、不平铺、不导出。\n" +
-                "取消：当前这条 FBX 整段做完后再停。",
+                "内核可识别：" + ToolImportApi.FormatSupportedExtensionsDisplay() + "\n" +
+                "下面勾选只过滤本次收集列表，不表示没勾的格式内核不认识；CLI 指定文件仍认全表。\n" +
+                "改勾选会按上次拖入/浏览的路径重新收集（取消的文件再勾选会回来）。清空列表才忘掉这些路径。\n" +
+                "「执行导入」：只把文件送进导入区（Conflict 仍拦住；Warning 可导）。不建 Prefab、不平铺、不导出。\n" +
+                "「同夹多模型」Warning（本面板夹名）：只看当前列表里三层名是否撞车，不扫盘上未列出的文件。\n" +
+                "「输出到编排」建议 ID2：扫父目录磁盘上全部内核格式（不管本面板勾选）。\n" +
+                "「输出到编排面板」：筛选完成，把路径 + 建议 ID2 交给总面板，不拷贝。编排运行按行走全流程。\n" +
+                "建议 ID2：父目录磁盘上还有其它内核格式文件、或三层不足时，三层+文件全名。\n" +
+                "夹名（本面板自己导入时）：三层；同夹多文件追加文件名（Warning）。目标已存在 / 交付区 = Conflict。",
                 MessageType.Info);
 
             DrawSettings();
@@ -73,9 +84,11 @@ public class BatchFbxImportWindow : EditorWindow
         using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
         {
             EditorGUILayout.HelpBox(
-                "deliveryAlertPathPrefixes 只拦「FBX 入库目标」是否落在交付区；" +
-                "与贴图/模型高级设置里的 excludedPathPrefixes（跳过自动处理）是另一份列表，默认都是 Assets/Art/ 但不共享。",
+                "deliveryAlertPathPrefixes 只拦「入库目标」是否落在交付区；" +
+                "与贴图/模型高级设置里的 excludedPathPrefixes 是另一份列表。",
                 MessageType.None);
+
+            DrawExtensionFilter();
 
             EditorGUI.BeginChangeCheck();
             ScriptableObjectSettingsGui.Draw(settings, ref settingsSerialized);
@@ -100,7 +113,7 @@ public class BatchFbxImportWindow : EditorWindow
         using (new EditorGUILayout.HorizontalScope())
         {
             Rect dropRect = GUILayoutUtility.GetRect(0f, 56f, GUILayout.ExpandWidth(true));
-            GUI.Box(dropRect, "拖入外部文件夹（递归检索 .fbx）；也可拖入单个 .fbx", EditorStyles.helpBox);
+            GUI.Box(dropRect, "拖入外部文件夹（递归检索已勾选格式）；也可拖入单个模型文件", EditorStyles.helpBox);
             HandleDropAreaEvents(dropRect);
 
             using (new EditorGUILayout.VerticalScope(GUILayout.Width(108f)))
@@ -146,7 +159,7 @@ public class BatchFbxImportWindow : EditorWindow
 
     private void BrowseFolderAndAppend()
     {
-        string folder = EditorUtility.OpenFolderPanel("选择含 FBX 的文件夹", "", "");
+        string folder = EditorUtility.OpenFolderPanel("选择含模型的文件夹", "", "");
         if (string.IsNullOrEmpty(folder))
         {
             return;
@@ -166,6 +179,7 @@ public class BatchFbxImportWindow : EditorWindow
             if (GUILayout.Button("清空列表", GUILayout.Width(100f)))
             {
                 items.Clear();
+                collectRoots.Clear();
                 lastSummary = null;
             }
 
@@ -175,6 +189,11 @@ public class BatchFbxImportWindow : EditorWindow
                 {
                     RemoveAllConflicts();
                 }
+            }
+
+            if (GUILayout.Button("按勾选重扫", GUILayout.Width(120f)))
+            {
+                RecollectFromRoots();
             }
 
             if (GUILayout.Button("刷新冲突检测", GUILayout.Width(120f)))
@@ -247,54 +266,193 @@ public class BatchFbxImportWindow : EditorWindow
     {
         EditorGUILayout.Space(8f);
         bool blocked = BatchFbxImportService.HasBlockingAlerts(items, settings, out string reason);
-        using (new EditorGUI.DisabledScope(isRunning || blocked))
+        using (new EditorGUILayout.HorizontalScope())
         {
-            if (GUILayout.Button("执行导入（无 Conflict 时可用）", GUILayout.Height(32f)))
+            using (new EditorGUI.DisabledScope(isRunning || blocked))
             {
-                RunImport();
+                if (GUILayout.Button("执行导入（本单步；无 Conflict）", GUILayout.Height(32f)))
+                {
+                    RunImport();
+                }
+            }
+
+            using (new EditorGUI.DisabledScope(isRunning || items.Count == 0))
+            {
+                if (GUILayout.Button("输出到编排面板（筛选完成）", GUILayout.Height(32f)))
+                {
+                    OutputToOrchestration();
+                }
             }
         }
 
         if (blocked && items.Count > 0)
         {
             EditorGUILayout.HelpBox(
-                reason + " 可用单条「移除」或「移除全部冲突」处理后再执行。",
+                reason + " 「执行导入」需先处理冲突。「输出到编排」仍可用（编排覆盖槽，不走本面板 Conflict）。",
                 MessageType.Warning);
         }
         else if (!blocked && items.Count > 0)
         {
             EditorGUILayout.HelpBox(
-                "无 Conflict（Warning 可执行）。进度条可取消：当前 FBX 完成后停止。",
+                "无 Conflict。「执行导入」只入库；「输出到编排」不拷贝。",
                 MessageType.Info);
         }
     }
 
     private void AppendDropped(string[] paths)
     {
-        List<BatchFbxImportService.ImportItem> collected =
-            BatchFbxImportService.CollectFromDroppedPaths(paths, settings);
+        RememberRoots(paths);
+        MergeCollected(
+            BatchFbxImportService.CollectFromDroppedPaths(paths, settings, EnabledExtensionList()),
+            "新加入");
+    }
 
-        var existing = new HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
+    private void RecollectFromRoots()
+    {
+        items.Clear();
+        if (collectRoots.Count == 0)
+        {
+            lastSummary = "没有记住的拖入/浏览路径。请先拖入或选择文件夹。";
+            Repaint();
+            return;
+        }
+
+        MergeCollected(
+            BatchFbxImportService.CollectFromDroppedPaths(collectRoots, settings, EnabledExtensionList()),
+            "按勾选重扫");
+    }
+
+    private void RememberRoots(IEnumerable<string> paths)
+    {
+        if (paths == null)
+        {
+            return;
+        }
+
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        for (int i = 0; i < collectRoots.Count; i++)
+        {
+            seen.Add(collectRoots[i]);
+        }
+
+        foreach (string raw in paths)
+        {
+            if (string.IsNullOrWhiteSpace(raw))
+            {
+                continue;
+            }
+
+            string n = raw.Replace("\\", "/").Trim();
+            if (seen.Add(n))
+            {
+                collectRoots.Add(n);
+            }
+        }
+    }
+
+    private void MergeCollected(List<BatchFbxImportService.ImportItem> collected, string verb)
+    {
+        var existing = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (BatchFbxImportService.ImportItem item in items)
         {
             existing.Add(item.SourceFbxPath);
         }
 
         int added = 0;
-        foreach (BatchFbxImportService.ImportItem item in collected)
+        if (collected != null)
         {
-            if (existing.Add(item.SourceFbxPath))
+            foreach (BatchFbxImportService.ImportItem item in collected)
             {
-                items.Add(item);
-                added++;
+                if (item != null && existing.Add(item.SourceFbxPath))
+                {
+                    items.Add(item);
+                    added++;
+                }
             }
         }
 
         RefreshItemStates();
-        lastSummary = added > 0
-            ? "新加入 " + added + " 个 FBX，列表共 " + items.Count + " 条。"
-            : "未加入新 FBX（可能与列表重复或路径下无 .fbx）。";
+        lastSummary = verb + " " + added + " 个模型，列表共 " + items.Count + " 条。";
         Repaint();
+    }
+
+    private void OutputToOrchestration()
+    {
+        var paths = new List<string>();
+        for (int i = 0; i < items.Count; i++)
+        {
+            if (items[i] != null && !string.IsNullOrEmpty(items[i].SourceFbxPath))
+            {
+                paths.Add(items[i].SourceFbxPath);
+            }
+        }
+
+        List<PipelineSourceBinding> bindings = PipelineMaterialId.SuggestBindingsForSelection(paths);
+        if (bindings.Count == 0)
+        {
+            lastSummary = "没有可输出的路径。";
+            return;
+        }
+
+        PipelineSourceAccept.SendToOrchestration(bindings);
+        lastSummary = "已输出 " + bindings.Count + " 条到编排面板（未入库）。建议 ID2：父目录仅一个内核文件用三层；还有其它则加文件全名。";
+        Repaint();
+    }
+
+    private void DrawExtensionFilter()
+    {
+        EnsureFilterDefaults();
+        EditorGUILayout.LabelField("本次收集格式（子集）", EditorStyles.miniBoldLabel);
+        string[] all = ToolImportApi.GetSupportedModelExtensions();
+        using (new EditorGUI.DisabledScope(isRunning))
+        {
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                for (int i = 0; i < all.Length; i++)
+                {
+                    string ext = all[i];
+                    bool on = enabledExtensions.Contains(ext);
+                    bool next = EditorGUILayout.ToggleLeft(ext, on, GUILayout.Width(72f));
+                    if (next == on)
+                    {
+                        continue;
+                    }
+
+                    if (next)
+                    {
+                        enabledExtensions.Add(ext);
+                    }
+                    else
+                    {
+                        enabledExtensions.Remove(ext);
+                    }
+
+                    RecollectFromRoots();
+                }
+            }
+        }
+    }
+
+    private void EnsureFilterDefaults()
+    {
+        if (filterInitialized)
+        {
+            return;
+        }
+
+        string[] all = ToolImportApi.GetSupportedModelExtensions();
+        for (int i = 0; i < all.Length; i++)
+        {
+            enabledExtensions.Add(all[i]);
+        }
+
+        filterInitialized = true;
+    }
+
+    private List<string> EnabledExtensionList()
+    {
+        EnsureFilterDefaults();
+        return new List<string>(enabledExtensions);
     }
 
     private void RemoveAt(int index)

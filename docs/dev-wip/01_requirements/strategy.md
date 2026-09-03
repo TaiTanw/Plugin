@@ -5,7 +5,7 @@
 ## 目标
 
 用 Unity **`-batchmode` / `-executeMethod`**，从 **FBX、GLB** 到 **Android / iOS AssetBundle**，尽量无人点菜单。  
-现阶段先补齐**编辑器内可静默跑通的内核**；CLI / Docker 是外壳。
+现阶段编辑器内核与无头 CLI（**D5 已验收**）已可静默跑通；Docker / 队列仍是 V1.2 外壳。
 
 ## 工程与 Git
 

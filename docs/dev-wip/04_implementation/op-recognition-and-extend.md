@@ -17,6 +17,8 @@
 | **模型** | `t:Model` + Prefab 依赖 ∩ `supportedExtensions` | **改该 SO 列表**；L3 只读 | 刷白：非 `ModelImporter`（如 glb）Evaluate **Skip** |
 | **材质** | `t:Material` 且路径 `.mat` | **不用后缀表** | Op 按 Shader 名 / 白名单 Skip |
 
+`supportedExtensions` 同时闸**三**路：⑤/L1 收集、后处理自动、以及**设置自动**（`ModelImportSettingsProcessor`）。开关与 exclude 各不相同：设置自动/后处理自动看总闸 + `excludedPathPrefixes`；⑤/L1 两者都不读。
+
 ② 导入另有一套：`ToolImportApi` 写死 `.fbx/.glb/.gltf/.obj`，与模型 Op 的 SO 列表独立。  
 **`.gltf`：** 扩展名认；② 整包拷（JSON + 相对 URI 伴生）；④ 有外 URI 时原子搬迁。转 GLB **可选**（D22 不开发）。见 backlog **O**。
 

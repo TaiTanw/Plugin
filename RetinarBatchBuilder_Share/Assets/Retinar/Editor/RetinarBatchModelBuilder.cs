@@ -1,44 +1,46 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Text;
 using UnityEditor;
 using UnityEditor.Animations;
 using UnityEngine;
 
 // =====================================================================================
-// Legacy — 规范化平铺 / 全套 Deliverables 导出（暂不拆碎）
+// Legacy — 规范化平铺（暂不拆碎）
 //
 // 菜单入口已迁到 01_RetinarMenu.cs。请先读 Editor/README_EDITOR.md。
 //
-// 本类仍被调度器调用：
-//   RetinarFlattenScheduler  → FlattenSelectedToArt
-//   RetinarPackageScheduler  → ExportAllArtPrefabs / ExportSelectedArtPrefabs
-// 成品直达（不改 Art）在 RetinarDirectPackage，不经过本文件。
+// 入口只剩两个：
+//   RetinarFlattenApi.FlattenPaths  → 管线④（PipelineRunner 唯一调用方）
+//   RetinarFlattenScheduler         → 菜单「平铺到交付中间区 Art（选中）」
+//
+// 2026-09-03（backlog D24-7）删除「【遗产】从 Art 规范化导出」与「成品直达」两条链：
+//   一阶段：两条菜单 + 调度器 + DirectPackage + 出包前三道校验 + 30_Business 整层。
+//   二阶段：交付物写盘子树 + AssetInfoWorkbook + CollectAssetStats +
+//           无调用方的 SafeZone 副本 NormalizePreparedPrefabBounds。已删完。
+// 出包与交付物统一走 ⑥ RetinarAbApi + RetinarDeliverableIo，本文件不再落盘任何交付物。
 //
 // partial 分文件：
-//   RetinarBatchModelBuilder.cs                  主流程：选模型 -> 规范化 -> 出包 -> 拷交付物
-//   RetinarBatchModelBuilder.AssetResolution.cs  源资产发现 + 打包前校验与自愈
-//   RetinarBatchModelBuilder.AssetInfoWorkbook.cs asset_info.xlsx（手写 OOXML）
+//   RetinarBatchModelBuilder.cs                  主流程：选模型 -> 规范化 -> 平铺
+//   RetinarBatchModelBuilder.AssetResolution.cs  源资产发现 + 自愈
 // =====================================================================================
 public static partial class RetinarBatchModelBuilder
 {
     private const string ArtRoot = "Assets/Art";
-    private const string DeliverableRoot = "Deliverables";
-    private const string AssetBundleRoot = "AssetBundles";
     private const string AssetBundleVariant = "assetbundle";
-    private const string AssetInfoTemplatePath = "Assets/Retinar/Templates/asset_info_template.xlsx";
-    private const string RequiredRuntimeVersion = "RetinarRuntime_v1.0.0";
     private const float SafeZonePadding = 0.8f;
     private const string FbxNormalizedModelChildSuffix = "_Model";
     private const float EmissionIntensity = 0.3f;
     private const float MetallicValue = 0.4f;
     private const float SmoothnessValue = 0.4f;
-    private const long MaxTextureSourceBytes = 5L * 1024L * 1024L;
 
     private static readonly Vector3 SafeZoneCenter = new Vector3(0f, 0.15f, 0f);
     private static readonly Vector3 SafeZoneSize = Vector3.one;
     private static readonly Color EmissionColor = Color.white;
+
+    // Z-up → Y-up。与 Unity 读到 FBX 头里 up-axis 时自己写的那个旋转一致。
+    // OBJ 格式没有 up-axis 字段，Unity 一律当 Y-up 读，所以只能由人在绑定行上指定。
+    private static readonly Quaternion ZUpToYUpRotation = Quaternion.Euler(-90f, 0f, 0f);
 
     // ---------------------------------------------------------------------------
     // 延迟弹窗：修复"打包结果正确，但控制台报
@@ -209,210 +211,15 @@ public static partial class RetinarBatchModelBuilder
         return generatedCount;
     }
 
-    /// <summary>由 RetinarPackageScheduler / 菜单「批量汇总/从 Art 导出（规范化）/导出全部」调用。</summary>
-    public static void ExportAllArtPrefabs()
-    {
-        if (StopIfEditorIsPlaying())
-        {
-            return;
-        }
-
-        List<string> sourcePaths = CollectAllArtDeliveryPrefabPaths();
-        if (sourcePaths.Count == 0)
-        {
-            ShowDialogDeferred(
-                "Retinar 导出",
-                "在 " + ArtRoot + " 下未找到规范交付预制体（期望路径：Art/<名>/Prefab/*.prefab）。\n" +
-                "请先执行「批量汇总 > 平铺到 Art」。",
-                "OK");
-            return;
-        }
-
-        if (!EditorUtility.DisplayDialog(
-                "Retinar 导出 Art 全部",
-                "将导出 " + ArtRoot + " 下 " + sourcePaths.Count + " 个交付 Prefab。\n\n是否继续？",
-                "导出",
-                "取消"))
-        {
-            return;
-        }
-
-        ExportArtPrefabPaths(sourcePaths);
-    }
-
-    /// <summary>由 RetinarPackageScheduler / 菜单「批量汇总/从 Art 导出（规范化）/导出选中」调用。</summary>
-    public static void ExportSelectedArtPrefabs()
-    {
-        if (StopIfEditorIsPlaying())
-        {
-            return;
-        }
-
-        List<string> skipped;
-        List<string> sourcePaths = CollectSelectedArtPrefabPaths(out skipped);
-        if (skipped.Count > 0)
-        {
-            Debug.LogWarning("[Retinar] 导出选中：已跳过非 Art 或非 Prefab 项：\n" +
-                string.Join("\n", skipped.ToArray()));
-        }
-
-        if (sourcePaths.Count == 0)
-        {
-            string skipHint = skipped.Count == 0
-                ? "请选中 Assets/Art/<名>/Prefab/ 下的预制体（可多选）。"
-                : "选中项均不在 " + ArtRoot + " 下或不是 Prefab，已全部跳过。\n\n" +
-                  BuildDialogPreview(string.Join("\n", skipped.ToArray()), 8);
-            ShowDialogDeferred(
-                "Retinar 导出",
-                skipHint + "\n\n导入区资源请先「批量汇总 > 平铺到 Art」；若要一次导出全部可用「导出全部」。\n" +
-                "已是成品、不想改 Prefab 时请用「成品直达 > 选中预制体直通打包」。",
-                "OK");
-            return;
-        }
-
-        if (skipped.Count > 0)
-        {
-            if (!EditorUtility.DisplayDialog(
-                    "Retinar 导出",
-                    "将导出 " + sourcePaths.Count + " 个 Art Prefab。\n\n" +
-                    "已跳过 " + skipped.Count + " 项（非 Art 或非 Prefab），详见 Console。\n\n是否继续？",
-                    "导出",
-                    "取消"))
-            {
-                return;
-            }
-        }
-
-        ExportArtPrefabPaths(sourcePaths);
-    }
-
     public static bool ValidateFlattenSelectedToArt()
     {
         return !EditorApplication.isCompiling;
-    }
-
-    public static bool ValidateExportAllArtPrefabs()
-    {
-        return !EditorApplication.isCompiling;
-    }
-
-    public static bool ValidateExportSelectedArtPrefabs()
-    {
-        return !EditorApplication.isCompiling;
-    }
-
-    /// <summary>
-    /// 导出共用后半段：规范化 → 校验 → AB → 交付物。
-    /// </summary>
-    private static void ExportArtPrefabPaths(List<string> sourcePaths)
-    {
-        if (sourcePaths == null || sourcePaths.Count == 0)
-        {
-            return;
-        }
-
-        EnsureAssetFolder(ArtRoot);
-        EnsureDiskDirectory(Path.Combine(Directory.GetCurrentDirectory(), DeliverableRoot));
-        EnsureDiskDirectory(Path.Combine(Directory.GetCurrentDirectory(), AssetBundleRoot));
-
-        var generated = new List<GeneratedAsset>();
-        try
-        {
-            for (int i = 0; i < sourcePaths.Count; i++)
-            {
-                string sourcePath = sourcePaths[i];
-                EditorUtility.DisplayProgressBar(
-                    "Retinar 导出交付物",
-                    "准备: " + sourcePath,
-                    (float)i / sourcePaths.Count);
-
-                // 对已在 Art 内的 Prefab 再跑规范化：复用同名目录、保留已压缩贴图/已刷顶点色（有保护）。
-                GeneratedAsset asset = CreateNormalizedPrefab(sourcePath);
-                if (asset.IsValid)
-                {
-                    generated.Add(asset);
-                }
-            }
-        }
-        finally
-        {
-            EditorUtility.ClearProgressBar();
-        }
-
-        AssetDatabase.SaveAssets();
-        AssetDatabase.Refresh();
-
-        if (generated.Count == 0)
-        {
-            ShowDialogDeferred("Retinar 导出", "没有有效的 Art 预制体，未构建 AssetBundle。", "OK");
-            return;
-        }
-
-        var excludedReports = new List<string>();
-        List<GeneratedAsset> buildable = PartitionAssetsThatPassValidation(generated, excludedReports);
-        string excludedReportPath = excludedReports.Count > 0 ? WriteValidationFailureReport(excludedReports) : null;
-
-        if (buildable.Count == 0)
-        {
-            ShowDialogDeferred(
-                "Retinar 导出",
-                "导出中止：选中的 " + generated.Count + " 个资产全部未通过校验。\n\n" +
-                BuildDialogPreview(string.Join("\n", excludedReports.ToArray()), 10) +
-                "\n\n完整报告:\n" + excludedReportPath,
-                "OK");
-            return;
-        }
-
-        // 打 AB 前做贴图预检（口径与 01_source/texture_size_report 相同），便于先去插件 2 压图。
-        List<string> texturePrecheckLines = new List<string>();
-        int texturePrecheckCount = CollectTextureIssuesForAssets(buildable, texturePrecheckLines);
-        if (texturePrecheckCount > 0)
-        {
-            Debug.LogWarning(
-                "[Retinar] 贴图预检（打 AB 前）：发现 " + texturePrecheckCount +
-                " 个问题项。请用 Tools > 资源处理总面板 对 Assets/Art/.../Texture 执行压缩后再导出。\n" +
-                string.Join("\n", texturePrecheckLines.ToArray()));
-        }
-
-        BuildAssetBundles(BuildTarget.Android);
-        BuildAssetBundles(BuildTarget.iOS);
-        int textureWarningCount = CopySourceFilesToDeliverables(buildable);
-        CopyBuiltBundlesToDeliverables(buildable);
-        ExportUnityPackages(buildable);
-        WriteDocsFiles(buildable);
-
-        string warningText = textureWarningCount > 0
-            ? "\n\nTexture check: " + textureWarningCount + " texture issue(s). See 01_source/texture_size_report.txt." +
-              (texturePrecheckCount > 0
-                  ? "\n（打 AB 前预检已提示 " + texturePrecheckCount + " 项，详见 Console [Retinar] 贴图预检）"
-                  : string.Empty)
-            : "\n\nTexture check: all copied textures are power-of-two and <= 5 MB.";
-
-        string excludedText = excludedReports.Count == 0
-            ? string.Empty
-            : "\n\n已排除 " + excludedReports.Count + " 个未通过校验的资产（其余照常出包）：\n" +
-              BuildDialogPreview(string.Join("\n", excludedReports.ToArray()), 6) +
-              "\n完整清单:\n" + excludedReportPath;
-
-        ShowDialogDeferred(
-            "Retinar 导出",
-            "完成。已导出 " + buildable.Count + " / " + generated.Count + " 个资产。\n\nUnity prefabs: " + ArtRoot +
-            "\nAssetBundles: " + AssetBundleRoot +
-            "\nDeliverables: " + GetDeliverablesAbsolutePath() +
-            warningText +
-            excludedText,
-            "OK");
     }
 
     /// <summary>兼容旧调用；菜单入口已迁到 RetinarMenu → RetinarEditorUtil.OpenDeliverablesFolder。</summary>
     public static void OpenDeliverablesFolder()
     {
         RetinarEditorUtil.OpenDeliverablesFolder();
-    }
-
-    private static string GetDeliverablesAbsolutePath()
-    {
-        return Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), DeliverableRoot));
     }
 
     private static bool StopIfEditorIsPlaying()
@@ -458,100 +265,6 @@ public static partial class RetinarBatchModelBuilder
         return paths;
     }
 
-    /// <summary>
-    /// 收集 Assets/Art/&lt;名&gt;/Prefab/*.prefab 规范交付预制体。
-    /// </summary>
-    private static List<string> CollectAllArtDeliveryPrefabPaths()
-    {
-        var result = new List<string>();
-        if (!AssetDatabase.IsValidFolder(ArtRoot))
-        {
-            return result;
-        }
-
-        foreach (string guid in AssetDatabase.FindAssets("t:Prefab", new[] { ArtRoot }))
-        {
-            string path = AssetDatabase.GUIDToAssetPath(guid).Replace("\\", "/");
-            if (IsArtDeliveryPrefabPath(path) && !result.Contains(path))
-            {
-                result.Add(path);
-            }
-        }
-
-        result.Sort();
-        return result;
-    }
-
-    /// <summary>
-    /// 从 Project 选中收集 Art 交付 Prefab；非 Art / 非 Prefab 写入 skipped（含说明）。
-    /// </summary>
-    private static List<string> CollectSelectedArtPrefabPaths(out List<string> skipped)
-    {
-        var result = new List<string>();
-        skipped = new List<string>();
-        string artPrefix = ArtRoot + "/";
-
-        foreach (Object selected in Selection.objects)
-        {
-            string path = AssetDatabase.GetAssetPath(selected);
-            if (string.IsNullOrEmpty(path))
-            {
-                continue;
-            }
-
-            path = path.Replace("\\", "/");
-            if (AssetDatabase.IsValidFolder(path))
-            {
-                skipped.Add(path + "  （文件夹：本菜单只接受 Prefab 文件；全部导出请用「导出 Art 全部」）");
-                continue;
-            }
-
-            if (!string.Equals(Path.GetExtension(path), ".prefab", System.StringComparison.OrdinalIgnoreCase))
-            {
-                skipped.Add(path + "  （不是 Prefab）");
-                continue;
-            }
-
-            if (!path.StartsWith(artPrefix, System.StringComparison.OrdinalIgnoreCase))
-            {
-                skipped.Add(path + "  （不在 " + ArtRoot + " 下，请先平铺）");
-                continue;
-            }
-
-            if (!result.Contains(path))
-            {
-                result.Add(path);
-            }
-        }
-
-        return result;
-    }
-
-    private static bool IsArtDeliveryPrefabPath(string assetPath)
-    {
-        if (string.IsNullOrEmpty(assetPath))
-        {
-            return false;
-        }
-
-        assetPath = assetPath.Replace("\\", "/");
-        string artPrefix = ArtRoot + "/";
-        if (!assetPath.StartsWith(artPrefix, System.StringComparison.OrdinalIgnoreCase))
-        {
-            return false;
-        }
-
-        if (!string.Equals(Path.GetExtension(assetPath), ".prefab", System.StringComparison.OrdinalIgnoreCase))
-        {
-            return false;
-        }
-
-        // 规范：Assets/Art/<名>/Prefab/<file>.prefab
-        string relative = assetPath.Substring(artPrefix.Length);
-        string[] parts = relative.Split('/');
-        return parts.Length == 3 &&
-               string.Equals(parts[1], "Prefab", System.StringComparison.OrdinalIgnoreCase);
-    }
 
     /// <summary>
     /// 弹窗里塞不下太长的文本，超过 maxLines 行就截断并说明还有多少条。
@@ -581,40 +294,9 @@ public static partial class RetinarBatchModelBuilder
             return;
         }
 
-        importer.globalScale = 1f;
-        importer.importNormals = ModelImporterNormals.Import;
-        importer.importTangents = ModelImporterTangents.CalculateMikk;
-        TrySetModelImporterMaterialImportMode(importer, "ImportViaMaterialDescription");
-
-        // InPrefab 是硬性防回归基线，不要改成 External（PACKAGING_RULES.md 规则 20/21，
-        // 已于 2026-07-20 由用户完成导入回归验收）。
-        // 理由：External 会让目标工程首次导入 UnityPackage 时，Unity 自动在
-        // Assets/Art/<名字>/Model/ 下面生成 Materials/ 和 <FBX名>.fbm 两个目录，
-        // 而 ValidateModelFoldersAreClean 规定 Model 目录只允许放模型文件、
-        // 不允许有子文件夹——于是打包终止。
-        //
-        // 注意这里曾经和导入插件（TOol/ModelImportSettingsProcessor，把 FBX 设成 External）
-        // 互相覆盖：本方法设 InPrefab 后调 SaveAndReimport()，这次 reimport 又会触发
-        // 那个插件的 OnPreprocessModel 把它改回 External，两边来回打架，
-        // 最终生效的是哪个取决于时序，非常难查。
-        // 解决办法不在这里，而是让导入插件跳过 Assets/Art 这个产物目录——
-        // 艺术家新导入的 FBX 用 External（编辑器生成外部 .mat，符合上游流程），
-        // 打包工具的交付工作副本用 InPrefab（符合交付规范）。两者不再有交集。
-        importer.materialLocation = ModelImporterMaterialLocation.InPrefab;
-        // 交付副本必须用 Local，不能用 Everywhere。
-        // 踩过的坑（Plane_Jian31）：Flatten 把 Model/<fbx>.fbm 平铺进 Texture/ 之后，
-        // 若仍是 Everywhere，再 SaveAndReimport 时 Unity 按贴图文件名全工程搜索，
-        // 会再次命中导入区残留的 Assets/**/xxx.fbm/，于是预制体依赖里一直挂着
-        // 外部 .fbm 路径，外部依赖校验失败。Local 只在模型同目录找，避免跨到 AAA/New Folder。
-        importer.materialSearch = ModelImporterMaterialSearch.Local;
-        importer.materialName = ModelImporterMaterialName.BasedOnMaterialName;
-        importer.importCameras = false;
-        importer.importLights = false;
-        importer.importAnimation = true;
-        importer.animationCompression = ModelImporterAnimationCompression.Optimal;
-        importer.addCollider = false;
-        // 交付区 FBX 保持 Read/Write，便于⑤写顶点色；且避免⑤再裸重导冲色。
-        importer.isReadable = true;
+        // 交付区口径只在 ModelImporterProfiles.ApplyArtDelivery。
+        // Processor 对 Art 硬跳过，SaveAndReimport 不会再被导入区策略改回 External。
+        ModelImporterProfiles.ApplyArtDelivery(importer, sourcePath);
         SaveAndReimportPreservingMeshVertexColors(importer);
     }
 
@@ -722,8 +404,7 @@ public static partial class RetinarBatchModelBuilder
         prefabImporter.SaveAndReimport();
         ClearDuplicateBundleNames(prefabFolder, prefabPath, bundleName);
 
-        AssetStats stats = CollectAssetStats(savedPrefab);
-        var generated = new GeneratedAsset(assetName, assetFolder, sourcePath, unityModelPath, prefabPath, bundleName + "." + AssetBundleVariant, stats);
+        var generated = new GeneratedAsset(assetName, assetFolder, sourcePath, unityModelPath, prefabPath, bundleName + "." + AssetBundleVariant);
         List<string> healedPaths;
         if (TryHealExternalDependencies(generated, out healedPaths) && healedPaths.Count > 0)
         {
@@ -739,17 +420,52 @@ public static partial class RetinarBatchModelBuilder
 
     private static GeneratedAsset CreatePackagedAdjustedPrefab(string sourcePath, RetinarFlattenOptions flattenOptions = null)
     {
+        RetinarFlattenWork work;
+        if (!TryBeginPackagedFlatten(sourcePath, flattenOptions, out work))
+        {
+            return GeneratedAsset.Invalid;
+        }
+
+        bool relocated = work.Options != null && work.Options.SkipDependencySplit
+            ? FlattenRelocateAtomic(work)
+            : FlattenSplitDependencies(work);
+        if (!relocated)
+        {
+            return GeneratedAsset.Invalid;
+        }
+
+        FlattenApplyImportAndExtract(work);
+        FlattenRemap(work);
+        FlattenCopyRendererMaterials(work);
+        if (!TryFinishPackagedFlatten(work))
+        {
+            return GeneratedAsset.Invalid;
+        }
+
+        return ToGeneratedAsset(work);
+    }
+
+    /// <summary>0 清单元夹 + A 写 Art Prefab。管线④与菜单共用。</summary>
+    public static bool TryBeginPackagedFlatten(string sourcePath, RetinarFlattenOptions flattenOptions, out RetinarFlattenWork work)
+    {
+        work = null;
         flattenOptions = flattenOptions ?? RetinarFlattenOptions.Default;
+        if (string.IsNullOrEmpty(sourcePath) ||
+            !string.Equals(Path.GetExtension(sourcePath), ".prefab", System.StringComparison.OrdinalIgnoreCase))
+        {
+            Debug.LogWarning("[Retinar] TryBeginPackagedFlatten 只接受 Prefab: " + sourcePath);
+            return false;
+        }
+
         string sourceModelPath = FindMainModelDependency(sourcePath);
         if (string.IsNullOrEmpty(sourceModelPath))
         {
-            // GLB 嵌套预制体应能命中 .glb；若 Mesh 全嵌在 Prefab 内也可继续（无独立模型文件）。
             GameObject probe = AssetDatabase.LoadAssetAtPath<GameObject>(sourcePath);
             if (probe == null || probe.GetComponentsInChildren<Renderer>(true).Length == 0)
             {
                 Debug.LogWarning(
                     "Selected prefab has no FBX/OBJ/GLB model dependency and no renderers: " + sourcePath);
-                return GeneratedAsset.Invalid;
+                return false;
             }
 
             Debug.LogWarning(
@@ -762,113 +478,184 @@ public static partial class RetinarBatchModelBuilder
         ResolvePackagedAssetIdentity(sourcePath, out assetName, out assetFolder);
         if (!TryClearArtUnitFolderIfRequested(assetFolder, sourcePath, flattenOptions))
         {
-            return GeneratedAsset.Invalid;
+            return false;
         }
 
         string prefabFolder = FlattenLayout.PrefabFolder(assetFolder);
-        string animationFolder = FlattenLayout.AnimationFolder(assetFolder);
         EnsureStandardAssetFolders(assetFolder);
-
         FlattenReferenceAudit.LogSourcePrefabMissingReferences(sourcePath, assetName);
 
         string prefabPath = PreparePackagePrefab(sourcePath, prefabFolder, assetName);
         AssetDatabase.SaveAssets();
         AssetDatabase.Refresh();
 
-        Dictionary<string, string> copiedDependencies;
-        if (flattenOptions.SkipDependencySplit)
+        work = new RetinarFlattenWork
         {
-            copiedDependencies = RelocateAtomicPackage(
-                assetFolder, assetName, flattenOptions, sourceModelPath);
-            if (copiedDependencies.Count == 0)
-            {
-                Debug.LogError("[Retinar] B′ 原子搬迁未写入文件: " + sourcePath);
-                return GeneratedAsset.Invalid;
-            }
-        }
-        else
+            SourcePath = sourcePath,
+            SourceModelPath = sourceModelPath,
+            AssetName = assetName,
+            AssetFolder = assetFolder,
+            PrefabPath = prefabPath,
+            CopiedDependencies = new Dictionary<string, string>(),
+            Options = flattenOptions
+        };
+        return true;
+    }
+
+    /// <summary>B 按后缀拆依赖 + OBJ .mtl 跟拷 + Model 伴生夹整理。</summary>
+    public static bool FlattenSplitDependencies(RetinarFlattenWork work)
+    {
+        if (work == null || string.IsNullOrEmpty(work.PrefabPath))
         {
-            copiedDependencies = CopyAdjustedPrefabDependencies(prefabPath, assetFolder);
+            return false;
         }
 
-        if (!flattenOptions.SkipDependencySplit)
-        {
-            FlattenModelCompanionFolders(assetFolder);
-        }
-        FlattenCopyRunner.LogUnknownIfAny(assetFolder, assetName);
+        work.CopiedDependencies = CopyAdjustedPrefabDependencies(work.PrefabPath, work.AssetFolder);
+        CopyObjMaterialLibrariesBesideCopiedModels(work.CopiedDependencies);
+        FlattenModelCompanionFolders(work.AssetFolder);
+        FlattenCopyRunner.LogUnknownIfAny(work.AssetFolder, work.AssetName);
         AssetDatabase.SaveAssets();
         AssetDatabase.Refresh();
-        ApplyImportSettingsToPackagedModels(assetFolder);
-        // 内嵌贴图：Unity 可能复用工程里已有的同名 Assets/**/xxx.fbm（导入区残留），
-        // 导致 Art/Model/fbx 一直依赖 AAA/.../fbx.fbm。强制抽到本模型 Texture/ 并重绑。
-        Debug.Log("[Retinar] " + assetName + "：开始 ExtractTextures/重绑（打包流程第 1 次） -> " + FlattenLayout.TextureFolder(assetFolder));
-        ExtractAndBindPackagedModelTextures(assetFolder);
-        RemapPackagedModelImporterMaterials(assetFolder, copiedDependencies);
-        RemapCopiedAssetReferences(copiedDependencies, assetFolder);
-        RemapCopiedPrefabModelReferences(prefabPath, copiedDependencies);
-        CopyPrefabRendererMaterials(prefabPath, assetFolder, assetName);
-        // 自愈主位置：平铺拷贝/objectMap/材质槽改完后，补拷缺失 .mat/.png 并再 Extract+.fbm 重绑。
-        // 导出校验不再跑 TryHeal，只对仍挂外部 .fbm 的资产强制 Extract。
+        return work.CopiedDependencies != null;
+    }
+
+    /// <summary>B′ 原子搬迁。不跑伴生夹整理。</summary>
+    public static bool FlattenRelocateAtomic(RetinarFlattenWork work)
+    {
+        if (work == null || work.Options == null)
+        {
+            return false;
+        }
+
+        work.CopiedDependencies = RelocateAtomicPackage(
+            work.AssetFolder, work.AssetName, work.Options, work.SourceModelPath);
+        if (work.CopiedDependencies == null || work.CopiedDependencies.Count == 0)
+        {
+            Debug.LogError("[Retinar] B′ 原子搬迁未写入文件: " + work.SourcePath);
+            return false;
+        }
+
+        CopyObjMaterialLibrariesBesideCopiedModels(work.CopiedDependencies);
+        FlattenCopyRunner.LogUnknownIfAny(work.AssetFolder, work.AssetName);
+        AssetDatabase.SaveAssets();
+        AssetDatabase.Refresh();
+        return true;
+    }
+
+    /// <summary>E1 导入设置 + E2 Extract 内嵌贴图并绑回。</summary>
+    public static void FlattenApplyImportAndExtract(RetinarFlattenWork work)
+    {
+        if (work == null)
+        {
+            return;
+        }
+
+        ApplyImportSettingsToPackagedModels(work.AssetFolder);
+        Debug.Log("[Retinar] " + work.AssetName + "：开始 ExtractTextures/重绑（打包流程第 1 次） -> " +
+                  FlattenLayout.TextureFolder(work.AssetFolder));
+        ExtractAndBindPackagedModelTextures(work.AssetFolder);
+        RemapPackagedModelImporterMaterials(work.AssetFolder, work.CopiedDependencies);
+    }
+
+    /// <summary>D 重映射拷贝后的资产与 Prefab 模型引用。</summary>
+    public static void FlattenRemap(RetinarFlattenWork work)
+    {
+        if (work == null)
+        {
+            return;
+        }
+
+        RemapCopiedAssetReferences(work.CopiedDependencies, work.AssetFolder);
+        RemapCopiedPrefabModelReferences(work.PrefabPath, work.CopiedDependencies);
+    }
+
+    /// <summary>C 另存 Renderer 上的 .mat。</summary>
+    public static void FlattenCopyRendererMaterials(RetinarFlattenWork work)
+    {
+        if (work == null)
+        {
+            return;
+        }
+
+        CopyPrefabRendererMaterials(work.PrefabPath, work.AssetFolder, work.AssetName);
+    }
+
+    /// <summary>自愈 / 空壳（含轴向）/ 碰撞盒 / 动画 / AB 名。</summary>
+    public static bool TryFinishPackagedFlatten(RetinarFlattenWork work)
+    {
+        if (work == null || string.IsNullOrEmpty(work.PrefabPath))
+        {
+            return false;
+        }
+
         var healTarget = new GeneratedAsset(
-            assetName, assetFolder, sourcePath, string.Empty, prefabPath, string.Empty, default(AssetStats));
+            work.AssetName, work.AssetFolder, work.SourcePath, string.Empty, work.PrefabPath, string.Empty);
         List<string> healedPaths;
         if (TryHealExternalDependencies(healTarget, out healedPaths) && healedPaths.Count > 0)
         {
-            Debug.Log("[Retinar] " + assetName + "：平铺结束自愈 " + healedPaths.Count + " 条：\n" +
+            Debug.Log("[Retinar] " + work.AssetName + "：平铺结束自愈 " + healedPaths.Count + " 条：\n" +
                 string.Join("\n", healedPaths.ToArray()));
         }
 
-        List<string> leftoverFbm = CollectExternalFbmTextureDependencies(assetFolder, prefabPath);
+        List<string> leftoverFbm = CollectExternalFbmTextureDependencies(work.AssetFolder, work.PrefabPath);
         if (leftoverFbm.Count > 0)
         {
-            Debug.LogWarning("[Retinar] " + assetName + "：平铺结束后仍有 " + leftoverFbm.Count +
-                " 条外部 .fbm 依赖（导出校验会再强制 Extract）：\n" + string.Join("\n", leftoverFbm.ToArray()));
+            Debug.LogWarning("[Retinar] " + work.AssetName + "：平铺结束后仍有 " + leftoverFbm.Count +
+                " 条外部 .fbm 依赖（已无后续兜底，将原样进 AB）：\n" + string.Join("\n", leftoverFbm.ToArray()));
         }
         else
         {
-            Debug.Log("[Retinar] " + assetName + "：打包流程后未发现外部 .fbm 依赖");
+            Debug.Log("[Retinar] " + work.AssetName + "：打包流程后未发现外部 .fbm 依赖");
         }
 
         AssetDatabase.SaveAssets();
         AssetDatabase.Refresh();
-        FlattenAnimationClipRemapper.CopyAndRemapPrefabClips(prefabPath, assetFolder, assetName);
-        if (RemapAllArtMaterialsToLocalTextures(assetFolder))
+        FlattenAnimationClipRemapper.CopyAndRemapPrefabClips(work.PrefabPath, work.AssetFolder, work.AssetName);
+        if (RemapAllArtMaterialsToLocalTextures(work.AssetFolder))
         {
-            Debug.Log("[Retinar] " + assetName + "：动画重绑后再次收敛材质贴图到本包");
+            Debug.Log("[Retinar] " + work.AssetName + "：动画重绑后再次收敛材质贴图到本包");
         }
 
         AssetDatabase.SaveAssets();
 
-        WrapIncomingPrefabInEmptyShell(prefabPath, assetName);
-        AddOrUpdateBoxColliderInPrefab(prefabPath);
-        NormalizePreparedPrefabAnimations(prefabPath, animationFolder, assetName);
+        bool convertZUp = work.Options != null && work.Options.ConvertZUpToYUp;
+        WrapIncomingPrefabInEmptyShell(work.PrefabPath, work.AssetName, convertZUp);
+        AddOrUpdateBoxColliderInPrefab(work.PrefabPath);
+        NormalizePreparedPrefabAnimations(
+            work.PrefabPath, FlattenLayout.AnimationFolder(work.AssetFolder), work.AssetName);
 
-        GameObject savedPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
+        GameObject savedPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(work.PrefabPath);
         if (savedPrefab == null || savedPrefab.GetComponentsInChildren<Renderer>(true).Length == 0)
         {
-            ClearBundleName(prefabPath);
-            Debug.LogError("Prepared prefab has no renderers and will not be bundled: " + prefabPath);
-            return GeneratedAsset.Invalid;
+            ClearBundleName(work.PrefabPath);
+            Debug.LogError("Prepared prefab has no renderers and will not be bundled: " + work.PrefabPath);
+            return false;
         }
 
-        string finalModelPath = FindMainModelDependency(prefabPath);
-        if (string.IsNullOrEmpty(finalModelPath) && !string.IsNullOrEmpty(sourceModelPath))
-        {
-            finalModelPath = FlattenLayout.ModelFolder(assetFolder) + "/" + Path.GetFileName(sourceModelPath);
-        }
-        if (string.IsNullOrEmpty(finalModelPath))
-        {
-            finalModelPath = prefabPath;
-        }
-        string bundleName = assetName.ToLowerInvariant();
-        AssetImporter prefabImporter = AssetImporter.GetAtPath(prefabPath);
+        string bundleName = work.AssetName.ToLowerInvariant();
+        AssetImporter prefabImporter = AssetImporter.GetAtPath(work.PrefabPath);
         prefabImporter.assetBundleName = bundleName;
         prefabImporter.assetBundleVariant = AssetBundleVariant;
         prefabImporter.SaveAndReimport();
-        ClearDuplicateBundleNames(prefabFolder, prefabPath, bundleName);
+        ClearDuplicateBundleNames(FlattenLayout.PrefabFolder(work.AssetFolder), work.PrefabPath, bundleName);
+        return true;
+    }
 
-        AssetStats stats = CollectAssetStats(savedPrefab);
-        return new GeneratedAsset(assetName, assetFolder, finalModelPath, finalModelPath, prefabPath, bundleName + "." + AssetBundleVariant, stats);
+    private static GeneratedAsset ToGeneratedAsset(RetinarFlattenWork work)
+    {
+        string finalModelPath = FindMainModelDependency(work.PrefabPath);
+        if (string.IsNullOrEmpty(finalModelPath) && !string.IsNullOrEmpty(work.SourceModelPath))
+        {
+            finalModelPath = FlattenLayout.ModelFolder(work.AssetFolder) + "/" + Path.GetFileName(work.SourceModelPath);
+        }
+        if (string.IsNullOrEmpty(finalModelPath))
+        {
+            finalModelPath = work.PrefabPath;
+        }
+
+        string bundleFileName = work.AssetName.ToLowerInvariant() + "." + AssetBundleVariant;
+        return new GeneratedAsset(
+            work.AssetName, work.AssetFolder, finalModelPath, finalModelPath, work.PrefabPath, bundleFileName);
     }
 
     /// <summary>
@@ -1060,6 +847,115 @@ public static partial class RetinarBatchModelBuilder
         }
 
         return copied;
+    }
+
+    // OBJ 的 .mtl 不是 AssetDatabase 依赖，GetDependencies 拿不到；平铺分类表里也没有它
+    // （ModelFlattenProcessor 只认 fbx/obj/glb/gltf）。所以必须在这里显式跟拷到副本旁边。
+    // 少了它，Unity 会忽略 usemtl 改按 group 生成默认材质，交付副本的材质集和源对不上
+    // （歼15 这份是 35 vs 111），MapSubAssetsBetweenCopies 判非同源，Material 这一类的
+    // 引用改写整个跳过，交付副本的模型只剩白材质。
+    private static void CopyObjMaterialLibrariesBesideCopiedModels(Dictionary<string, string> copiedDependencies)
+    {
+        if (copiedDependencies == null || copiedDependencies.Count == 0)
+        {
+            return;
+        }
+
+        bool copiedAny = false;
+        foreach (KeyValuePair<string, string> pair in copiedDependencies)
+        {
+            if (!pair.Key.EndsWith(".obj", System.StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            foreach (string libraryName in ReadObjMaterialLibraryNames(pair.Key))
+            {
+                string sourceLibrary = GetSiblingAssetPath(pair.Key, libraryName);
+                string targetLibrary = GetSiblingAssetPath(pair.Value, libraryName);
+                if (string.IsNullOrEmpty(sourceLibrary) || string.IsNullOrEmpty(targetLibrary))
+                {
+                    continue;
+                }
+
+                if (AssetDatabase.LoadAssetAtPath<Object>(sourceLibrary) == null)
+                {
+                    Debug.LogWarning("[Retinar] OBJ 声明的 mtllib 不在源目录，交付副本材质将退化成按组的默认白材质: " +
+                        sourceLibrary);
+                    continue;
+                }
+
+                if (CopyAssetToExactPath(sourceLibrary, targetLibrary) != sourceLibrary)
+                {
+                    copiedAny = true;
+                }
+            }
+        }
+
+        if (copiedAny)
+        {
+            AssetDatabase.Refresh();
+        }
+    }
+
+    // 只读到第一行几何数据为止：mtllib 按 OBJ 规范出现在几何之前，
+    // 为一条声明整份读进上百 MB 的模型不划算。
+    private static List<string> ReadObjMaterialLibraryNames(string objAssetPath)
+    {
+        var names = new List<string>();
+        string fullPath = AssetPathToFullPath(objAssetPath);
+        if (string.IsNullOrEmpty(fullPath) || !File.Exists(fullPath))
+        {
+            return names;
+        }
+
+        try
+        {
+            using (var reader = new StreamReader(fullPath))
+            {
+                string line;
+                while ((line = reader.ReadLine()) != null)
+                {
+                    string trimmed = line.Trim();
+                    if (trimmed.StartsWith("v ", System.StringComparison.Ordinal))
+                    {
+                        break;
+                    }
+
+                    if (!trimmed.StartsWith("mtllib ", System.StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+
+                    // 规范允许一条 mtllib 后跟多个库名，以空格分隔。
+                    foreach (string name in trimmed.Substring("mtllib ".Length)
+                                 .Split(new[] { ' ', '\t' }, System.StringSplitOptions.RemoveEmptyEntries))
+                    {
+                        if (!names.Contains(name))
+                        {
+                            names.Add(name);
+                        }
+                    }
+                }
+            }
+        }
+        catch (System.Exception ex)
+        {
+            Debug.LogWarning("[Retinar] 读取 OBJ mtllib 失败: " + objAssetPath + " " + ex.Message);
+        }
+
+        return names;
+    }
+
+    private static string GetSiblingAssetPath(string assetPath, string fileName)
+    {
+        string folder = Path.GetDirectoryName(assetPath);
+        if (string.IsNullOrEmpty(folder) || string.IsNullOrEmpty(fileName))
+        {
+            return null;
+        }
+
+        return folder.Replace("\\", "/") + "/" + fileName;
     }
 
     // GetPreparedPrefabDependencyFolder 已由 FlattenCopyRunner.ResolveRelativeFolder 取代。
@@ -1648,7 +1544,16 @@ public static partial class RetinarBatchModelBuilder
 
         foreach (string filePath in Directory.GetFiles(modelFullPath, "*.*", SearchOption.AllDirectories))
         {
-            if (Path.GetExtension(filePath).ToLowerInvariant() == ".meta")
+            string extension = Path.GetExtension(filePath).ToLowerInvariant();
+            if (extension == ".meta")
+            {
+                continue;
+            }
+
+            // .mtl 是 OBJ 的必需伴生，必须留在模型旁边（规则 20：Model 只放模型文件
+            // **及其必需伴生**，禁的是自动生成的子文件夹）。搬走它等于让 Unity 忽略
+            // usemtl，副本材质集立刻和源脱钩。
+            if (extension == ".mtl")
             {
                 continue;
             }
@@ -1723,8 +1628,11 @@ public static partial class RetinarBatchModelBuilder
     /// <summary>
     /// 外来 Prefab：套一层空外壳（Identity），内容节点保持源 TRS / 名字 / Animator。
     /// 不缩放、不居中、不 Bake 子节点。已是外壳则不再套。禁止嵌套预制体资产。
+    ///
+    /// convertZUpToYUp 为真时，内容节点在源 TRS 之上左乘 −90°X（规则 23 的唯一例外，
+    /// 外壳根仍 Identity）。开关来自绑定行，本方法不猜、不读文件。
     /// </summary>
-    private static void WrapIncomingPrefabInEmptyShell(string prefabPath, string assetName)
+    private static void WrapIncomingPrefabInEmptyShell(string prefabPath, string assetName, bool convertZUpToYUp)
     {
         GameObject source = AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
         if (source == null)
@@ -1752,6 +1660,11 @@ public static partial class RetinarBatchModelBuilder
             Vector3 localPos = content.transform.localPosition;
             Quaternion localRot = content.transform.localRotation;
             Vector3 localScale = content.transform.localScale;
+            if (convertZUpToYUp)
+            {
+                localRot = ZUpToYUpRotation * localRot;
+            }
+
             content.transform.SetParent(shell.transform, false);
             content.transform.localPosition = localPos;
             content.transform.localRotation = localRot;
@@ -1761,7 +1674,8 @@ public static partial class RetinarBatchModelBuilder
             shell.transform.localScale = Vector3.one;
 
             PrefabUtility.SaveAsPrefabAsset(shell, prefabPath);
-            Debug.Log("[Retinar] " + assetName + "：外来 Prefab 已套空父外壳，不缩放、不 Bake 子节点");
+            Debug.Log("[Retinar] " + assetName + "：外来 Prefab 已套空父外壳，不缩放、不 Bake 子节点" +
+                      (convertZUpToYUp ? "；内容节点已叠 −90°X 轴向修正" : string.Empty));
         }
         finally
         {
@@ -1788,111 +1702,6 @@ public static partial class RetinarBatchModelBuilder
                root.GetComponent<Animation>() == null &&
                root.GetComponent<MeshFilter>() == null &&
                root.GetComponent<Canvas>() == null;
-    }
-
-    private static bool LooksLikeFbxNormalizedPrefab(GameObject root, string assetName)
-    {
-        if (root == null || root.transform.childCount != 1 || string.IsNullOrEmpty(assetName))
-        {
-            return false;
-        }
-
-        return root.transform.GetChild(0).name == assetName + FbxNormalizedModelChildSuffix;
-    }
-
-    /// <summary>
-    /// FBX 自动预制体的 SafeZone Bake。Prefab 入口禁止调用：会改子节点 local，打坏动画。
-    /// FBX 入口仍走 CreateNormalizedPrefab 内联缩放，本方法暂保留。
-    /// </summary>
-    private static void NormalizePreparedPrefabBounds(string prefabPath)
-    {
-        GameObject instance = PrefabUtility.LoadPrefabContents(prefabPath);
-        try
-        {
-            RebasePrefabRootToOrigin(instance);
-            Transform[] movableRoots = GetMovablePrefabRoots(instance);
-            if (movableRoots.Length == 0 || !TryGetRendererBounds(instance, out Bounds bounds))
-            {
-                return;
-            }
-
-            float maxSize = Mathf.Max(bounds.size.x, bounds.size.y, bounds.size.z);
-            if (maxSize > 0f)
-            {
-                float targetMaxSize = Mathf.Min(SafeZoneSize.x, SafeZoneSize.y, SafeZoneSize.z) * SafeZonePadding;
-                float scale = targetMaxSize / maxSize;
-                foreach (Transform movable in movableRoots)
-                {
-                    movable.localScale *= scale;
-                    movable.localPosition *= scale;
-                }
-            }
-
-            if (TryGetRendererBounds(instance, out bounds))
-            {
-                Vector3 offset = SafeZoneCenter - bounds.center;
-                foreach (Transform movable in movableRoots)
-                {
-                    movable.position += offset;
-                }
-            }
-
-            PrefabUtility.SaveAsPrefabAsset(instance, prefabPath);
-        }
-        finally
-        {
-            PrefabUtility.UnloadPrefabContents(instance);
-        }
-    }
-
-    private static void RebasePrefabRootToOrigin(GameObject instance)
-    {
-        Transform root = instance.transform;
-        if (root.localPosition.sqrMagnitude < 0.00000001f &&
-            Quaternion.Angle(root.localRotation, Quaternion.identity) < 0.001f &&
-            (root.localScale - Vector3.one).sqrMagnitude < 0.00000001f)
-        {
-            return;
-        }
-
-        Transform[] directChildren = new Transform[root.childCount];
-        Vector3[] worldPositions = new Vector3[root.childCount];
-        Quaternion[] worldRotations = new Quaternion[root.childCount];
-        Vector3[] worldScales = new Vector3[root.childCount];
-        for (int i = 0; i < root.childCount; i++)
-        {
-            Transform child = root.GetChild(i);
-            directChildren[i] = child;
-            worldPositions[i] = child.position;
-            worldRotations[i] = child.rotation;
-            worldScales[i] = child.lossyScale;
-        }
-
-        root.localPosition = Vector3.zero;
-        root.localRotation = Quaternion.identity;
-        root.localScale = Vector3.one;
-
-        for (int i = 0; i < directChildren.Length; i++)
-        {
-            directChildren[i].SetPositionAndRotation(worldPositions[i], worldRotations[i]);
-            directChildren[i].localScale = worldScales[i];
-        }
-    }
-
-    private static Transform[] GetMovablePrefabRoots(GameObject instance)
-    {
-        var movableRoots = new List<Transform>();
-        foreach (Transform child in instance.transform)
-        {
-            movableRoots.Add(child);
-        }
-
-        if (movableRoots.Count == 0 && instance.GetComponentsInChildren<Renderer>(true).Length > 0)
-        {
-            movableRoots.Add(instance.transform);
-        }
-
-        return movableRoots.ToArray();
     }
 
     /// <summary>
@@ -1963,89 +1772,6 @@ public static partial class RetinarBatchModelBuilder
         return hasBounds;
     }
 
-    private static void BuildAssetBundles(BuildTarget target)
-    {
-        string outputPath = Path.Combine(AssetBundleRoot, ToPlatformFolder(target));
-        EnsureDiskDirectory(Path.Combine(Directory.GetCurrentDirectory(), outputPath));
-        BuildPipeline.BuildAssetBundles(outputPath, BuildAssetBundleOptions.None, target);
-    }
-
-    private static int CopySourceFilesToDeliverables(List<GeneratedAsset> assets)
-    {
-        int textureWarningCount = 0;
-        foreach (GeneratedAsset asset in assets)
-        {
-            string root = Path.Combine(Directory.GetCurrentDirectory(), DeliverableRoot, asset.AssetName, "01_source");
-            string modelDir = Path.Combine(root, "Model");
-            string textureDir = Path.Combine(root, "Textures");
-
-            EnsureDiskDirectory(modelDir);
-            EnsureDiskDirectory(textureDir);
-
-            var modelPaths = new HashSet<string>();
-            var ignoredSourceMaterials = new HashSet<string>();
-            var ignoredSourceTextures = new HashSet<string>();
-            var ignoredPackagedModels = new HashSet<string>();
-            var packagedMaterialPaths = new HashSet<string>();
-            var texturePaths = new HashSet<string>();
-
-            CollectSourceAssets(asset.SourcePath, modelPaths, ignoredSourceMaterials, ignoredSourceTextures);
-            CollectSourceAssets(asset.PrefabPath, ignoredPackagedModels, packagedMaterialPaths, texturePaths);
-
-            foreach (string modelPath in modelPaths)
-            {
-                CopyAssetFile(modelPath, modelDir);
-            }
-
-            List<string> textureReport = new List<string>
-            {
-                "Texture report notes:",
-                "- Unity Imported Size is the effective Texture2D size after TextureImporter Max Size/settings.",
-                "- Source File Size is the original PNG/JPG file size on disk; Unity import settings do not rewrite source files.",
-                "- Source file warning threshold: 5 MB.",
-                "Path\tUnity Imported Size\tSource File Size\tStatus"
-            };
-            foreach (string texturePath in texturePaths)
-            {
-                CopyAssetFile(texturePath, textureDir);
-                int issueCount = GetTextureIssueCount(texturePath);
-                if (issueCount > 0)
-                {
-                    textureWarningCount += issueCount;
-                }
-
-                textureReport.Add(BuildTextureReportLine(texturePath));
-            }
-
-            string reportPath = Path.Combine(root, "texture_size_report.txt");
-            File.WriteAllLines(reportPath, textureReport.ToArray(), Encoding.UTF8);
-
-            string dccReportPath = Path.Combine(root, "dcc_model_report.txt");
-            File.WriteAllLines(dccReportPath, BuildDccModelReport(asset).ToArray(), Encoding.UTF8);
-        }
-
-        return textureWarningCount;
-    }
-
-    private static List<string> BuildDccModelReport(GeneratedAsset asset)
-    {
-        var lines = new List<string>();
-        lines.Add("DCC / model report");
-        lines.Add("Asset: " + asset.AssetName);
-        lines.Add("Original source: " + asset.SourcePath);
-        lines.Add("Unity model path: " + asset.UnityModelPath);
-        lines.Add("Unity version: " + Application.unityVersion);
-        lines.Add("Mesh count: " + asset.Stats.MeshCount);
-        lines.Add("Vertices: " + asset.Stats.VertexCount);
-        lines.Add("Faces: " + asset.Stats.TriangleCount);
-        lines.Add("Renderers: " + asset.Stats.RendererCount);
-        lines.Add("");
-        lines.Add("DCC software/version: Unity cannot reliably detect the original DCC software version from every FBX/MAX/MA/BLEND file.");
-        lines.Add("Manual check required: open the editable DCC source file in its authoring software and record software name/version in asset_info.xlsx.");
-        lines.Add("If only FBX is provided, treat DCC source/version as pending unless the producer supplies export metadata or source screenshots.");
-        return lines;
-    }
-
     private static void CopySourceTexturesToUnityArtFolder(string sourcePath, string textureFolder)
     {
         var modelPaths = new HashSet<string>();
@@ -2075,29 +1801,6 @@ public static partial class RetinarBatchModelBuilder
         AssetDatabase.Refresh();
         return targetPath;
     }
-
-    private static void TrySetModelImporterMaterialImportMode(ModelImporter importer, string enumName)
-    {
-        System.Reflection.PropertyInfo property = typeof(ModelImporter).GetProperty("materialImportMode");
-        if (property == null || !property.CanWrite)
-        {
-            return;
-        }
-
-        try
-        {
-            object value = System.Enum.Parse(property.PropertyType, enumName);
-            property.SetValue(importer, value, null);
-        }
-        catch (System.Exception)
-        {
-            importer.materialImportMode = ModelImporterMaterialImportMode.ImportStandard;
-        }
-    }
-
-    // TrySetModelImporterMaterialLocation 已删除：它是用反射设置 materialLocation 的
-    // 兜底实现，但 ApplyModelImportSettings 一直是直接用强类型属性赋值的，
-    // 这个方法在工程里从来没有任何调用方，留着只会让人以为材质来源有两条设置路径。
 
     private static void ApplyImportSettingsToPackagedModels(string assetFolder)
     {
@@ -2208,154 +1911,6 @@ public static partial class RetinarBatchModelBuilder
     // 已迁移到 RetinarBatchModelBuilder.AssetResolution.cs 并修复为递归查找、
     // 支持更多伴生文件夹命名、失败时输出详细诊断，而不是静默找不到贴图。
 
-    private static void CopyAssetFile(string assetPath, string targetDirectory)
-    {
-        string sourceFullPath = AssetPathToFullPath(assetPath);
-        if (!File.Exists(sourceFullPath))
-        {
-            Debug.LogWarning("Source file not found for 01_source copy: " + assetPath);
-            return;
-        }
-
-        string targetPath = Path.Combine(targetDirectory, Path.GetFileName(sourceFullPath));
-        File.Copy(sourceFullPath, targetPath, true);
-    }
-
-    private static string BuildTextureReportLine(string texturePath)
-    {
-        Texture2D texture = AssetDatabase.LoadAssetAtPath<Texture2D>(texturePath);
-        if (texture == null)
-        {
-            return texturePath + "\tUnknown size\t[TEXTURE_LOAD] WARN: texture could not be loaded";
-        }
-
-        bool widthOk = IsPowerOfTwo(texture.width);
-        bool heightOk = IsPowerOfTwo(texture.height);
-        long fileSize = GetAssetFileSize(texturePath);
-        bool fileSizeOk = fileSize <= MaxTextureSourceBytes;
-        string status = widthOk && heightOk && fileSizeOk ? "OK" : BuildTextureWarningText(widthOk, heightOk, fileSizeOk);
-        string line = texturePath + "\t" + texture.width + "x" + texture.height + "\t" + FormatBytes(fileSize) + "\t" + status;
-        if (!widthOk || !heightOk)
-        {
-            Debug.LogWarning("Texture size is not power of two: " + line);
-        }
-
-        if (!fileSizeOk)
-        {
-            Debug.LogWarning("Texture source file is larger than 5 MB and should be optimized: " + line +
-                "\n处理方式：打开 Tools > 资源处理总面板 / 贴图子面板，在 Assets/Art 下按后缀递归选中该贴图" +
-                "（常见落点 image/Texture，勿写死夹名），" +
-                "执行\"压缩超标的贴图源文件\"，确认体积 < 5 MB 后再重新打包。" +
-                "\n不要压 .fbm；重新打包会保留已压缩的 Art 副本（ExtractTextures / SyncNewer 不再用更大内嵌图覆盖）。");
-        }
-
-        return line;
-    }
-
-    /// <summary>
-    /// 打 AB 前贴图预检：对已过门禁资产的 Prefab 依赖贴图做与报告相同的 5MB / POT 检查。
-    /// </summary>
-    private static int CollectTextureIssuesForAssets(List<GeneratedAsset> assets, List<string> issueLines)
-    {
-        int issueCount = 0;
-        if (assets == null || issueLines == null)
-        {
-            return 0;
-        }
-
-        var seen = new HashSet<string>();
-        foreach (GeneratedAsset asset in assets)
-        {
-            if (!asset.IsValid || string.IsNullOrEmpty(asset.PrefabPath))
-            {
-                continue;
-            }
-
-            foreach (string dependency in AssetDatabase.GetDependencies(asset.PrefabPath, true))
-            {
-                string path = dependency.Replace("\\", "/");
-                if (!IsTextureAsset(path) || !seen.Add(path))
-                {
-                    continue;
-                }
-
-                issueCount += AppendTextureIssueCodes(path, issueLines);
-            }
-        }
-
-        return issueCount;
-    }
-
-    private static int AppendTextureIssueCodes(string texturePath, List<string> issueLines)
-    {
-        int count = 0;
-        Texture2D texture = AssetDatabase.LoadAssetAtPath<Texture2D>(texturePath);
-        if (texture == null)
-        {
-            issueLines.Add("[TEXTURE_LOAD] " + texturePath);
-            return 1;
-        }
-
-        if (!IsPowerOfTwo(texture.width) || !IsPowerOfTwo(texture.height))
-        {
-            issueLines.Add("[TEXTURE_POT] " + texturePath + " " + texture.width + "x" + texture.height);
-            count++;
-        }
-
-        long fileSize = GetAssetFileSize(texturePath);
-        if (fileSize > MaxTextureSourceBytes)
-        {
-            issueLines.Add("[TEXTURE_SIZE] " + texturePath + " " + FormatBytes(fileSize));
-            count++;
-        }
-
-        return count;
-    }
-
-    private static int GetTextureIssueCount(string texturePath)
-    {
-        Texture2D texture = AssetDatabase.LoadAssetAtPath<Texture2D>(texturePath);
-        int issueCount = 0;
-        if (texture == null || !IsPowerOfTwo(texture.width) || !IsPowerOfTwo(texture.height))
-        {
-            issueCount++;
-        }
-
-        if (GetAssetFileSize(texturePath) > MaxTextureSourceBytes)
-        {
-            issueCount++;
-        }
-
-        return issueCount;
-    }
-
-    private static string BuildTextureWarningText(bool widthOk, bool heightOk, bool fileSizeOk)
-    {
-        var warnings = new List<string>();
-        if (!widthOk || !heightOk)
-        {
-            warnings.Add("[TEXTURE_POT] WARN: size is not power of two");
-        }
-
-        if (!fileSizeOk)
-        {
-            warnings.Add("[TEXTURE_SIZE] WARN: source file > 5 MB");
-        }
-
-        return string.Join("; ", warnings.ToArray());
-    }
-
-    private static long GetAssetFileSize(string assetPath)
-    {
-        string fullPath = AssetPathToFullPath(assetPath);
-        if (!File.Exists(fullPath))
-        {
-            return 0;
-        }
-
-        return new FileInfo(fullPath).Length;
-    }
-
     private static string FormatBytes(long bytes)
     {
         if (bytes <= 0)
@@ -2364,11 +1919,6 @@ public static partial class RetinarBatchModelBuilder
         }
 
         return (bytes / 1024f / 1024f).ToString("0.00") + " MB";
-    }
-
-    private static bool IsPowerOfTwo(int value)
-    {
-        return value > 0 && (value & (value - 1)) == 0;
     }
 
     private static string AssetPathToFullPath(string assetPath)
@@ -2398,268 +1948,6 @@ public static partial class RetinarBatchModelBuilder
         return normalizedFullPath.Substring(normalizedProjectRoot.Length + 1);
     }
 
-    private static void CopyBuiltBundlesToDeliverables(List<GeneratedAsset> assets)
-    {
-        foreach (GeneratedAsset asset in assets)
-        {
-            CopyBuiltBundle(asset, "Android");
-            CopyBuiltBundle(asset, "iOS");
-        }
-    }
-
-    private static void CopyBuiltBundle(GeneratedAsset asset, string platformFolder)
-    {
-        string projectRoot = Directory.GetCurrentDirectory();
-        string sourceDir = Path.Combine(projectRoot, AssetBundleRoot, platformFolder);
-        string bundleSource = Path.Combine(sourceDir, asset.BundleFileName);
-        string manifestSource = bundleSource + ".manifest";
-        string targetDir = Path.Combine(projectRoot, DeliverableRoot, asset.AssetName, "03_assetbundles", platformFolder);
-
-        EnsureDiskDirectory(targetDir);
-        CopyFileIfExists(bundleSource, Path.Combine(targetDir, asset.BundleFileName));
-        CopyFileIfExists(manifestSource, Path.Combine(targetDir, asset.BundleFileName + ".manifest"));
-    }
-
-    private static void ExportUnityPackages(List<GeneratedAsset> assets)
-    {
-        foreach (GeneratedAsset asset in assets)
-        {
-            string outputDir = Path.Combine(DeliverableRoot, asset.AssetName, "02_unity");
-            EnsureDiskDirectory(Path.Combine(Directory.GetCurrentDirectory(), outputDir));
-            string outputPath = Path.Combine(outputDir, asset.AssetName + ".unitypackage");
-            string[] modelPackageAssets = AssetDatabase.GetDependencies(asset.PrefabPath, true)
-                .Select(path => path.Replace("\\", "/"))
-                .Where(path => path.Equals(asset.AssetFolder, System.StringComparison.OrdinalIgnoreCase) ||
-                               path.StartsWith(asset.AssetFolder + "/", System.StringComparison.OrdinalIgnoreCase))
-                .Distinct(System.StringComparer.OrdinalIgnoreCase)
-                .ToArray();
-
-            AssetDatabase.ExportPackage(modelPackageAssets, outputPath, ExportPackageOptions.Default);
-        }
-    }
-
-    // 三道校验（ValidateModelFoldersAreClean / ValidateExternalDependencies）以及
-    // 逐资产判定的调度（PartitionAssetsThatPassValidation）都在
-    // RetinarBatchModelBuilder.AssetResolution.cs 里。
-    // 修复点一：校验从"整批一起判、任一条不过就全批终止"改成"逐个资产判、只排除没过的那个"。
-    // 修复点二：ValidateExternalDependencies 会先尝试自愈（把贴图/材质复制并重定向进该模型
-    // 自己的 Art 目录），只有自愈也失败时才报错，
-    // 并且报错信息里会带上磁盘绝对路径、最后修改时间等线索。
-
-    // 业务验收层预留：后续拆到 IRetinarAcceptanceGate。
-    // Prefab 入口只强制外壳 Identity（及可选碰撞体对齐）；SafeZone 中心/尺寸仅 FBX 自动预制体阻断。
-    private static bool ValidatePrefabSpatialPlacement(List<GeneratedAsset> assets, out string errorText)
-    {
-        var errors = new List<string>();
-        foreach (GeneratedAsset asset in assets)
-        {
-            GameObject instance = PrefabUtility.LoadPrefabContents(asset.PrefabPath);
-            try
-            {
-                Transform root = instance.transform;
-                if (root.localPosition.sqrMagnitude > 0.000001f)
-                {
-                    errors.Add(asset.AssetName + ": root position is not zero: " + root.localPosition);
-                }
-
-                if (Quaternion.Angle(root.localRotation, Quaternion.identity) > 0.1f)
-                {
-                    errors.Add(asset.AssetName + ": root rotation is not identity: " + root.localEulerAngles);
-                }
-
-                if ((root.localScale - Vector3.one).sqrMagnitude > 0.000001f)
-                {
-                    errors.Add(asset.AssetName + ": root scale is not one: " + root.localScale);
-                }
-
-                if (!TryGetRendererBounds(instance, out Bounds bounds))
-                {
-                    errors.Add(asset.AssetName + ": no renderer bounds were found.");
-                    continue;
-                }
-
-                float maxSize = Mathf.Max(bounds.size.x, bounds.size.y, bounds.size.z);
-                if (maxSize < 0.01f)
-                {
-                    errors.Add(asset.AssetName + ": renderer max size is invalid: " + maxSize.ToString("F4") + " m.");
-                }
-
-                bool enforceSafeZoneFit = LooksLikeFbxNormalizedPrefab(instance, asset.AssetName);
-                if (enforceSafeZoneFit)
-                {
-                    float centerDistance = Vector3.Distance(bounds.center, SafeZoneCenter);
-                    float targetMaxSize = Mathf.Min(SafeZoneSize.x, SafeZoneSize.y, SafeZoneSize.z) * SafeZonePadding;
-                    if (centerDistance > 0.02f)
-                    {
-                        errors.Add(asset.AssetName + ": renderer center is outside SafeZone center by " + centerDistance.ToString("F4") + " m.");
-                    }
-
-                    if (maxSize > targetMaxSize + 0.02f)
-                    {
-                        errors.Add(asset.AssetName + ": renderer max size is invalid: " + maxSize.ToString("F4") + " m.");
-                    }
-                }
-
-                BoxCollider collider = instance.GetComponent<BoxCollider>();
-                if (FlattenPostProcessSettings.AddBoxCollider)
-                {
-                    if (collider == null)
-                    {
-                        errors.Add(asset.AssetName + ": root BoxCollider is missing.");
-                    }
-                    else
-                    {
-                        Vector3 colliderWorldCenter = root.TransformPoint(collider.center);
-                        if (Vector3.Distance(colliderWorldCenter, bounds.center) > 0.02f)
-                        {
-                            errors.Add(asset.AssetName + ": BoxCollider center does not match renderer center.");
-                        }
-                    }
-                }
-            }
-            finally
-            {
-                PrefabUtility.UnloadPrefabContents(instance);
-            }
-        }
-
-        errorText = string.Join("\n", errors.Distinct().ToArray());
-        return errors.Count == 0;
-    }
-
-    // WriteSpatialPlacementFailureReport 已删除，报告统一由
-    // RetinarBatchModelBuilder.AssetResolution.cs 里的 WriteValidationFailureReport 产出。
-    // IsApprovedRuntimeDependency 也在那个分文件里。
-
-    private static void WriteDocsFiles(List<GeneratedAsset> assets)
-    {
-        foreach (GeneratedAsset asset in assets)
-        {
-            WriteRuntimeRequirements(asset);
-            string docsDir = Path.Combine(Directory.GetCurrentDirectory(), DeliverableRoot, asset.AssetName, "06_docs");
-            EnsureDiskDirectory(docsDir);
-            string legacyReadme = Path.Combine(docsDir, "README.txt");
-            if (File.Exists(legacyReadme))
-            {
-                File.Delete(legacyReadme);
-            }
-
-            WriteAssetInfoWorkbook(asset, Path.Combine(docsDir, "asset_info.xlsx"));
-        }
-    }
-
-    private static void WriteRuntimeRequirements(GeneratedAsset asset)
-    {
-        string outputDir = Path.Combine(
-            Directory.GetCurrentDirectory(),
-            DeliverableRoot,
-            asset.AssetName,
-            "00_runtime_requirements");
-        EnsureDiskDirectory(outputDir);
-
-        string[] runtimeDependencies = AssetDatabase.GetDependencies(asset.PrefabPath, true)
-            .Select(path => path.Replace("\\", "/"))
-            .Where(IsApprovedRuntimeDependency)
-            .Distinct(System.StringComparer.OrdinalIgnoreCase)
-            .OrderBy(path => path)
-            .ToArray();
-
-        bool requiresRuntime = runtimeDependencies.Length > 0;
-        var lines = new List<string>
-        {
-            "Model: " + asset.AssetName,
-            "Unity: 2020.3.49f1c1",
-            "Required Runtime: " + (requiresRuntime ? RequiredRuntimeVersion : "None detected"),
-            "Import order: Runtime first, model UnityPackage second.",
-            "AssetBundle note: Runtime C# code must already be compiled into the validation app/player.",
-            "",
-            "Detected Runtime Dependencies:"
-        };
-
-        if (runtimeDependencies.Length == 0)
-        {
-            lines.Add("- None");
-        }
-        else
-        {
-            lines.AddRange(runtimeDependencies.Select(path => "- " + path));
-        }
-
-        File.WriteAllLines(
-            Path.Combine(outputDir, "runtime_requirements.txt"),
-            lines.ToArray(),
-            new UTF8Encoding(false));
-    }
-
-    private static AssetStats CollectAssetStats(GameObject prefab)
-    {
-        var stats = new AssetStats();
-        var materialNames = new HashSet<string>();
-        var textureNames = new HashSet<string>();
-
-        foreach (MeshFilter filter in prefab.GetComponentsInChildren<MeshFilter>(true))
-        {
-            Mesh mesh = filter.sharedMesh;
-            if (mesh == null)
-            {
-                continue;
-            }
-
-            stats.MeshCount++;
-            stats.VertexCount += mesh.vertexCount;
-            stats.TriangleCount += mesh.triangles.Length / 3;
-        }
-
-        foreach (SkinnedMeshRenderer skinned in prefab.GetComponentsInChildren<SkinnedMeshRenderer>(true))
-        {
-            Mesh mesh = skinned.sharedMesh;
-            if (mesh == null)
-            {
-                continue;
-            }
-
-            stats.MeshCount++;
-            stats.VertexCount += mesh.vertexCount;
-            stats.TriangleCount += mesh.triangles.Length / 3;
-        }
-
-        foreach (Renderer renderer in prefab.GetComponentsInChildren<Renderer>(true))
-        {
-            stats.RendererCount++;
-            foreach (Material material in renderer.sharedMaterials)
-            {
-                if (material == null)
-                {
-                    continue;
-                }
-
-                materialNames.Add(material.name);
-                foreach (string textureProperty in material.GetTexturePropertyNames())
-                {
-                    Texture texture = material.GetTexture(textureProperty);
-                    if (texture == null)
-                    {
-                        continue;
-                    }
-
-                    textureNames.Add(texture.name);
-                    stats.MaxTextureWidth = Mathf.Max(stats.MaxTextureWidth, texture.width);
-                    stats.MaxTextureHeight = Mathf.Max(stats.MaxTextureHeight, texture.height);
-                }
-            }
-        }
-
-        stats.MaterialCount = materialNames.Count;
-        stats.TextureCount = textureNames.Count;
-        return stats;
-    }
-
-    // asset_info.xlsx 的全部生成代码（WriteAssetInfoWorkbook 一直到 XmlEscape，约 500 行
-    // 手写 OOXML / zip 处理）已迁移到同名 partial 分文件：
-    //   RetinarBatchModelBuilder.AssetInfoWorkbook.cs
-    // 迁移原因：那部分只是"把统计数据渲染成一个 Excel 文件"，和模型规范化、打包流程
-    // 没有任何耦合，却占了主文件近五分之一的体积。分开之后改表格内容和改打包流程
-    // 互不干扰。调用入口仍然是 WriteDocsFiles 里的 WriteAssetInfoWorkbook。
     private static void AddOrUpdateBoxCollider(GameObject root)
     {
         if (!FlattenPostProcessSettings.AddBoxCollider)
@@ -2915,28 +2203,6 @@ public static partial class RetinarBatchModelBuilder
         }
     }
 
-    private static void CopyFileIfExists(string source, string target)
-    {
-        if (File.Exists(source))
-        {
-            File.Copy(source, target, true);
-        }
-        else
-        {
-            Debug.LogWarning("Expected bundle file was not found: " + source);
-        }
-    }
-
-    private static string ToPlatformFolder(BuildTarget target)
-    {
-        if (target == BuildTarget.iOS)
-        {
-            return "iOS";
-        }
-
-        return target.ToString();
-    }
-
     private static string MakeSafeName(string name)
     {
         foreach (char invalid in Path.GetInvalidFileNameChars())
@@ -2949,7 +2215,7 @@ public static partial class RetinarBatchModelBuilder
 
     private struct GeneratedAsset
     {
-        public static readonly GeneratedAsset Invalid = new GeneratedAsset(null, null, null, null, null, null, new AssetStats());
+        public static readonly GeneratedAsset Invalid = new GeneratedAsset(null, null, null, null, null, null);
 
         public readonly string AssetName;
         public readonly string AssetFolder;
@@ -2957,14 +2223,13 @@ public static partial class RetinarBatchModelBuilder
         public readonly string UnityModelPath;
         public readonly string PrefabPath;
         public readonly string BundleFileName;
-        public readonly AssetStats Stats;
 
         public bool IsValid
         {
             get { return !string.IsNullOrEmpty(PrefabPath); }
         }
 
-        public GeneratedAsset(string assetName, string assetFolder, string sourcePath, string unityModelPath, string prefabPath, string bundleFileName, AssetStats stats)
+        public GeneratedAsset(string assetName, string assetFolder, string sourcePath, string unityModelPath, string prefabPath, string bundleFileName)
         {
             AssetName = assetName;
             AssetFolder = assetFolder;
@@ -2972,32 +2237,6 @@ public static partial class RetinarBatchModelBuilder
             UnityModelPath = unityModelPath;
             PrefabPath = prefabPath;
             BundleFileName = bundleFileName;
-            Stats = stats;
-        }
-    }
-
-    private struct AssetStats
-    {
-        public int MeshCount;
-        public long VertexCount;
-        public long TriangleCount;
-        public int RendererCount;
-        public int MaterialCount;
-        public int TextureCount;
-        public int MaxTextureWidth;
-        public int MaxTextureHeight;
-
-        public string TextureSummary
-        {
-            get
-            {
-                if (TextureCount <= 0)
-                {
-                    return "待复核 / 未从材质引用中统计到贴图";
-                }
-
-                return TextureCount + " 张贴图；最大 " + MaxTextureWidth + " x " + MaxTextureHeight;
-            }
         }
     }
 }

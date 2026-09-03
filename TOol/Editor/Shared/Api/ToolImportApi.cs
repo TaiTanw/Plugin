@@ -4,7 +4,7 @@ using UnityEditor;
 using UnityEngine;
 
 // =====================================================================================
-// Shared / Api — ② 导入窄口（单文件优先；批量仍走 BatchFbxImportService）
+// Shared / Api — 1 入库窄口（单文件优先；批量仍走 BatchFbxImportService）
 // =====================================================================================
 
 /// <summary>插件 2 · 导入对外接口。</summary>
@@ -15,15 +15,39 @@ public static class ToolImportApi
         ".fbx", ".glb", ".gltf", ".obj"
     };
 
+    /// <summary>1 入库识别表。批量筛选只能是子集；CLI / 编排单文件认全表。</summary>
+    public static string[] GetSupportedModelExtensions()
+    {
+        var copy = new string[SupportedModelExtensions.Length];
+        for (int i = 0; i < SupportedModelExtensions.Length; i++)
+        {
+            copy[i] = SupportedModelExtensions[i];
+        }
+
+        return copy;
+    }
+
+    /// <summary>展示用：<c>.fbx / .glb / .gltf / .obj</c>。</summary>
+    public static string FormatSupportedExtensionsDisplay()
+    {
+        return string.Join(" / ", SupportedModelExtensions);
+    }
+
     /// <summary>
-    /// 单文件导入：工程外则先清本趟 Incoming/&lt;三层&gt;/ 再拷入并 ImportAsset；已在 Assets 则原样返回（不清夹）。
-    /// 设置自动依赖 Unity 导入回调，本方法不另调设置逻辑。
+    /// 单文件导入：工程外则先清本趟 Incoming 单元夹再拷入并 ImportAsset；已在 Assets 则原样返回（不清夹）。
+    /// Incoming 夹名：<paramref name="incomingFolderName"/> 非空则用它（ID2）；否则向上三层。
     /// </summary>
-    /// <param name="sourcePath">磁盘绝对路径或 Assets/…</param>
-    /// <param name="assetModelPath">成功时的工程内模型路径</param>
-    /// <param name="message">说明字符串</param>
-    /// <returns>是否得到可用的工程内模型路径</returns>
     public static bool ImportSingleModel(string sourcePath, out string assetModelPath, out string message)
+    {
+        return ImportSingleModel(sourcePath, null, out assetModelPath, out message);
+    }
+
+    /// <inheritdoc cref="ImportSingleModel(string,out string,out string)"/>
+    public static bool ImportSingleModel(
+        string sourcePath,
+        string incomingFolderName,
+        out string assetModelPath,
+        out string message)
     {
         assetModelPath = null;
         message = null;
@@ -44,14 +68,14 @@ public static class ToolImportApi
         string ext = Path.GetExtension(normalized);
         if (!IsSupportedExtension(ext))
         {
-            message = "不支持的扩展名（需 .fbx/.glb/.gltf/.obj）: " + ext;
+            message = "不支持的扩展名（需 " + FormatSupportedExtensionsDisplay() + "）: " + ext;
             return false;
         }
 
         if (string.Equals(ext, ".gltf", StringComparison.OrdinalIgnoreCase))
         {
             Debug.Log(
-                "[②导入] 源是 .gltf。将连同旁路 .bin/贴图整包入库；④ 有外 URI 时走原子搬迁。" +
+                "[1 入库] 源是 .gltf。将连同旁路 .bin/贴图整包入库；④ 有外 URI 时走原子搬迁。" +
                 "不必先转 GLB（D22 封装仍可选，编辑器不做 DCC 重导）。");
         }
 
@@ -84,7 +108,7 @@ public static class ToolImportApi
 
         bool fallback;
         string warning;
-        string folderName = BatchFbxImportService.ResolveFolderName(fullDisk, out fallback, out warning);
+        string folderName = ResolveIncomingFolderName(fullDisk, incomingFolderName, out fallback, out warning);
         string targetFolder = settings.NormalizedImportRoot + "/" + folderName;
         string fileName = Path.GetFileName(fullDisk);
         string targetAsset = targetFolder + "/" + fileName;
@@ -96,7 +120,7 @@ public static class ToolImportApi
             return false;
         }
 
-        // 管线单文件：只清本趟 Incoming/<三层>/，再拷。不扫整棵 Incoming。源已在 Assets 时上面已 return。
+        // 管线单文件：只清本趟 Incoming/<单元夹>/，再拷。不扫整棵 Incoming。源已在 Assets 时上面已 return。
         if (!AssetUnitFolder.TryDeleteImmediateChildFolder(settings.NormalizedImportRoot, targetFolder))
         {
             message = "无法清空导入单元夹: " + targetFolder;
@@ -124,6 +148,7 @@ public static class ToolImportApi
             // .gltf：下面 CopyGltfSidecarsBeside 会跟拷相对 URI 伴生。禁止用 GLTFSceneExporter 当入库。
             File.Copy(fullDisk, destFull, false);
             CopyGltfSidecarsBeside(fullDisk, destFull);
+            CopyObjSidecarsBeside(fullDisk, destFull);
         }
         catch (Exception ex)
         {
@@ -132,8 +157,12 @@ public static class ToolImportApi
         }
 
         AssetDatabase.Refresh();
-        AssetDatabase.ImportAsset(targetAsset, ImportAssetOptions.ForceUpdate);
         assetModelPath = targetAsset;
+        // Refresh 已导入成功则不要再 ForceUpdate：OBJ 会把「无法线」警告再打一遍（每 Mesh 一条）。
+        if (AssetDatabase.LoadMainAssetAtPath(targetAsset) == null)
+        {
+            AssetDatabase.ImportAsset(targetAsset, ImportAssetOptions.ForceUpdate);
+        }
 
         if (AssetDatabase.LoadMainAssetAtPath(targetAsset) == null)
         {
@@ -161,6 +190,28 @@ public static class ToolImportApi
         return BatchFbxImportService.ExecuteBatch(items, settings);
     }
 
+    /// <summary>编排/批量收集：路径后缀是否在 1 入库白名单。</summary>
+    public static bool IsSupportedModelPath(string path)
+    {
+        return IsSupportedExtension(Path.GetExtension(path ?? string.Empty));
+    }
+
+    static string ResolveIncomingFolderName(
+        string fullDisk,
+        string incomingFolderName,
+        out bool fallback,
+        out string warning)
+    {
+        if (!string.IsNullOrWhiteSpace(incomingFolderName))
+        {
+            fallback = false;
+            warning = null;
+            return BatchFbxImportService.SanitizeFolderName(incomingFolderName.Trim());
+        }
+
+        return BatchFbxImportService.ResolveFolderName(fullDisk, out fallback, out warning);
+    }
+
     public static bool IsSupportedExtension(string ext)
     {
         if (string.IsNullOrEmpty(ext))
@@ -178,11 +229,6 @@ public static class ToolImportApi
         }
 
         return false;
-    }
-
-    private static bool IsSupportedModelPath(string path)
-    {
-        return IsSupportedExtension(Path.GetExtension(path ?? string.Empty));
     }
 
     private static bool TryAsExistingAssetPath(string path, out string assetPath)
@@ -254,8 +300,9 @@ public static class ToolImportApi
 
     /// <summary>
     /// .gltf 入库时把相对 URI 伴生拷到同一导入夹（保持相对路径），再让 Import 能找到 .bin/图。
+    /// 批量「执行导入」拷主文件后也可调。
     /// </summary>
-    static void CopyGltfSidecarsBeside(string sourceGltfFull, string destGltfFull)
+    public static void CopyGltfSidecarsBeside(string sourceGltfFull, string destGltfFull)
     {
         if (string.IsNullOrEmpty(sourceGltfFull) ||
             !sourceGltfFull.EndsWith(".gltf", StringComparison.OrdinalIgnoreCase))
@@ -296,13 +343,73 @@ public static class ToolImportApi
             }
             catch (Exception ex)
             {
-                Debug.LogWarning("[②导入] 伴生拷贝失败: " + srcFull + " → " + destFull + " " + ex.Message);
+                Debug.LogWarning("[1 入库] 伴生拷贝失败: " + srcFull + " → " + destFull + " " + ex.Message);
             }
         }
 
         if (scan.MissingUris.Count > 0)
         {
-            Debug.LogWarning("[②导入] gltf 缺伴生 × " + scan.MissingUris.Count + "（ctx 会记 Warnings）");
+            Debug.LogWarning("[1 入库] gltf 缺伴生 × " + scan.MissingUris.Count + "（ctx 会记 Warnings）");
+        }
+    }
+
+    /// <summary>
+    /// .obj 入库时跟拷 mtllib 与 mtl 里的贴图。缺文件只 Warning，仍导入网格。
+    /// </summary>
+    public static void CopyObjSidecarsBeside(string sourceObjFull, string destObjFull)
+    {
+        if (string.IsNullOrEmpty(sourceObjFull) ||
+            !sourceObjFull.EndsWith(".obj", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        ObjExternalScan scan = ObjPackageFiles.Scan(sourceObjFull);
+        string destRoot = Path.GetDirectoryName(destObjFull);
+        if (string.IsNullOrEmpty(destRoot))
+        {
+            return;
+        }
+
+        for (int i = 0; i < scan.SidecarFullPaths.Count; i++)
+        {
+            string srcFull = scan.SidecarFullPaths[i];
+            string rel = ObjPackageFiles.MakeRelativeToObjDir(sourceObjFull, srcFull);
+            string destFull = Path.GetFullPath(Path.Combine(destRoot, rel)).Replace("\\", "/");
+            string destDir = Path.GetDirectoryName(destFull);
+            try
+            {
+                if (!string.IsNullOrEmpty(destDir) && !Directory.Exists(destDir))
+                {
+                    Directory.CreateDirectory(destDir);
+                }
+
+                if (!File.Exists(destFull))
+                {
+                    File.Copy(srcFull, destFull, false);
+                }
+
+                string destAsset = FullPathUnderAssets(destFull);
+                if (!string.IsNullOrEmpty(destAsset))
+                {
+                    AssetDatabase.ImportAsset(destAsset, ImportAssetOptions.ForceUpdate);
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning("[1 入库] obj 伴生拷贝失败: " + srcFull + " → " + destFull + " " + ex.Message);
+            }
+        }
+
+        if (scan.SidecarFullPaths.Count > 0)
+        {
+            Debug.Log("[1 入库] obj 已跟拷伴生 × " + scan.SidecarFullPaths.Count);
+        }
+
+        if (scan.MissingUris.Count > 0)
+        {
+            Debug.LogWarning("[1 入库] obj 缺伴生 × " + scan.MissingUris.Count +
+                             "（源目录没有 .mtl/贴图则 Unity 会白膜）");
         }
     }
 

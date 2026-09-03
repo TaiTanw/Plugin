@@ -1,9 +1,11 @@
+using System.Collections.Generic;
 using System.IO;
 using UnityEditor;
 using UnityEngine;
 
 // =====================================================================================
-// Pipeline — D3 自动化管线总面板（单文件；步骤开关走 SO）
+// Pipeline — D3 自动化管线总面板（步骤开关走 SO）
+// 可收单文件，也可收批量「输出到编排」的路径+ID2 表。Runner 按行 1→2.5→③。
 // =====================================================================================
 
 /// <summary>
@@ -17,6 +19,11 @@ public class PipelineWindow : EditorWindow
     private string materialId = string.Empty;
     /// <summary>上次已为 materialId 同步过的源路径；源变化时才重写默认 Id。</summary>
     private string materialIdSyncedForSource = string.Empty;
+    private readonly List<PipelineSourceBinding> sourceBindings = new List<PipelineSourceBinding>();
+
+    /// <summary>源路径 → OBJ 文件头里的 Z-up 导出器署名。绑定变化时算一次，OnGUI 不读盘。</summary>
+    private readonly Dictionary<string, string> axisHints = new Dictionary<string, string>();
+    private Vector2 bindingsScroll;
     private string lastResultText = string.Empty;
     private Vector2 scroll;
     private Vector2 resultScroll;
@@ -24,7 +31,20 @@ public class PipelineWindow : EditorWindow
     [MenuItem("Tools/自动化管线总面板", false, 40)]
     public static void ShowWindow()
     {
-        GetWindow<PipelineWindow>("自动化管线").minSize = new Vector2(480f, 560f);
+        GetWindow<PipelineWindow>("自动化管线").minSize = new Vector2(480f, 620f);
+    }
+
+    /// <summary>
+    /// 批量面板「输出到编排」入口：整表替换路径+建议 ID2。不入库。
+    /// Conflict 不拦本调用。
+    /// </summary>
+    public static void AcceptBindings(IList<PipelineSourceBinding> bindings)
+    {
+        PipelineWindow window = GetWindow<PipelineWindow>("自动化管线");
+        window.minSize = new Vector2(480f, 620f);
+        window.ApplyBindings(bindings);
+        window.Focus();
+        window.Repaint();
     }
 
     private void OnEnable()
@@ -44,12 +64,15 @@ public class PipelineWindow : EditorWindow
         {
             scroll = scrollScope.scrollPosition;
 
-            EditorGUILayout.LabelField("自动化管线（单文件）", EditorStyles.boldLabel);
+            EditorGUILayout.LabelField("自动化管线", EditorStyles.boldLabel);
             EditorGUILayout.HelpBox(
                 "三区：导入（1 入库 / 2 总自动化）→ 处理（③④⑤）→ 输出（⑥）。\n" +
+                "内核格式：" + ToolImportApi.FormatSupportedExtensionsDisplay() +
+                "（编排始终认全表；批量勾选只筛那次收集）。\n" +
                 "处理区须开前一步才能开后一步：③开才能④，④开才能⑤。\n" +
                 "导入区 2 只开总闸（与资源总面板「总开关」同一 Prefs）；" +
-                "哪些资源、设置自动/后处理自动仍在资源总面板。",
+                "哪些资源、设置自动/后处理自动仍在资源总面板。\n" +
+                "多文件：用批量面板「输出到编排」填表。行号由 Runner 调度：每行 1 入库 → 2.5 ctx → ③（该行 ID2）。",
                 MessageType.Info);
 
             DrawImportZone();
@@ -59,15 +82,24 @@ public class PipelineWindow : EditorWindow
             EditorGUILayout.Space(10f);
             using (new EditorGUI.DisabledScope(string.IsNullOrWhiteSpace(sourcePath)))
             {
-                if (GUILayout.Button("运行管线", GUILayout.Height(36f)))
+                string runLabel = sourceBindings.Count > 1
+                    ? "运行管线（" + sourceBindings.Count + " 行）"
+                    : "运行管线";
+                if (GUILayout.Button(runLabel, GUILayout.Height(36f)))
                 {
-                    RunPipeline();
+                    // 不要在 OnGUI 里同步跑完整管线：入库/重导会嵌套 IMGUI，出现 GUILayout / GUIClip 不平衡。
+                    EditorApplication.delayCall += RunPipeline;
                 }
             }
 
             EditorGUILayout.Space(8f);
             using (new EditorGUILayout.HorizontalScope())
             {
+                if (GUILayout.Button("打开批量选择器", GUILayout.Height(26f)))
+                {
+                    BatchFbxImportWindow.ShowWindow();
+                }
+
                 if (GUILayout.Button("打开资源处理总面板", GUILayout.Height(26f)))
                 {
                     ResourceProcessWindow.ShowWindow();
@@ -100,17 +132,22 @@ public class PipelineWindow : EditorWindow
     private void DrawSourceSection()
     {
         Rect drop = GUILayoutUtility.GetRect(0f, 56f, GUILayout.ExpandWidth(true));
-        GUI.Box(drop, string.IsNullOrEmpty(sourcePath)
-            ? "拖放模型文件到此处"
-            : Path.GetFileName(sourcePath));
+        GUI.Box(drop, sourceBindings.Count > 1
+            ? "已收 " + sourceBindings.Count + " 条；再拖入将整表替换"
+            : (string.IsNullOrEmpty(sourcePath)
+                ? "拖放模型文件到此处（可多选；文件夹请用批量选择器）"
+                : Path.GetFileName(sourcePath)));
         HandleDrag(drop);
 
         EditorGUILayout.BeginHorizontal();
-        EditorGUI.BeginChangeCheck();
-        string edited = EditorGUILayout.TextField(sourcePath);
-        if (EditorGUI.EndChangeCheck())
+        if (sourceBindings.Count == 0)
         {
-            SetSourcePath(edited);
+            EditorGUI.BeginChangeCheck();
+            string edited = EditorGUILayout.TextField(sourcePath);
+            if (EditorGUI.EndChangeCheck())
+            {
+                SetSourcePath(edited);
+            }
         }
 
         if (GUILayout.Button("浏览…", GUILayout.Width(64f)))
@@ -131,6 +168,12 @@ public class PipelineWindow : EditorWindow
         }
 
         EditorGUILayout.EndHorizontal();
+        if (sourceBindings.Count > 0)
+        {
+            EditorGUILayout.LabelField(
+                "表内路径只读。换文件请拖入、浏览，或从批量面板重新输出。ID2 可改。",
+                EditorStyles.miniLabel);
+        }
     }
 
     /// <summary>导入区：1 入库（无勾选）+ 2 总自动化处理（MasterEnabled）。</summary>
@@ -141,6 +184,7 @@ public class PipelineWindow : EditorWindow
         using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
         {
             DrawSourceSection();
+            DrawBindingsTable();
 
             EditorGUILayout.Space(4f);
             EditorGUILayout.LabelField("1 入库（导入器，无开关）", EditorStyles.miniBoldLabel);
@@ -150,6 +194,7 @@ public class PipelineWindow : EditorWindow
                 : "Assets/Incoming";
             EditorGUILayout.HelpBox(
                 "工程外文件始终拷入导入根并 ImportAsset（已在 Assets 内则复用、不拷）。\n" +
+                "ID2 非空时 Incoming 槽 = Incoming/<ID2>/（D18 只清该子夹）；空则仍用三层夹名。\n" +
                 "导入根 / 禁止写入 Art：与【批量 FBX 导入】同一份 BatchFbxImportSettings，本区不改。\n" +
                 "当前导入根：" + importRoot,
                 MessageType.None);
@@ -173,7 +218,8 @@ public class PipelineWindow : EditorWindow
             else
             {
                 EditorGUILayout.HelpBox(
-                    "总闸已开。随后由【资源处理总面板】决定：贴图/模型谁开、是「设置自动」还是「后处理自动」。\n" +
+                    "总闸已开。模型基线（剔灯剔相机 / OBJ 法线）此时必跑，不看下面的分项勾选；" +
+                    "其余由【资源处理总面板】决定：贴图/模型谁开、是「设置自动」还是「后处理自动」。\n" +
                     "现状（只读）：贴图 设置" +
                     (ResourceProcessSwitches.TextureSettingsAuto ? "开" : "关") +
                     " / 后处理" +
@@ -186,7 +232,7 @@ public class PipelineWindow : EditorWindow
                     MessageType.None);
             }
 
-            if (IsGltfSourcePath(sourcePath))
+            if (IsGltfSourcePath(ActiveSourcePath()))
             {
                 EditorGUILayout.HelpBox(
                     "源是 .gltf（JSON + 旁路 .bin/贴图）。管线会整包入库，④ 按原子夹搬迁，不必先转 GLB。\n" +
@@ -238,10 +284,25 @@ public class PipelineWindow : EditorWindow
                 MessageType.None);
 
             EditorGUILayout.Space(4f);
-            materialId = EditorGUILayout.TextField("materialId（可选）", materialId);
-            EditorGUILayout.HelpBox(
-                "选源时自动填三层名；③ 用该 Id；④ 通常跟 Prefab 名。留空则③按三层规则算名。",
-                MessageType.None);
+            if (sourceBindings.Count > 1)
+            {
+                EditorGUILayout.HelpBox(
+                    "多行时请在导入区表内改各行 ID2。运行时每行用自己的 ID2 入库并建 Prefab。",
+                    MessageType.Info);
+            }
+            else
+            {
+                EditorGUI.BeginChangeCheck();
+                materialId = EditorGUILayout.TextField("materialId / ID2（可选）", materialId);
+                if (EditorGUI.EndChangeCheck())
+                {
+                    SyncRowZeroFromLegacyFields();
+                }
+
+                EditorGUILayout.HelpBox(
+                    "选源时自动填：父目录仅一个内核文件 → 三层名；同夹还有其它内核文件或三层不足（Warning）→ 三层+文件全名。手填覆盖。③ 用该 Id。",
+                    MessageType.None);
+            }
         }
     }
 
@@ -305,6 +366,113 @@ public class PipelineWindow : EditorWindow
         EditorGUILayout.LabelField("产物: " + products, EditorStyles.miniLabel);
     }
 
+    private void DrawBindingsTable()
+    {
+        EditorGUILayout.Space(4f);
+        EditorGUILayout.LabelField(
+            "源与 ID2（" + sourceBindings.Count + " 行）",
+            EditorStyles.miniBoldLabel);
+        EditorGUILayout.HelpBox(
+            "接口：PipelineSourceAccept.SendToOrchestration / PipelineWindow.AcceptBindings。\n" +
+            "建议 ID2：父目录磁盘上仅一个内核文件 → 三层夹名；还有其它 .fbx/.glb/.gltf/.obj 或三层 Warning → 三层 + 文件全名。手填覆盖。\n" +
+            "路径只读，避免误改；换源请拖入 / 浏览 / 批量重新输出。ID2 可改。行索引由 Runner 承担。",
+            MessageType.None);
+
+        if (sourceBindings.Count > 1)
+        {
+            EditorGUILayout.HelpBox(
+                "表内 " + sourceBindings.Count + " 行，运行将逐行入库 / 建 Prefab / 按该份 ctx 平铺。",
+                MessageType.Info);
+        }
+
+        if (sourceBindings.Count == 0)
+        {
+            EditorGUILayout.LabelField("尚无绑定。拖入文件、浏览，或从批量面板「输出到编排」。", EditorStyles.miniLabel);
+            return;
+        }
+
+        using (var bs = new EditorGUILayout.ScrollViewScope(bindingsScroll, GUILayout.MinHeight(96f), GUILayout.MaxHeight(280f)))
+        {
+            bindingsScroll = bs.scrollPosition;
+            for (int i = 0; i < sourceBindings.Count; i++)
+            {
+                PipelineSourceBinding row = sourceBindings[i];
+                if (row == null)
+                {
+                    continue;
+                }
+
+                using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
+                {
+                    using (new EditorGUILayout.HorizontalScope())
+                    {
+                        EditorGUILayout.LabelField(
+                            (i + 1) + ". " + Path.GetFileName(row.SourcePath ?? string.Empty),
+                            EditorStyles.boldLabel);
+                        if (GUILayout.Button("移除", GUILayout.Width(48f)))
+                        {
+                            sourceBindings.RemoveAt(i);
+                            SyncLegacyFieldsFromRowZero();
+                            GUI.FocusControl(null);
+                            break;
+                        }
+                    }
+
+                    EditorGUILayout.LabelField("路径", EditorStyles.miniLabel);
+                    EditorGUILayout.SelectableLabel(
+                        row.SourcePath ?? string.Empty,
+                        EditorStyles.wordWrappedLabel,
+                        GUILayout.MinHeight(32f));
+
+                    using (new EditorGUILayout.HorizontalScope())
+                    {
+                        EditorGUILayout.LabelField("ID2", GUILayout.Width(32f));
+                        EditorGUI.BeginChangeCheck();
+                        string id = EditorGUILayout.TextField(row.MaterialId ?? string.Empty);
+                        if (EditorGUI.EndChangeCheck())
+                        {
+                            row.MaterialId = (id ?? string.Empty).Trim();
+                            if (i == 0)
+                            {
+                                SyncLegacyFieldsFromRowZero();
+                            }
+                        }
+                    }
+
+                    DrawAxisRow(row);
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// 只对 .obj 出现：FBX / glTF 头里有 up-axis，Unity 自己会转，勾了反而转过头。
+    /// </summary>
+    private void DrawAxisRow(PipelineSourceBinding row)
+    {
+        string path = row.SourcePath ?? string.Empty;
+        if (!path.EndsWith(".obj", System.StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        row.ConvertZUpToYUp = EditorGUILayout.ToggleLeft(
+            new GUIContent(
+                "OBJ 轴向修正（内容节点 −90°X）",
+                "OBJ 格式没有 up-axis 字段，Unity 一律当 Y-up 读，Max 的 Z-up 导出会竖立。\n" +
+                "勾上则由④在空壳的内容节点上叠 −90°X，与 Unity 对 FBX 的既有行为一致。\n" +
+                "管线不自动判定：导出器都带 Flip YZ 勾选，署名看不出实际轴向，猜反了 AB 里也看不出来。"),
+            row.ConvertZUpToYUp);
+
+        string hint;
+        if (axisHints.TryGetValue(path, out hint))
+        {
+            EditorGUILayout.LabelField(
+                "  导出器「" + hint + "」默认 Z-up，多半需要勾选",
+                EditorStyles.miniLabel);
+        }
+    }
+
     private void HandleDrag(Rect dropArea)
     {
         Event evt = Event.current;
@@ -318,35 +486,8 @@ public class PipelineWindow : EditorWindow
             return;
         }
 
-        string candidate = null;
-        if (DragAndDrop.paths != null)
-        {
-            for (int i = 0; i < DragAndDrop.paths.Length; i++)
-            {
-                string p = DragAndDrop.paths[i];
-                if (!string.IsNullOrEmpty(p) && ToolImportApi.IsSupportedExtension(Path.GetExtension(p)))
-                {
-                    candidate = p.Replace("\\", "/");
-                    break;
-                }
-            }
-        }
-
-        if (candidate == null && DragAndDrop.objectReferences != null)
-        {
-            for (int i = 0; i < DragAndDrop.objectReferences.Length; i++)
-            {
-                Object obj = DragAndDrop.objectReferences[i];
-                string ap = AssetDatabase.GetAssetPath(obj);
-                if (ToolImportApi.IsSupportedExtension(Path.GetExtension(ap)))
-                {
-                    candidate = ap.Replace("\\", "/");
-                    break;
-                }
-            }
-        }
-
-        if (candidate == null)
+        List<string> files = CollectDroppedModelPaths();
+        if (files.Count == 0)
         {
             DragAndDrop.visualMode = DragAndDropVisualMode.Rejected;
             return;
@@ -356,10 +497,54 @@ public class PipelineWindow : EditorWindow
         if (evt.type == EventType.DragPerform)
         {
             DragAndDrop.AcceptDrag();
-            SetSourcePath(candidate);
+            ApplyBindings(PipelineMaterialId.SuggestBindingsForSelection(files));
             evt.Use();
             Repaint();
         }
+    }
+
+    private static List<string> CollectDroppedModelPaths()
+    {
+        var files = new List<string>();
+        var seen = new HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
+        if (DragAndDrop.paths != null)
+        {
+            for (int i = 0; i < DragAndDrop.paths.Length; i++)
+            {
+                string p = DragAndDrop.paths[i];
+                if (string.IsNullOrEmpty(p) || !ToolImportApi.IsSupportedExtension(Path.GetExtension(p)))
+                {
+                    continue;
+                }
+
+                string n = p.Replace("\\", "/");
+                if (seen.Add(n))
+                {
+                    files.Add(n);
+                }
+            }
+        }
+
+        if (files.Count == 0 && DragAndDrop.objectReferences != null)
+        {
+            for (int i = 0; i < DragAndDrop.objectReferences.Length; i++)
+            {
+                Object obj = DragAndDrop.objectReferences[i];
+                string ap = AssetDatabase.GetAssetPath(obj);
+                if (!ToolImportApi.IsSupportedExtension(Path.GetExtension(ap)))
+                {
+                    continue;
+                }
+
+                string n = ap.Replace("\\", "/");
+                if (seen.Add(n))
+                {
+                    files.Add(n);
+                }
+            }
+        }
+
+        return files;
     }
 
     private static bool IsGltfSourcePath(string path)
@@ -368,11 +553,60 @@ public class PipelineWindow : EditorWindow
                string.Equals(Path.GetExtension(path), ".gltf", System.StringComparison.OrdinalIgnoreCase);
     }
 
-    /// <summary>D9：改源路径时同步默认 materialId；清空源时清 Id。</summary>
-    private void SetSourcePath(string path)
+    private string ActiveSourcePath()
     {
-        string normalized = (path ?? string.Empty).Replace("\\", "/").Trim();
-        if (string.IsNullOrEmpty(normalized))
+        if (sourceBindings.Count > 0 && sourceBindings[0] != null &&
+            !string.IsNullOrEmpty(sourceBindings[0].SourcePath))
+        {
+            return sourceBindings[0].SourcePath;
+        }
+
+        return sourcePath;
+    }
+
+    private void ApplyBindings(IList<PipelineSourceBinding> bindings)
+    {
+        sourceBindings.Clear();
+        if (bindings != null)
+        {
+            for (int i = 0; i < bindings.Count; i++)
+            {
+                PipelineSourceBinding src = bindings[i];
+                if (src == null || string.IsNullOrWhiteSpace(src.SourcePath))
+                {
+                    continue;
+                }
+
+                sourceBindings.Add(src.CloneWith(null));
+            }
+        }
+
+        RefreshAxisHints();
+        SyncLegacyFieldsFromRowZero();
+    }
+
+    private void RefreshAxisHints()
+    {
+        axisHints.Clear();
+        for (int i = 0; i < sourceBindings.Count; i++)
+        {
+            PipelineSourceBinding row = sourceBindings[i];
+            if (row == null || string.IsNullOrEmpty(row.SourcePath) || axisHints.ContainsKey(row.SourcePath))
+            {
+                continue;
+            }
+
+            string note = PipelineObjAxisProbe.SniffZUpExporter(row.SourcePath);
+            if (!string.IsNullOrEmpty(note))
+            {
+                axisHints[row.SourcePath] = note;
+            }
+        }
+    }
+
+    private void SyncLegacyFieldsFromRowZero()
+    {
+        if (sourceBindings.Count == 0)
         {
             sourcePath = string.Empty;
             materialId = string.Empty;
@@ -380,34 +614,73 @@ public class PipelineWindow : EditorWindow
             return;
         }
 
-        bool sourceChanged = !string.Equals(
-            materialIdSyncedForSource, normalized, System.StringComparison.OrdinalIgnoreCase);
-        sourcePath = normalized;
-        if (sourceChanged)
+        PipelineSourceBinding row = sourceBindings[0];
+        sourcePath = row.SourcePath ?? string.Empty;
+        materialId = row.MaterialId ?? string.Empty;
+        materialIdSyncedForSource = sourcePath;
+    }
+
+    private void SyncRowZeroFromLegacyFields()
+    {
+        if (sourceBindings.Count == 0)
         {
-            materialId = PipelineMaterialId.SuggestDefault(normalized);
-            materialIdSyncedForSource = normalized;
+            if (string.IsNullOrWhiteSpace(sourcePath))
+            {
+                return;
+            }
+
+            sourceBindings.Add(new PipelineSourceBinding(sourcePath, materialId));
+            materialIdSyncedForSource = sourcePath;
+            RefreshAxisHints();
+            return;
         }
+
+        sourceBindings[0].SourcePath = sourcePath;
+        sourceBindings[0].MaterialId = materialId ?? string.Empty;
+        materialIdSyncedForSource = sourcePath;
+        RefreshAxisHints();
+    }
+
+    /// <summary>改源路径：整表换成建议 ID2 的一行；清空则清表。</summary>
+    private void SetSourcePath(string path)
+    {
+        string normalized = (path ?? string.Empty).Replace("\\", "/").Trim();
+        if (string.IsNullOrEmpty(normalized))
+        {
+            sourceBindings.Clear();
+            sourcePath = string.Empty;
+            materialId = string.Empty;
+            materialIdSyncedForSource = string.Empty;
+            return;
+        }
+
+        ApplyBindings(PipelineMaterialId.SuggestBindingsForSelection(new[] { normalized }));
     }
 
     private void RunPipeline()
     {
-        AssetDatabase.SaveAssets();
-        PipelineOptions opt = PipelineOptions.FromSettings(settings, sourcePath);
-        // 导入区 1 无勾选：本面板跑管线时始终入库（工程外拷入；已在 Assets 则复用）。
-        opt.RunImport = true;
-        if (!string.IsNullOrWhiteSpace(materialId))
+        SyncRowZeroFromLegacyFields();
+        if (sourceBindings.Count == 0 && !string.IsNullOrWhiteSpace(sourcePath))
         {
-            opt.MaterialId = materialId.Trim();
+            ApplyBindings(PipelineMaterialId.SuggestBindingsForSelection(new[] { sourcePath }));
+            if (!string.IsNullOrWhiteSpace(materialId) && sourceBindings.Count > 0)
+            {
+                sourceBindings[0].MaterialId = materialId.Trim();
+            }
         }
 
-        // D10 预备：单文件也写成一条绑定，便于日后统一消费；Runner 暂不读 SourceBindings。
-        if (!string.IsNullOrWhiteSpace(sourcePath))
+        string runSource = ActiveSourcePath();
+        string runId = sourceBindings.Count > 0 ? sourceBindings[0].MaterialId : materialId;
+
+        AssetDatabase.SaveAssets();
+        PipelineOptions opt = PipelineOptions.FromSettings(settings, runSource);
+        opt.RunImport = true;
+        if (!string.IsNullOrWhiteSpace(runId))
         {
-            opt.SourceBindings = PipelineMaterialId.BuildSourceBindings(
-                new[] { sourcePath },
-                string.IsNullOrWhiteSpace(materialId) ? null : materialId.Trim());
+            opt.MaterialId = runId.Trim();
         }
+
+        opt.SourceBindings = CopyBindings();
 
         PipelineResult result = PipelineRunner.Run(opt);
         lastResultText = result.ToString();
@@ -427,5 +700,22 @@ public class PipelineWindow : EditorWindow
                 body,
                 "OK");
         }
+    }
+
+    private List<PipelineSourceBinding> CopyBindings()
+    {
+        var copy = new List<PipelineSourceBinding>(sourceBindings.Count);
+        for (int i = 0; i < sourceBindings.Count; i++)
+        {
+            PipelineSourceBinding row = sourceBindings[i];
+            if (row == null)
+            {
+                continue;
+            }
+
+            copy.Add(row.CloneWith(null));
+        }
+
+        return copy;
     }
 }

@@ -55,8 +55,8 @@
 | 改 Mesh？ | 重导时保留已写入顶点色                      | 是（如顶点色全白）                      |
 
 
-**硬边界（PACKAGING_RULES 规则 33）：**  
-两边不得同时改同一 Importer 属性。`Assets/Art/**` 是打包产物区；导入区 FBX 的 `materialLocation=External` 只由插件 2 管；交付区 Model 的 `InPrefab`+`Local` 只由插件 1 管。
+**硬边界（PACKAGING_RULES 规则 33 / D24-6）：**  
+两边不得同时改同一 Importer 属性。赋值集中在 `ModelImporterProfiles`：`ApplyIncoming*` 只写导入区，`ApplyArtDelivery` 只写 `Assets/Art/**`。插件 2 的 `OnPreprocessModel` **硬跳过 Art**（不单靠 SO 排除表）。交付区 `InPrefab`+`Local` 只由 ④ 调用 `ApplyArtDelivery`。
 
 ---
 
@@ -89,7 +89,7 @@ TOol/
    └─ Model/
       ├─ Config/     ModelProcessSettings.cs
       ├─ Operations/ 接口、注册表、Runner、具体操作
-      ├─ Import/     设置自动 + 后处理入队
+      ├─ Import/     设置自动 + 后处理入队 + ModelImporterProfiles（D24-6 两档口径）
       └─ Window/     模型子面板 + 目标收集
 ```
 
@@ -144,8 +144,16 @@ TOol/
 
 | 分项含义      | 时机              | 谁执行                                   | 典型事                              |
 | --------- | --------------- | ------------------------------------- | -------------------------------- |
-| **设置自动**  | `OnPreprocess`* | `*ImportSettingsProcessor`            | 贴图关 Read/Write；模型 External、剔灯剔相机 |
+| **设置自动**  | `OnPreprocess`* | `*ImportSettingsProcessor`            | 贴图关 Read/Write；模型材质来源 External |
 | **后处理自动** | 导入后 `delayCall` | `ImportPostProcessScheduler` → Runner | 压缩超标；顶点色全白（**仅导入区；exclude Art**）         |
+
+**模型设置自动分两档（D24-1/2/6）。** 赋值都在 `ModelImporterProfiles`。`ModelImportSettingsProcessor` 只闸导入区；④ `ApplyModelImportSettings` 只调 `ApplyArtDelivery`。
+
+| 档 | 项 | 开关来源 | 为何这样分 |
+|---|---|---|---|
+| **导入区基线** | 剔灯剔相机、`.obj` 法线 Calculate | `ModelProcessSettings`（SO）+ **总闸**（D26-1 未改） | 管线产物形状不能由本机 Prefs 决定。相机灯光必须早于 ③ 剔掉 |
+| **导入区策略** | `materialLocation = External` | SO + 本机「模型 · 设置自动」勾选 | 会让 Incoming 旁生成 `Materials/`，改变 ④ 的输入。默认关（D24-3） |
+| **交付区** | InPrefab + Local + isReadable + 剔灯剔相机 + OBJ Calculate | 无开关，④ 必写 | PACKAGING_RULES 20/21/37；与导入区策略互斥 |
 
 
 **设置自动建议保留**（导入区 Importer 行为需要）。**后处理自动默认关 + UI 标明「仅导入区」**：内嵌贴图压缩、Art 顶点色与贴图两遍同类，平铺前跑了易误以为交付已成功；管线代码保留，不删。
@@ -165,7 +173,7 @@ TOol/
 
 ```text
 模型导入结束（时序，导入区自动）
-  ├─ OnPreprocessModel          设置自动（External / 剔灯等）
+  ├─ OnPreprocessModel          设置自动（基线：剔灯剔相机 / OBJ 法线；策略：External）
   ├─ OnPostprocessModel         后处理：用 ImportRoot 层级 Mesh 写顶点色
   │                             （此时 LoadAllAssetsAtPath 常为空，不能只用库路径）
   ├─ 抽出 .fbm 贴图 → OnPreprocessTexture …
@@ -332,7 +340,8 @@ TOol/
 
 | 类                              | 职能                                                                                      |
 | ------------------------------ | --------------------------------------------------------------------------------------- |
-| `ModelImportSettingsProcessor` | 设置自动：`materialLocation=External`、`materialName=BasedOnMaterialName`、剔灯光摄像机等；**跳过 Art**。 |
+| `ModelImporterProfiles` | D24-6 两档口径。`ApplyIncomingBaseline` / `ApplyIncomingPolicy` / `ApplyArtDelivery`；`IsArtDeliveryPath` 给 Processor 硬跳过。 |
+| `ModelImportSettingsProcessor` | 设置自动闸。Art 硬跳过 → 总闸 → 扩展名/排除表 → Incoming 基线；勾分项再跑 Incoming 策略。 |
 | `ModelSourceFileProcessor`     | `OnPostprocessModel` 立刻跑 importAuto；`OnPostprocessAllAssets` 入队 Scheduler。              |
 
 

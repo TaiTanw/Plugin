@@ -3,7 +3,7 @@ using System.IO;
 using UnityEngine;
 
 // =====================================================================================
-// Pipeline — 编排入口（导入区② → 处理区③④⑤ → 输出区⑥）
+// Pipeline — 编排入口（导入区 1 入库 → 处理区③④⑤ → 输出区⑥）
 // =====================================================================================
 
 /// <summary>
@@ -23,13 +23,11 @@ public static class PipelineRunner
 
         bool quiet = options.Quiet;
 
-        if (!ResolveModelPaths(options, result))
+        if (!ImportFromBindings(options, result))
         {
             LogResult(result);
             return result;
         }
-
-        AttachJobContext(options, result);
 
         // ③ Prefab
         List<string> prefabPaths = options.PrefabPaths != null
@@ -45,8 +43,13 @@ public static class PipelineRunner
                 return result;
             }
 
-            List<string> written = ToolPrefabApi.BuildPrefabs(options.ModelPaths, options.MaterialId);
-            prefabPaths = written ?? new List<string>();
+            prefabPaths = BuildPrefabsPerBinding(options, result);
+            if (prefabPaths == null)
+            {
+                LogResult(result);
+                return result;
+            }
+
             result.PrefabOutputs.AddRange(prefabPaths);
             result.Info("[Pipeline] ③ Prefab 成功 " + prefabPaths.Count + " / " + options.ModelPaths.Count);
 
@@ -81,21 +84,9 @@ public static class PipelineRunner
                 return result;
             }
 
-            List<string> artPrefabPaths;
-            RetinarFlattenOptions flattenOpt = PipelineFlattenBridge.ToFlattenOptions(options.JobContext);
-            int n = RetinarFlattenApi.FlattenPaths(prefabPaths, quiet, flattenOpt, out artPrefabPaths);
-            if (flattenOpt != null && flattenOpt.ClearDestinationArtFolder)
+            List<string> artPrefabPaths = FlattenPerPrefab(options, prefabPaths, quiet, result);
+            if (artPrefabPaths == null)
             {
-                result.Info("[Pipeline] ④ 清空本次 Art/<名>/ 再写（不扫整棵 Art）");
-            }
-            if (flattenOpt != null && flattenOpt.SkipDependencySplit)
-            {
-                result.Info("[Pipeline] ④ SkipDependencySplit + B′ 原子搬迁 Art/<名>/<名>/");
-            }
-            result.Info("[Pipeline] ④ Flatten " + n + " / " + prefabPaths.Count);
-            if (n <= 0 || artPrefabPaths == null || artPrefabPaths.Count == 0)
-            {
-                result.Fail(PipelineErrorCodes.FlattenFailed, "平铺未成功或未返回 Art Prefab 路径");
                 LogResult(result);
                 return result;
             }
@@ -104,7 +95,7 @@ public static class PipelineRunner
             result.Info("[Pipeline] ④→⑥ 改用 Art Prefab × " + prefabPaths.Count);
             for (int i = 0; i < prefabPaths.Count; i++)
             {
-                result.Info("  Art: " + artPrefabPaths[i]);
+                result.Info("  Art: " + prefabPaths[i]);
             }
 
             // D17：⑤ 扫本次 Art 单元（含 Model/），不读 L1 Prefs。
@@ -238,82 +229,298 @@ public static class PipelineRunner
         return result;
     }
 
-    /// <summary>单文件 SourcePath 或已有 ModelPaths → 工程内模型列表。</summary>
-    private static bool ResolveModelPaths(PipelineOptions options, PipelineResult result)
+    /// <summary>
+    /// 读 Bindings（空则用 SourcePath+MaterialId 合成一行）。逐行 1 入库 + 2.5 ctx。
+    /// 无表且已有 ModelPaths 时沿用（不入库）。
+    /// </summary>
+    private static bool ImportFromBindings(PipelineOptions options, PipelineResult result)
     {
-        if (!string.IsNullOrWhiteSpace(options.SourcePath))
+        List<PipelineSourceBinding> rows = NormalizeBindings(options);
+        if (rows.Count == 0)
         {
-            string source = options.SourcePath.Trim();
-
-            if (options.RunImport)
+            if (options.ModelPaths != null && options.ModelPaths.Count > 0)
             {
-                string assetPath;
-                string importMsg;
-                if (!ToolImportApi.ImportSingleModel(source, out assetPath, out importMsg))
-                {
-                    result.Fail(PipelineErrorCodes.ImportFailed, "[Pipeline] ② 导入失败: " + importMsg);
-                    return false;
-                }
-
-                result.Info("[Pipeline] ② " + importMsg);
-                options.ModelPaths = new List<string> { assetPath };
+                AttachContextsFromModelPaths(options, result);
                 return true;
             }
 
-            // ② 关闭：仅接受已在 Assets 内的路径（ImportSingleModel 对 Assets 路径不拷贝）
-            if (IsExternalDiskPath(source))
+            if (options.RunPrefab ||
+                (options.RunAb && (options.PrefabPaths == null || options.PrefabPaths.Count == 0)))
             {
-                result.Fail(PipelineErrorCodes.BadArgs,
-                    "[Pipeline] 工程外路径需要打开步骤②导入: " + source);
+                result.Fail(PipelineErrorCodes.BadArgs, "[Pipeline] 未提供 SourceBindings / SourcePath / ModelPaths");
                 return false;
             }
 
-            string existing;
-            string msg;
-            if (!ToolImportApi.ImportSingleModel(source, out existing, out msg))
+            return true;
+        }
+
+        options.SourceBindings = rows;
+        options.SourcePath = rows[0].SourcePath;
+        options.MaterialId = rows[0].MaterialId;
+        options.ModelPaths = new List<string>();
+        options.JobContexts = new List<PipelineJobContext>();
+        options.JobContext = null;
+
+        result.Info("[Pipeline] Bindings × " + rows.Count);
+
+        for (int i = 0; i < rows.Count; i++)
+        {
+            PipelineSourceBinding row = rows[i];
+            string assetPath;
+            if (!ImportOne(options, row, i, result, out assetPath))
             {
-                result.Fail(PipelineErrorCodes.BadArgs, "[Pipeline] 无法解析工程内模型: " + msg);
                 return false;
             }
 
-            result.Info("[Pipeline] ② 跳过导入: " + existing);
-            options.ModelPaths = new List<string> { existing };
-            return true;
-        }
-
-        if (options.ModelPaths != null && options.ModelPaths.Count > 0)
-        {
-            return true;
-        }
-
-        if (options.RunPrefab || (options.RunAb && (options.PrefabPaths == null || options.PrefabPaths.Count == 0)))
-        {
-            result.Fail(PipelineErrorCodes.BadArgs, "[Pipeline] 未提供 SourcePath / ModelPaths");
-            return false;
+            options.ModelPaths.Add(assetPath);
+            AttachOneContext(options, assetPath, result);
         }
 
         return true;
     }
 
-    /// <summary>② 后建 ctx。不调用平铺；平铺只收 FlattenOptions。</summary>
-    private static void AttachJobContext(PipelineOptions options, PipelineResult result)
+    private static List<PipelineSourceBinding> NormalizeBindings(PipelineOptions options)
     {
-        if (options.ModelPaths == null || options.ModelPaths.Count == 0)
+        var rows = new List<PipelineSourceBinding>();
+        if (options.SourceBindings != null)
+        {
+            for (int i = 0; i < options.SourceBindings.Count; i++)
+            {
+                PipelineSourceBinding src = options.SourceBindings[i];
+                if (src == null || string.IsNullOrWhiteSpace(src.SourcePath))
+                {
+                    continue;
+                }
+
+                rows.Add(src.CloneWith(src.SourcePath.Trim().Replace("\\", "/")));
+            }
+        }
+
+        if (rows.Count == 0 && !string.IsNullOrWhiteSpace(options.SourcePath))
+        {
+            rows.Add(new PipelineSourceBinding(
+                options.SourcePath.Trim().Replace("\\", "/"),
+                options.MaterialId));
+        }
+
+        for (int i = 0; i < rows.Count; i++)
+        {
+            if (string.IsNullOrWhiteSpace(rows[i].MaterialId))
+            {
+                rows[i].MaterialId = PipelineMaterialId.SuggestDefault(rows[i].SourcePath);
+            }
+            else
+            {
+                rows[i].MaterialId = rows[i].MaterialId.Trim();
+            }
+        }
+
+        return rows;
+    }
+
+    private static bool ImportOne(
+        PipelineOptions options,
+        PipelineSourceBinding row,
+        int index,
+        PipelineResult result,
+        out string assetPath)
+    {
+        assetPath = null;
+        string source = row.SourcePath;
+        string id2 = row.MaterialId;
+        string label = "[Pipeline] 1 入库 [" + (index + 1) + "] ";
+
+        if (options.RunImport)
+        {
+            string importMsg;
+            if (!ToolImportApi.ImportSingleModel(source, id2, out assetPath, out importMsg))
+            {
+                result.Fail(PipelineErrorCodes.ImportFailed, label + "失败: " + importMsg);
+                return false;
+            }
+
+            result.Info(label + importMsg + " ID2=" + id2);
+            return true;
+        }
+
+        if (IsExternalDiskPath(source))
+        {
+            result.Fail(PipelineErrorCodes.BadArgs,
+                "[Pipeline] 工程外路径需要打开 1 入库: " + source);
+            return false;
+        }
+
+        string msg;
+        if (!ToolImportApi.ImportSingleModel(source, id2, out assetPath, out msg))
+        {
+            result.Fail(PipelineErrorCodes.BadArgs, "[Pipeline] 无法解析工程内模型: " + msg);
+            return false;
+        }
+
+        result.Info(label + "跳过拷贝: " + assetPath + " ID2=" + id2);
+        return true;
+    }
+
+    private static void AttachContextsFromModelPaths(PipelineOptions options, PipelineResult result)
+    {
+        options.JobContexts = new List<PipelineJobContext>();
+        options.JobContext = null;
+        if (options.ModelPaths == null)
         {
             return;
         }
 
-        options.JobContext = PipelineJobContext.Build(options.ModelPaths[0]);
+        for (int i = 0; i < options.ModelPaths.Count; i++)
+        {
+            AttachOneContext(options, options.ModelPaths[i], result);
+        }
+    }
+
+    private static void AttachOneContext(PipelineOptions options, string assetPath, PipelineResult result)
+    {
+        if (options.JobContexts == null)
+        {
+            options.JobContexts = new List<PipelineJobContext>();
+        }
+
+        PipelineJobContext ctx = PipelineJobContext.Build(assetPath);
+        options.JobContexts.Add(ctx);
         if (options.JobContext == null)
         {
+            options.JobContext = ctx;
+        }
+
+        if (ctx == null)
+        {
             return;
         }
 
-        result.Info(options.JobContext.ToLogString());
-        if (!options.JobContext.MainAssetOk && options.RunPrefab)
+        result.Info(ctx.ToLogString());
+        if (!ctx.MainAssetOk && options.RunPrefab)
         {
             result.Info("[Pipeline] ctx.MainAssetOk=false → ③ 空列表仍映射 PrefabFailed(30)（默认，不改 20）");
         }
+    }
+
+    /// <summary>③ 每行自己的 ID2；不把一个 Id 罩整表（避免内核再追加 stem）。</summary>
+    private static List<string> BuildPrefabsPerBinding(PipelineOptions options, PipelineResult result)
+    {
+        var prefabPaths = new List<string>();
+        IList<PipelineSourceBinding> rows = options.SourceBindings;
+        for (int i = 0; i < options.ModelPaths.Count; i++)
+        {
+            string id2 = null;
+            if (rows != null && i < rows.Count)
+            {
+                id2 = rows[i].MaterialId;
+            }
+            else if (i == 0)
+            {
+                id2 = options.MaterialId;
+            }
+
+            List<string> written = ToolPrefabApi.BuildPrefabs(
+                new[] { options.ModelPaths[i] },
+                id2);
+            if (written == null || written.Count == 0)
+            {
+                result.Fail(
+                    PipelineErrorCodes.PrefabFailed,
+                    "[Pipeline] ③ [" + (i + 1) + "] 未生成 Prefab: " + options.ModelPaths[i]);
+                return null;
+            }
+
+            prefabPaths.AddRange(written);
+            result.Info("[Pipeline] ③ [" + (i + 1) + "] " + written[0] + " ID2=" + id2);
+        }
+
+        return prefabPaths;
+    }
+
+    /// <summary>④ 按该份 Prefab 对应的 ctx 映射闸（gltf B′ / 普通拆夹）。失败返回 null。</summary>
+    private static List<string> FlattenPerPrefab(
+        PipelineOptions options,
+        List<string> prefabPaths,
+        bool quiet,
+        PipelineResult result)
+    {
+        var allArt = new List<string>();
+        IList<PipelineJobContext> contexts = options.JobContexts;
+        bool loggedClear = false;
+
+        for (int i = 0; i < prefabPaths.Count; i++)
+        {
+            PipelineJobContext ctx = null;
+            if (contexts != null && contexts.Count > 0)
+            {
+                ctx = i < contexts.Count ? contexts[i] : contexts[0];
+            }
+            else
+            {
+                ctx = options.JobContext;
+            }
+
+            PipelineSourceBinding binding = null;
+            if (options.SourceBindings != null && i < options.SourceBindings.Count)
+            {
+                binding = options.SourceBindings[i];
+            }
+
+            RetinarFlattenOptions flattenOpt = PipelineFlattenBridge.ToFlattenOptions(ctx, binding);
+            if (flattenOpt != null && flattenOpt.ConvertZUpToYUp)
+            {
+                result.Info("[Pipeline] ④ [" + (i + 1) + "] 轴向修正：内容节点叠 −90°X");
+            }
+            else if (ctx != null && !string.IsNullOrEmpty(ctx.ZUpExporterNote))
+            {
+                // 嗅到默认 Z-up 却没开修正：可能是人没勾，也可能是开关没传到这里。
+                // 两者从产物上看一模一样（都是「没变化」），不打这条就只能靠翻 Prefab 里的四元数。
+                result.Info("[Pipeline] ④ [" + (i + 1) + "] 未开轴向修正（该源导出器默认 Z-up）");
+            }
+
+            if (!loggedClear && flattenOpt != null && flattenOpt.ClearDestinationArtFolder)
+            {
+                result.Info("[Pipeline] ④ 清空本次 Art/<名>/ 再写（不扫整棵 Art）");
+                loggedClear = true;
+            }
+
+            if (flattenOpt != null && flattenOpt.SkipDependencySplit)
+            {
+                result.Info("[Pipeline] ④ [" + (i + 1) + "] SkipDependencySplit + B′ 原子搬迁");
+            }
+
+            RetinarFlattenWork work;
+            if (!RetinarFlattenApi.TryBegin(prefabPaths[i], flattenOpt, out work))
+            {
+                result.Fail(PipelineErrorCodes.FlattenFailed, "平铺 Begin 失败: " + prefabPaths[i]);
+                return null;
+            }
+
+            bool copied = flattenOpt != null && flattenOpt.SkipDependencySplit
+                ? RetinarFlattenApi.RelocateAtomic(work)
+                : RetinarFlattenApi.SplitDependencies(work);
+            if (!copied)
+            {
+                result.Fail(PipelineErrorCodes.FlattenFailed,
+                    (flattenOpt != null && flattenOpt.SkipDependencySplit ? "B′ 原子搬迁失败: " : "B 拆依赖失败: ") +
+                    prefabPaths[i]);
+                return null;
+            }
+
+            RetinarFlattenApi.ApplyImportAndExtract(work);
+            RetinarFlattenApi.Remap(work);
+            RetinarFlattenApi.CopyRendererMaterials(work);
+            if (!RetinarFlattenApi.TryFinish(work) || string.IsNullOrEmpty(work.PrefabPath))
+            {
+                result.Fail(PipelineErrorCodes.FlattenFailed, "平铺 Finish 失败: " + prefabPaths[i]);
+                return null;
+            }
+
+            result.Info("[Pipeline] ④ [" + (i + 1) + "] Flatten 1 ← " + prefabPaths[i]);
+            allArt.Add(work.PrefabPath);
+        }
+
+        return allArt;
     }
 
     private static bool IsExternalDiskPath(string path)

@@ -21,7 +21,7 @@
 └─────────────────────────────────────────────────────────────┘
                               ↑ 同一 Runner
 ┌─────────────────────────────────────────────────────────────┐
-│  (B) CLI 工具使用入口（D5 第一刀已写 PipelineCli.Run）           │
+│  (B) CLI 工具使用入口（D5 已验收 PipelineCli.Run）               │
 │      Unity.exe -batchmode -executeMethod PipelineCli.Run …     │
 │           ↓ 解析 argv → 填 Options → Runner → Exit(ExitCode)   │
 │      （见 cli-getting-started.md）                             │
@@ -31,7 +31,7 @@
 | 块 | 谁用 | 现状 | 文档 |
 |---|---|---|---|
 | **A 中间层** | 总面板、将来 Editor/测试 | **已可用** | 本文 §1–§4 |
-| **B CLI** | 无头 CI / 本机脚本 | **第一刀已写** `PipelineCli.Run` | [cli-getting-started](./cli-getting-started.md) |
+| **B CLI** | 无头 CI / 本机脚本 | **D5 已验收** `PipelineCli.Run` | [cli-getting-started](./cli-getting-started.md) |
 
 ---
 
@@ -56,13 +56,13 @@ gltf / 多文件包：同一编排；② 后建 ctx，**仅④**经 Bridge 消�
 **(A) 中间层 · 步骤 → 对外窄口**
 
 编排是 **本地变量接力**，不是插件互相调、也不是改 L1 Prefs。每步窄口返回路径（或结果对象），Runner 收下再传入下一步。  
-各相位入参 / 返回值 / 关步行为 → 专文 [pipeline-phase-io](./pipeline-phase-io.md)。
+各相位入参 / 返回值 / 关步行为 → 专文 [pipeline-phase-io](./pipeline-phase-io.md)（2026-09-03 已按 D18/D23/Bindings 更新）。
 
 ```text
 SourcePath
   → ② ImportSingleModel(out assetPath)     → options.ModelPaths
   → ③ BuildPrefabs(ModelPaths)             → 局部 prefabPaths
-  → ④ FlattenPaths(prefabPaths, out art)   → 覆盖 prefabPaths = Art Prefab
+  → ④ Begin→B|B′→E→D→C→Finish   → 覆盖 prefabPaths = Art Prefab
                                            → D17 PostProcessFolderPaths = Art 单元根
   → ⑤ RunMasterBatch → ToolPostProcessResult（FailedCount + Report）
   → ⑥ Build(prefabPaths, abOpt)            → AB 文件列表
@@ -73,7 +73,7 @@ SourcePath
 | 1 入库 / ② | `ToolImportApi.ImportSingleModel` | TOol `Shared/Api` | 入 `SourcePath`；出 `assetModelPath` → `ModelPaths`。总面板跑管线时始终入库 |
 | 2 总闸 | 不调窄口 | `ResourceProcessSwitches.MasterEnabled` | 只决定导入期回调进不进 `Is*Effective`；不替代 L1 分项 |
 | ③ | `ToolPrefabApi.BuildPrefabs` | → `PrefabBuildService` | 入 `ModelPaths` + `MaterialId`；出 `List` Prefab 路径 |
-| ④ | `RetinarFlattenApi.FlattenPaths` | Retinar `40_Api` | 入 ③ 的 Prefab；出 Art Prefab（`out`）覆盖后续⑥用的列表；并推 Art 单元给⑤ |
+| ④ | `RetinarFlattenApi` 能力方法 | Retinar `40_Api` | 入 ③ 的 Prefab + Bridge(ctx)；编排按行 Begin→B\|B′→E→D→C→Finish；出 Art Prefab 覆盖⑥；D17 推 Art 单元给⑤ |
 | ⑤ | `ToolPostProcessApi.RunMasterBatch` | → L1 总批量 | 入 D17 的 `PostProcessFolderPaths`；出 `ToolPostProcessResult`（FailedCount 复用三层 Summary；细节在 Report） |
 | ⑥ | `RetinarAbApi.Build` | Retinar `40_Api` | 入当前 `prefabPaths` + `AbBuildOptions`（从导出 SO 填：根目录 / 是否 UP / 是否拷交付）；步骤 SO 只提供 `RunAb` |
 
@@ -89,7 +89,8 @@ Assets/Plugin/Pipeline/
 └─ Editor/
    ├─ PipelineOptions / Result / ErrorCodes
    ├─ PipelineStepSettings.cs
-   ├─ PipelineMaterialId.cs               # D9；D10 SourceBindings 预备
+   ├─ PipelineMaterialId.cs               # D9；SuggestBindingsForSelection
+   ├─ PipelineSourceAccept.cs             # 批量输出到编排
    ├─ PipelineRunner.cs                   # ★ 唯一编排内核
    └─ PipelineWindow.cs                   # (A) 人机入口
 ```
@@ -111,13 +112,13 @@ Assets/Plugin/Pipeline/
 | `MaterialId` | 覆盖 Prefab 三层命名 |
 | `PostProcessFolderPaths` | ⑤扫描根；开④时 D17 写入本次 Art 单元。null → L1 Prefs（编排不改这份 Prefs） |
 | `Quiet` | 禁 Dialog；**≠** 进程退出 |
-| `SourceBindings` | D10 预备；**Runner 未消费** |
+| `SourceBindings` | Runner 主输入；空则合成一行 |
 
 详细单文件/⑤约定见 [smoke-and-results](./smoke-and-results.md)。
 
 ---
 
-## 3. (A) 错误码（与 CLI 退出码对齐草案）
+## 3. (A) 错误码（与 CLI 退出码对齐；D5 已冻）
 
 | 码 | 常量 | 含义 | Runner 现状 |
 |---|---|---|---|
@@ -141,9 +142,9 @@ Assets/Plugin/Pipeline/
 | `ToolPrefabApi` | ✓ | ✓ | 多 materialId 靠 D10 |
 | `RetinarFlattenApi` | ✓ + Art 路径 out | ✓ | — |
 | `ToolPostProcessApi` | ✓ 返回 **`ToolPostProcessResult`** | ✓ | FailedCount→50（D16 已做） |
-| `RetinarAbApi` | ✓ | ✓ | 部分失败策略见 D5 表 |
+| `RetinarAbApi` | ✓ | ✓ | **D5 已冻**：`PartialOk` 仍 0；全失败 60 |
 | `PipelineRunner` | ✓（面板已用） | ✓ | — |
-| `PipelineCli` | ✓ `-source` / `-materialId` | ✓ | 无头验收；全 flag 表仍见 B.CLI |
+| `PipelineCli` | ✓ `-source` / `-materialId` | ✓ | **D5 已验收**；扩 flag 见 B.CLI |
 
 ④→⑤：开⑤依赖开④（④依赖③）；④成功后 **已**把本次 Art 单元写入 `PostProcessFolderPaths`（D17）。⑤ `FailedCount>0` → 50（D16）。
 
@@ -151,8 +152,8 @@ Assets/Plugin/Pipeline/
 
 ## 5. (B) CLI · 指针
 
-结构、第一刀命令、退出码 → **[cli-getting-started.md](./cli-getting-started.md)**。  
-实现顺序：A 已基本完成 → **D5 第一刀已写** → 无头验收。D16 ⑤结果码 **已做**。
+结构、命令、已冻退出码 → **[cli-getting-started.md](./cli-getting-started.md)**。  
+实现顺序：A 已基本完成 → **D5 已验收**（参数/退出码已冻）。D16 ⑤结果码 **已做**。
 
 ---
 
@@ -162,7 +163,7 @@ Assets/Plugin/Pipeline/
 2. ~~D3 总面板 + D2 单文件~~ **已做**  
 3. ~~实机验证 / D1 / D4~~ **已做**  
 4. ~~对外接口文档分块（A/B）~~ **本文 + CLI 文（结构整理，无代码）**  
-5. ~~**D5 CLI 第一刀**~~ **已写** `PipelineCli.Run`（待无头验收）  
+5. ~~**D5 CLI**~~ **已验收** `PipelineCli.Run`（2026-09-02 无头 `exit=0`；契约已冻）  
 6. ~~**D16**（⑤结果码）~~ **已做** · ~~D17 ④→⑤ Art 单元路径~~ **已做** · ~~D19 刷白门禁~~ **已降级**  
 
 结果形态：当前 `PipelineResult` + 字符串 Messages；`StepResult` 仍延后（CLI 要稳定按步失败时再加，见 smoke 文）。

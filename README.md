@@ -5,7 +5,7 @@ Unity Editor 插件集合，用于模型/贴图的**导入期处理**与**交付
 
 远程仓库：`http://swm-server.local:3000/Hanson/asset-bundle.git`  
 当前版本：**v1.5.3**（`main` / 标签 `v1.5.3` · **gltf 整包 + 管线重名覆盖**）  
-**本批重点：** `.gltf` B′ 原子平铺；管线只清本趟 Incoming/Art 单元夹；开发日志。  
+**本批重点：** `.gltf` B′ 原子平铺；管线只清本趟 Incoming/Art 单元夹；开发日志。**D5 无头已验收**（契约见 [cli-getting-started](./docs/dev-wip/04_implementation/cli-getting-started.md)）。  
 历史：`v1.5.0` 流程稳定；`v1.4.4` 平铺/动画循环；`v1.4.0` 平铺分类；`v1.3.8` 成品直通；`v1.3.5` 全流程基线
 
 ---

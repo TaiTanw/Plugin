@@ -152,7 +152,7 @@ CLI `materialId` 可覆盖 Prefab 名。
 
 自动线目标：总面板一键 ②③④⑤⑥（④⑤ 默认开，可关），**无确认弹窗**。
 
-命令行外壳（D5）概念与第一刀：[cli-getting-started](../04_implementation/cli-getting-started.md)。
+命令行外壳（D5）**已验收**：[cli-getting-started](../04_implementation/cli-getting-started.md)。
 
 ---
 

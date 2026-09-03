@@ -13,10 +13,16 @@ public static class PipelineFlattenBridge
     /// HasExternalUris → SkipDependencySplit + 主文件/伴生路径（供 B′）。
     /// 管线④始终清本次 Art/&lt;名&gt;/；菜单 Default 不清。
     /// </summary>
-    public static RetinarFlattenOptions ToFlattenOptions(PipelineJobContext ctx)
+    /// <param name="ctx">②.5 的观测事实。</param>
+    /// <param name="binding">
+    /// 同一行的人工输入。ctx 只记可验证的事实，轴向不是事实（OBJ 无 up-axis 字段），
+    /// 所以走这条独立入口，不塞进 ctx。
+    /// </param>
+    public static RetinarFlattenOptions ToFlattenOptions(PipelineJobContext ctx, PipelineSourceBinding binding)
     {
         var options = new RetinarFlattenOptions();
         options.ClearDestinationArtFolder = true;
+        options.ConvertZUpToYUp = binding != null && binding.ConvertZUpToYUp;
         if (ctx == null)
         {
             return options;

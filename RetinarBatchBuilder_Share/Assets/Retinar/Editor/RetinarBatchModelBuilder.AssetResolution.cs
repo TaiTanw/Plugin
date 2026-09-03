@@ -2,14 +2,13 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Text;
 using UnityEditor;
 using UnityEngine;
 
 // =====================================================================================
 // 本文件是 RetinarBatchModelBuilder 的 partial 分文件，专门负责两件事：
 //   1) “源资产发现”——给定一个 FBX/OBJ，去哪里找它的贴图、材质（CollectSourceAssets 等）。
-//   2) “打包前校验”——外部依赖白名单检查、Model 目录纯净度检查（Validate* 系列）。
+//   2) “平铺结束自愈”——补拷外部依赖、Extract 内嵌贴图、材质 remap。
 //
 // 为什么单独拆出来：
 //   用户反馈“有时只是移动文件位置，就会导致打包终止”。追下来是这两块代码共同造成的：
@@ -31,11 +30,14 @@ using UnityEngine;
 //      然后静默返回原路径，导致文件仍留在 Model 目录下，被后面更严格的
 //      ValidateModelFoldersAreClean 判定为“Model 目录里有非模型文件”而失败。
 //
+// 上面 c) d) 提到的两道门禁（ValidateExternalDependencies / ValidateModelFoldersAreClean）
+// 已于 2026-09-03 随遗产导出链一起删除（backlog D24-7）。保留这段叙述是因为它解释了
+// 本文件为什么长成现在这样；**别据此以为还有出包前的兜底检查**。
+//
 // 这个文件的修复思路：
 //   - 贴图/材质查找改成递归、支持更多命名，且会把“搜索了哪些目录、找到了什么”
 //     打印出来，方便一眼看出是不是因为挪了文件夹。
-//   - 完整自愈（补拷 + Extract + 材质 remap）的主调用在平铺结束；导出校验只对仍挂
-//     外部 .fbm 的资产强制 Extract，不再跑 TryHeal。
+//   - 完整自愈（补拷 + Extract + 材质 remap）在平铺结束时调用，④ 是最后一道。
 //   - 报错信息里带上磁盘绝对路径、最后修改时间，能直接定位是哪个文件、什么时候
 //     被动过。
 // =====================================================================================
@@ -224,11 +226,10 @@ public static partial class RetinarBatchModelBuilder
         string error = AssetDatabase.MoveAsset(sourcePath, destinationPath);
         if (!string.IsNullOrEmpty(error))
         {
-            // 原来这里只 LogWarning 然后静默放弃，文件会留在错误的位置，
-            // 直到后面 ValidateModelFoldersAreClean 才会因为“Model 目录里有非模型文件”
-            // 报错——但那时候已经看不出来是这里移动失败了。改成 LogError 并把
-            // 源/目标路径和原始错误都打出来，方便直接定位。
-            Debug.LogError("[Retinar] 移动资产失败，文件将保留在原位置，这可能导致后续目录清洁度校验失败：\n" +
+            // 原来这里只 LogWarning 然后静默放弃，文件留在错误位置，要等出包前的
+            // 目录清洁度校验才报错，那时已看不出是这里移动失败。那道校验现已删除
+            // （D24-7），所以这条 LogError 是唯一的信号，更不能降级成 Warning。
+            Debug.LogError("[Retinar] 移动资产失败，文件将保留在原位置，交付副本目录会不干净：\n" +
                 "  源路径: " + sourcePath + "\n" +
                 "  目标路径: " + destinationPath + "\n" +
                 "  Unity 返回的错误: " + error);
@@ -262,118 +263,13 @@ public static partial class RetinarBatchModelBuilder
     }
 
     // ---------------------------------------------------------------------------
-    // 打包前校验的总调度：逐个资产判定，失败的只排除自己
-    // ---------------------------------------------------------------------------
-
-    /// <summary>
-    /// 对每个生成出来的资产分别跑三道校验，返回通过的那些；没通过的把原因写进
-    /// excludedReports，并清掉它的 AssetBundle 名字，避免它被打进 AssetBundle 输出里。
-    ///
-    /// 为什么要改成逐个判定：
-    ///   原来三道校验是"对整批一起做，任一条不通过就整批 return"。实际使用中，
-    ///   十个模型里有一个贴图放错位置，另外九个已经生成好、也完全合规的模型
-    ///   同样不会出包，用户只能去 Assets/Art 里把生成好的预设体一个个重新选中再打一遍。
-    ///   逐个判定之后，坏的那一个被单独挑出来写进报告，好的九个正常交付。
-    /// </summary>
-    private static List<GeneratedAsset> PartitionAssetsThatPassValidation(
-        List<GeneratedAsset> generated,
-        List<string> excludedReports)
-    {
-        var passed = new List<GeneratedAsset>();
-        foreach (GeneratedAsset asset in generated)
-        {
-            List<string> reasons = CollectValidationFailures(asset);
-            if (reasons.Count == 0)
-            {
-                passed.Add(asset);
-                continue;
-            }
-
-            // 这个资产的预设体如果还挂着 AssetBundle 名字，BuildPipeline 会照样把它
-            // 打进包里——校验都没过的东西不应该出现在交付物里，这里主动摘掉。
-            ClearBundleName(asset.PrefabPath);
-
-            excludedReports.Add(
-                "【" + asset.AssetName + "】未通过校验，已从本次出包中排除\n" +
-                "  预设体: " + asset.PrefabPath + "\n" +
-                "  资产目录: " + asset.AssetFolder + "\n" +
-                string.Join("\n", reasons.ToArray()));
-        }
-
-        return passed;
-    }
-
-    /// <summary>
-    /// 单个资产的三道校验。复用原来那三个接收 List 的校验函数，传进去只装一个元素的
-    /// 列表——这样校验逻辑本身完全没动，只是调用粒度从"整批"变成"单个"。
-    /// </summary>
-    private static List<string> CollectValidationFailures(GeneratedAsset asset)
-    {
-        var single = new List<GeneratedAsset> { asset };
-        var reasons = new List<string>();
-        string error;
-
-        if (!ValidateModelFoldersAreClean(single, out error))
-        {
-            reasons.Add("  [MODEL_FOLDER_DIRTY] Model 目录只允许放模型文件、不允许有子文件夹\n" + Indent(error));
-        }
-
-        if (!ValidatePrefabSpatialPlacement(single, out error))
-        {
-            reasons.Add("  [SAFEZONE] SafeZone 位置校验未通过\n" + Indent(error));
-        }
-
-        if (!ValidateExternalDependencies(single, out error))
-        {
-            reasons.Add("  [EXTERNAL_DEP] 存在不支持的外部依赖（自动自愈已尝试过；下列为自愈后仍存在的问题）\n" + Indent(error));
-        }
-
-        return reasons;
-    }
-
-    private static string Indent(string text)
-    {
-        if (string.IsNullOrEmpty(text))
-        {
-            return string.Empty;
-        }
-
-        string[] lines = text.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
-        return "    " + string.Join("\n    ", lines);
-    }
-
-    /// <summary>
-    /// 三种校验失败合并写成一份报告。
-    /// 原来是每种校验各写一个固定文件名的报告（model_folder_not_clean.txt /
-    /// prefab_spatial_placement_failed.txt / unsupported_external_dependencies.txt），
-    /// 而且因为一失败就整批终止，后两份永远不会和第一份同时出现——排查时要挨个文件去翻。
-    /// 现在一次打包只产出一份，按资产分段，一眼能看完这批里所有问题。
-    /// </summary>
-    private static string WriteValidationFailureReport(List<string> excludedReports)
-    {
-        string outputDir = Path.Combine(Directory.GetCurrentDirectory(), DeliverableRoot, "_diagnostics");
-        EnsureDiskDirectory(outputDir);
-        string reportPath = Path.Combine(outputDir, "validation_failures.txt");
-
-        var lines = new List<string>
-        {
-            "Retinar Batch Builder - 未通过校验、已排除出本次打包的资产",
-            "Generated: " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"),
-            "",
-            "说明：名单里的资产只影响自己，同一批里通过校验的资产已经正常出包。",
-            "类别码：[MODEL_FOLDER_DIRTY] / [SAFEZONE] / [EXTERNAL_DEP]；贴图告警见导出 Console 预检与 01_source 报告中的 [TEXTURE_*]。",
-            "处理完下面的问题后，重新选中【原始 FBX】或【Assets/Art/<名字>/Prefab 里的预设体】再执行一次即可；",
-            "重新选中生成目录里的预设体不会再新建 Assets/Art/<名字>_prefab 这类多余目录。",
-            ""
-        };
-        lines.AddRange(excludedReports);
-
-        File.WriteAllLines(reportPath, lines.ToArray(), new UTF8Encoding(false));
-        return Path.GetFullPath(reportPath);
-    }
-
-    // ---------------------------------------------------------------------------
-    // 打包前校验：外部依赖白名单
+    // 公共运行时依赖白名单
+    //
+    // 2026-09-03（backlog D24-7）：出包前的三道校验（ValidateModelFoldersAreClean /
+    // ValidatePrefabSpatialPlacement / ValidateExternalDependencies）连同它们的调度
+    // （PartitionAssetsThatPassValidation / CollectValidationFailures）与报告
+    // （WriteValidationFailureReport）已整体删除——管线 ①→⑥ 从不经过它们。
+    // 白名单本身留下：④ 的依赖分类与 ⑥ RetinarAbApi 仍在读。
     // ---------------------------------------------------------------------------
 
     // 允许作为“公共运行时依赖”而不必复制进模型自己文件夹的路径前缀。
@@ -400,65 +296,6 @@ public static partial class RetinarBatchModelBuilder
         return false;
     }
 
-    private static bool ValidateExternalDependencies(List<GeneratedAsset> assets, out string errorText)
-    {
-        var errors = new List<string>();
-
-        foreach (GeneratedAsset asset in assets)
-        {
-            // 完整自愈（补拷 + Extract）已改到平铺结束。此处只处理导出时仍挂着的外部 .fbm。
-            string[] dependencies = AssetDatabase.GetDependencies(asset.PrefabPath, true);
-            List<string> externalFbmBefore = CollectExternalFbmPathsFromDependencies(asset, dependencies);
-            if (externalFbmBefore.Count > 0)
-            {
-                Debug.LogWarning("[Retinar] " + asset.AssetName + "：校验时仍有外部 .fbm 依赖 " +
-                    externalFbmBefore.Count + " 条，强制 Extract+remap：\n" +
-                    string.Join("\n", externalFbmBefore.ToArray()));
-                ExtractAndBindPackagedModelTextures(asset.AssetFolder);
-                RemapAllArtMaterialsToLocalTextures(asset.AssetFolder);
-                AssetDatabase.SaveAssets();
-                AssetDatabase.Refresh();
-                dependencies = AssetDatabase.GetDependencies(asset.PrefabPath, true);
-                List<string> externalFbmAfter = CollectExternalFbmPathsFromDependencies(asset, dependencies);
-                if (externalFbmAfter.Count == 0)
-                {
-                    Debug.Log("[Retinar] " + asset.AssetName + "：校验阶段强制 Extract+remap 后，外部 .fbm 依赖已清零");
-                }
-                else
-                {
-                    Debug.LogError("[Retinar] " + asset.AssetName + "：校验阶段强制 Extract+remap 后仍剩 " +
-                        externalFbmAfter.Count + " 条外部 .fbm 依赖：\n" +
-                        string.Join("\n", externalFbmAfter.ToArray()));
-                }
-            }
-            else
-            {
-                Debug.Log("[Retinar] " + asset.AssetName + "：校验时无外部 .fbm 依赖");
-            }
-
-            foreach (string rawDependency in dependencies)
-            {
-                string dependency = rawDependency.Replace("\\", "/");
-                if (!dependency.StartsWith("Assets/", StringComparison.OrdinalIgnoreCase) ||
-                    dependency.Equals(asset.PrefabPath, StringComparison.OrdinalIgnoreCase) ||
-                    dependency.StartsWith(asset.AssetFolder + "/", StringComparison.OrdinalIgnoreCase) ||
-                    IsApprovedRuntimeDependency(dependency))
-                {
-                    continue;
-                }
-
-                errors.Add(BuildDependencyDiagnosticLine(asset, dependency));
-            }
-        }
-
-        errorText = string.Join("\n\n", errors.Distinct().OrderBy(line => line).ToArray());
-        return errors.Count == 0;
-    }
-
-    private static bool HasExternalEmbeddedMediaDependency(GeneratedAsset asset, string[] dependencies)
-    {
-        return CollectExternalFbmPathsFromDependencies(asset, dependencies).Count > 0;
-    }
 
     private static List<string> CollectExternalFbmPathsFromDependencies(GeneratedAsset asset, string[] dependencies)
     {
@@ -496,8 +333,7 @@ public static partial class RetinarBatchModelBuilder
             string.Empty,
             string.Empty,
             prefabPath,
-            string.Empty,
-            default(AssetStats));
+            string.Empty);
         return CollectExternalFbmPathsFromDependencies(asset, AssetDatabase.GetDependencies(prefabPath, true));
     }
 
@@ -1035,48 +871,6 @@ public static partial class RetinarBatchModelBuilder
     }
 
     /// <summary>
-    /// 交付区 FBX 若仍是 Everywhere，Flatten 之后会重新搜到工程里其它 .fbm。
-    /// 这里把 Art 下模型统一收成 Local；有改动才 Reimport。
-    /// </summary>
-    private static bool TryRestrictPackagedModelMaterialSearch(string assetFolder)
-    {
-        string modelFolder = FlattenLayout.ModelFolder(assetFolder);
-        if (!AssetDatabase.IsValidFolder(modelFolder))
-        {
-            return false;
-        }
-
-        bool changed = false;
-        string[] modelGuids = AssetDatabase.FindAssets("t:Model", new[] { modelFolder });
-        foreach (string guid in modelGuids)
-        {
-            string modelPath = AssetDatabase.GUIDToAssetPath(guid);
-            if (!IsModelAsset(modelPath))
-            {
-                continue;
-            }
-
-            var importer = AssetImporter.GetAtPath(modelPath) as ModelImporter;
-            if (importer == null)
-            {
-                continue;
-            }
-
-            if (importer.materialLocation != ModelImporterMaterialLocation.InPrefab ||
-                importer.materialSearch != ModelImporterMaterialSearch.Local)
-            {
-                importer.materialLocation = ModelImporterMaterialLocation.InPrefab;
-                importer.materialSearch = ModelImporterMaterialSearch.Local;
-                importer.materialName = ModelImporterMaterialName.BasedOnMaterialName;
-                SaveAndReimportPreservingMeshVertexColors(importer);
-                changed = true;
-            }
-        }
-
-        return changed;
-    }
-
-    /// <summary>
     /// FBX/OBJ 的 SaveAndReimport 会从磁盘二进制重建全部 Mesh 子资产，
     /// TOol「顶点色设为全白」等改的是导入后 Mesh，会被冲掉。
     /// 打包链路凡重导交付区 Model，必须先快照顶点色再写回。
@@ -1199,75 +993,4 @@ public static partial class RetinarBatchModelBuilder
         return restored;
     }
 
-    private static string BuildDependencyDiagnosticLine(GeneratedAsset asset, string dependency)
-    {
-        string fullPath = AssetPathToFullPath(dependency);
-        string existsText = File.Exists(fullPath) ? "文件存在" : "磁盘上找不到这个文件（很可能已被移动或删除）";
-        string lastWriteText = File.Exists(fullPath)
-            ? File.GetLastWriteTime(fullPath).ToString("yyyy-MM-dd HH:mm:ss")
-            : "N/A";
-        string relative = FlattenCopyRunner.ResolveRelativeFolder(dependency);
-        string expectedFolder = string.IsNullOrEmpty(relative)
-            ? "(该类型不会被拷进 Art，例如 Packages/ 或内置资源)"
-            : asset.AssetFolder + "/" + relative;
-
-        return asset.AssetName + ": " + dependency +
-            "\n    当前状态: " + existsText + "，最后修改时间: " + lastWriteText +
-            "\n    期望所在目录: " + expectedFolder +
-            "\n    处理建议: 如果这个文件是模型专属资源，请把它移动/复制进上面的期望目录后重新打包；" +
-            "如果它应该是公共运行时资源，请确认它在白名单目录（Assets/Retinar/Scripts|XLua|Plugins 或 Assets/RetinarRuntime）下。";
-    }
-
-    // ---------------------------------------------------------------------------
-    // 打包前校验：Model 目录纯净度
-    // ---------------------------------------------------------------------------
-
-    private static bool ValidateModelFoldersAreClean(List<GeneratedAsset> assets, out string errorText)
-    {
-        var errors = new List<string>();
-        foreach (GeneratedAsset asset in assets)
-        {
-            string modelFolder = FlattenLayout.ModelFolder(asset.AssetFolder);
-            string fullModelFolder = AssetPathToFullPath(modelFolder);
-            if (!Directory.Exists(fullModelFolder))
-            {
-                errors.Add(asset.AssetName + ": missing " + modelFolder);
-                continue;
-            }
-
-            // 先自愈一次：把误留在 Model 目录里的贴图/材质等文件挪回它们该在的文件夹。
-            // 这能覆盖“MoveAssetToExactPath 之前失败过，文件还留在 Model 里”的情况——
-            // 现在 MoveAssetToExactPath 失败会重新走一次而不是静默放弃。
-            FlattenModelCompanionFolders(asset.AssetFolder);
-
-            foreach (string directory in Directory.GetDirectories(fullModelFolder, "*", SearchOption.AllDirectories))
-            {
-                errors.Add(asset.AssetName + ": unexpected Model subfolder " + FullPathToAssetPath(directory) +
-                    "\n    磁盘路径: " + directory);
-            }
-
-            foreach (string filePath in Directory.GetFiles(fullModelFolder, "*.*", SearchOption.AllDirectories))
-            {
-                if (Path.GetExtension(filePath).Equals(".meta", StringComparison.OrdinalIgnoreCase))
-                {
-                    continue;
-                }
-
-                string assetPath = FullPathToAssetPath(filePath);
-                if (!IsModelAsset(assetPath))
-                {
-                    errors.Add(asset.AssetName + ": non-model file in Model " + assetPath +
-                        "\n    磁盘路径: " + filePath +
-                        "\n    最后修改时间: " + File.GetLastWriteTime(filePath).ToString("yyyy-MM-dd HH:mm:ss") +
-                        "\n    处理建议: 该文件已尝试自动归类失败，请手动确认它应该落在对应单元目录（如 image/Texture、Material、Animation、Text）还是 Unknown。");
-                }
-            }
-        }
-
-        errorText = string.Join("\n\n", errors.Distinct().OrderBy(path => path).ToArray());
-        return errors.Count == 0;
-    }
-
-    // WriteModelFolderFailureReport / WriteExternalDependencyFailureReport 已删除，
-    // 合并进上面的 WriteValidationFailureReport——一次打包只产出一份按资产分段的报告。
 }

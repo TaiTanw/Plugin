@@ -22,6 +22,13 @@ public sealed class PipelineJobContext
     public PipelineMaterialForm MaterialForm;
     public readonly List<string> Warnings = new List<string>();
 
+    /// <summary>
+    /// OBJ 文件头里的导出器署名，仅当该导出器默认 Z-up 时非空。是提示不是判定，
+    /// 故意不进 <see cref="Warnings"/>：warnings=0 要继续表示「没发现问题」。
+    /// 是否修正由绑定行上的 <see cref="PipelineSourceBinding.ConvertZUpToYUp"/> 决定。
+    /// </summary>
+    public string ZUpExporterNote;
+
     /// <summary>对工程内主文件同步观测。失败只写 Warnings，不抛。</summary>
     public static PipelineJobContext Build(string primaryAssetPath)
     {
@@ -67,6 +74,7 @@ public sealed class PipelineJobContext
         if (ext == ".fbx" || ext == ".obj")
         {
             ctx.HasExternalUris = false;
+            ctx.ZUpExporterNote = PipelineObjAxisProbe.SniffZUpExporter(ctx.PrimaryAssetPath);
         }
         else if (ext == ".glb")
         {
@@ -108,6 +116,13 @@ public sealed class PipelineJobContext
         for (int i = 0; i < Warnings.Count; i++)
         {
             sb.Append("  warn: ").AppendLine(Warnings[i]);
+        }
+
+        if (!string.IsNullOrEmpty(ZUpExporterNote))
+        {
+            sb.AppendLine();
+            sb.Append("  提示: 导出器「").Append(ZUpExporterNote)
+                .Append("」默认 Z-up，本份若竖立请在绑定行勾「OBJ 轴向修正」。管线不自动判定");
         }
 
         return sb.ToString().TrimEnd();

@@ -4,7 +4,7 @@
 
 | 类 | 步骤 | 说明 |
 |---|---|---|
-| `ToolImportApi` | ② | **单文件** `ImportSingleModel`；批量仍 `ExecuteBatch` |
+| `ToolImportApi` | 1 入库 | **单文件** `ImportSingleModel(source, incomingFolderName?, …)`；夹名非空=ID2。`.gltf` 跟拷 URI 伴生；`.obj` 跟拷 `.mtl` 与贴图。批量仍 `ExecuteBatch` |
 | `ToolPrefabApi` | ③ | → `Generated/Prefab` |
 | `ToolPostProcessApi` | ⑤ | → L1 子流程（总批量）；返回 `ToolPostProcessResult`（FailedCount + Report） |
 

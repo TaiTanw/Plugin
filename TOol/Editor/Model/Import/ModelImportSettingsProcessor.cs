@@ -1,39 +1,50 @@
-using System.IO;
 using UnityEditor;
-using UnityEngine;
 
 // =====================================================================================
-// 模型【设置自动】：导入前只改 ModelImporter 参数。
-// 后处理（顶点色等）不在这里，走 ModelSourceFileProcessor → ImportPostProcessScheduler。
+// 模型【设置自动】：导入前改 ModelImporter 参数。
+// 导入区唯一入口。赋值都走 ModelImporterProfiles，本类只负责闸。
+//
+// 闸顺序：
+//   1. Art 硬跳过（D24-6）——不看 SO 排除表，清空 excludedPathPrefixes 也不能写交付区。
+//   2. 总闸。基线是否脱离总闸见 backlog D26-1，本文件暂不动。
+//   3. 扩展名 / SO 排除表。
+//   4. Incoming 基线；勾了「模型 · 设置自动」再跑 Incoming 策略。
 // =====================================================================================
 public class ModelImportSettingsProcessor : AssetPostprocessor
 {
     private void OnPreprocessModel()
     {
-        if (!ResourceProcessSwitches.IsModelSettingsEffective)
+        if (ModelImporterProfiles.IsArtDeliveryPath(assetPath))
+        {
+            return;
+        }
+
+        if (!ResourceProcessSwitches.MasterEnabled)
+        {
+            return;
+        }
+
+        var importer = assetImporter as ModelImporter;
+        if (importer == null)
         {
             return;
         }
 
         ModelProcessSettings settings = ModelProcessSettings.Current;
-        if (!settings.IsSupportedModelExtension(assetPath) || settings.IsExcludedPath(assetPath))
+        if (settings == null ||
+            !settings.IsSupportedModelExtension(assetPath) ||
+            settings.IsExcludedPath(assetPath))
         {
             return;
         }
 
-        var importer = (ModelImporter)assetImporter;
+        ModelImporterProfiles.ApplyIncomingBaseline(importer, assetPath, settings);
 
-        if (settings.modelUseExternalMaterials)
+        if (!ResourceProcessSwitches.ModelSettingsAuto)
         {
-            importer.materialLocation = ModelImporterMaterialLocation.External;
-            importer.materialName = ModelImporterMaterialName.BasedOnMaterialName;
+            return;
         }
 
-        if (settings.modelStripLightsAndCameras)
-        {
-            importer.importLights = false;
-            importer.importCameras = false;
-        }
-        // 成功时不打 Log：批量入库时每 FBX 一条会刷屏，易被当成警告。
+        ModelImporterProfiles.ApplyIncomingPolicy(importer, settings);
     }
 }

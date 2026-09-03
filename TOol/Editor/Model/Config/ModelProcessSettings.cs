@@ -12,16 +12,27 @@ public class ModelProcessSettings : ScriptableObject
 {
     public const string DefaultAssetPath = "Assets/Plugin/TOol/ConfigData/ModelProcessSettings.asset";
 
-    [Header("导入期 Importer 参数（设置自动）")]
-    [Tooltip("FBX 导入时把材质来源设为 External（外部 .mat 由编辑器生成）。")]
-    public bool modelUseExternalMaterials = true;
-
-    [Tooltip("FBX 导入时剔除 DCC 软件带出来的灯光与摄像机节点。")]
+    [Header("导入区 Importer · 基线（只受总闸约束，不看本机分项勾选）")]
+    [Tooltip("导入时剔除 DCC 带出来的灯光与摄像机节点。\n" +
+             "必须在 ③ 生成 Prefab 之前生效：③ 存出的是独立 Prefab 资产，" +
+             "相机灯光一旦烤成节点，④ 再写 importCameras=false 也回收不掉。")]
     public bool modelStripLightsAndCameras = true;
 
+    [Tooltip(".obj 导入时把法线设为 Calculate。\n" +
+             "Wavefront OBJ 常无作者法线，Import 会每 Mesh 打一条 has no normals 警告；" +
+             "百级子网格时能压垮 Console。代价：源文件真带 vn 时会改用重算法线。")]
+    public bool modelCalculateNormalsForObj = true;
+
+    [Header("导入区 Importer · 策略（需本机「模型 · 设置自动」勾选）")]
+    [Tooltip("导入时把材质来源设为 External（外部 .mat 由编辑器生成）。\n" +
+             "D24-3：④ 拆分前保持关闭。开启会让 Incoming 旁边生成 Materials/，" +
+             "改变 ④ 的输入（历史上与插件 1 的 InPrefab 互相覆盖过）。")]
+    public bool modelUseExternalMaterials = false;
+
     [Header("可处理的模型扩展名")]
-    [Tooltip("后处理与设置自动都只认这些扩展名。默认含 .fbx/.glb/.gltf（与管线导入对齐）；可在 SO 增删。")]
-    public List<string> supportedExtensions = new List<string> { ".fbx", ".glb", ".gltf" };
+    [Tooltip("设置自动、后处理自动、⑤ 收集都只认这些扩展名。默认与 ToolImportApi 的 1 入库白名单对齐（.fbx/.glb/.gltf/.obj）；可在 SO 增删。\n" +
+             "注意：这不是 1 入库白名单本身，那份在 ToolImportApi。两处必须同步，否则会出现「① 能入库但 ⑤ 不认」的资产。")]
+    public List<string> supportedExtensions = new List<string> { ".fbx", ".glb", ".gltf", ".obj" };
 
     [HideInInspector]
     public List<string> importAutoOperationIds = new List<string> { "set_vertex_colors_white" };
@@ -84,20 +95,14 @@ public class ModelProcessSettings : ScriptableObject
     }
 
     /// <summary>
-    /// D12 一次性迁移：空列表填默认；旧「仅 fbx」资产补 glb/gltf。之后不再强行追加，避免覆盖用户删改。
+    /// 一次性迁移，每批一个键：置位后不再强行追加，避免覆盖用户的删改。
+    /// D12 补 glb/gltf；D26 补 obj（① 一直能入库 OBJ，这张表却漏了，见 backlog D26-3）。
     /// </summary>
     public void EnsureSupportedExtensionsDefaults()
     {
-        const string migratedKey = "TOol.ModelExt.GlbGltfMigrated.v1";
-
         if (supportedExtensions == null)
         {
             supportedExtensions = new List<string>();
-        }
-
-        if (EditorPrefs.GetBool(migratedKey, false))
-        {
-            return;
         }
 
         bool dirty = false;
@@ -106,20 +111,36 @@ public class ModelProcessSettings : ScriptableObject
             supportedExtensions.Add(".fbx");
             supportedExtensions.Add(".glb");
             supportedExtensions.Add(".gltf");
+            supportedExtensions.Add(".obj");
             dirty = true;
         }
         else
         {
-            dirty |= AddExtensionIfMissing(".glb");
-            dirty |= AddExtensionIfMissing(".gltf");
+            dirty |= MigrateOnce("TOol.ModelExt.GlbGltfMigrated.v1", ".glb", ".gltf");
+            dirty |= MigrateOnce("TOol.ModelExt.ObjMigrated.v1", ".obj");
         }
 
         if (dirty)
         {
             EditorUtility.SetDirty(this);
         }
+    }
+
+    private bool MigrateOnce(string migratedKey, params string[] extensions)
+    {
+        if (EditorPrefs.GetBool(migratedKey, false))
+        {
+            return false;
+        }
+
+        bool dirty = false;
+        for (int i = 0; i < extensions.Length; i++)
+        {
+            dirty |= AddExtensionIfMissing(extensions[i]);
+        }
 
         EditorPrefs.SetBool(migratedKey, true);
+        return dirty;
     }
 
     private bool AddExtensionIfMissing(string extension)

@@ -12,11 +12,12 @@ Pipeline/
 ├─ ConfigData/PipelineStepSettings.asset   # 总步骤 SO（② 等）
 └─ Editor/
    ├─ PipelineStepSettings.cs
-   ├─ PipelineMaterialId.cs                # D9 默认 Id；D10 多源绑定预备
+   ├─ PipelineMaterialId.cs                # D9 默认 Id；SuggestBindingsForSelection（A）
+   ├─ PipelineSourceAccept.cs              # 批量 → 编排（路径+ID2）
    ├─ PipelineOptions / Result / ErrorCodes
    ├─ PipelineRunner.cs                    # (A/B) 编排内核
    ├─ PipelineWindow.cs                    # (A) Tools > 自动化管线总面板
-   └─ PipelineCli.cs                       # (B) -executeMethod PipelineCli.Run
+   └─ PipelineCli.cs                       # (B) -executeMethod PipelineCli.Run（D5 已验收）
 ```
 
 对外分块说明：`docs/dev-wip/04_implementation/pipeline-flow.md` · CLI：`cli-getting-started.md`。
@@ -27,11 +28,11 @@ Pipeline/
 | 导出产物/路径 | **RetinarExportSettings SO** | 交付根、AB 根、是否 UP、是否拷 AB 到交付夹 |
 | 资源自动细节 | **资源总面板 EditorPrefs + L3 SO** | 设置自动/后处理自动、Op、压缩参数 |
 
-**materialId：** 面板选源自动填默认名、清除同步清空（D9）。多文件绑定见 `PipelineMaterialId.BuildSourceBindings` / `Options.SourceBindings`（D10 预备，Runner 未消费）。
+**materialId / ID2：** 选源自动填（父目录仅一个内核文件→三层；还有其它或三层 Warning→三层+文件全名）。批量「输出到编排」走 `PipelineSourceAccept.SendToOrchestration` → 总面板 `AcceptBindings`。Runner 读 `SourceBindings` 按行 1→2.5→③（该行 ID2）；④ 按该行 ctx。空表则用 `SourcePath`+`MaterialId` 合成一行。
 
 | 步骤 | 窄口 |
 |---|---|
-| ② | `ToolImportApi.ImportSingleModel` |
+| ② / 1 入库 | `ToolImportApi.ImportSingleModel`（可选 Incoming 夹名 = ID2） |
 | ③ | `ToolPrefabApi` |
 | ④ | `RetinarFlattenApi` |
 | ⑤ | `ToolPostProcessApi`（Converter 默认开；贴图→材质→模型） |

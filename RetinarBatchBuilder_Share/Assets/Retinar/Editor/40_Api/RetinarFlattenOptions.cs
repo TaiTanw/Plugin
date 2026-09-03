@@ -28,4 +28,11 @@ public sealed class RetinarFlattenOptions
     /// 不扫整棵 <c>Assets/Art</c>。
     /// </summary>
     public bool ClearDestinationArtFolder;
+
+    /// <summary>
+    /// true：套空外壳时给内容节点叠 −90°X，把 Z-up 源摆正。
+    /// 由编排从绑定行映射过来（人给的输入），本类不猜、不读文件。
+    /// 规则 23 锁的是外壳根必须 Identity，内容节点带轴向旋转是 Unity 对 FBX 的既有形态。
+    /// </summary>
+    public bool ConvertZUpToYUp;
 }

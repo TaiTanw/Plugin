@@ -37,16 +37,15 @@ public sealed class PipelineOptions
     /// <summary>禁止 DisplayDialog（编排默认 true）。</summary>
     public bool Quiet = true;
 
-    /// <summary>CLI/任务 Id；非空时覆盖 Prefab 三层命名。</summary>
+    /// <summary>CLI/任务 Id；非空时 1 入库夹名与 ③ Prefab 名都用它（D10-1）。</summary>
     public string MaterialId;
 
     /// <summary>
-    /// D10 预备：多源 + 各自 materialId。面板/Runner 当前仍走 <see cref="SourcePath"/> + <see cref="MaterialId"/>；
-    /// 正式多选接线前可先用 <see cref="PipelineMaterialId.BuildSourceBindings"/> 生成本列表。
+    /// 多源 + 各自 ID2。Runner 主输入；空则用 SourcePath+MaterialId 合成一行。
     /// </summary>
     public List<PipelineSourceBinding> SourceBindings;
 
-    /// <summary>② 完成后的工程内模型路径（也可预填已导入模型）。</summary>
+    /// <summary>1 完成后的工程内模型路径（也可预填已导入模型）。</summary>
     public List<string> ModelPaths = new List<string>();
 
     /// <summary>
@@ -58,9 +57,12 @@ public sealed class PipelineOptions
     public List<string> PostProcessFolderPaths;
 
     /// <summary>
-    /// ② 成功后的导入事实（文件归类）。不是步骤开关。平铺侧不读本字段。
+    /// 第一份 2.5 ctx（兼容旧读取）。完整列表见 <see cref="JobContexts"/>。
     /// </summary>
     public PipelineJobContext JobContext;
+
+    /// <summary>每份入库模型一份 2.5 ctx，与 ModelPaths 下标对齐。④ 按行映射闸。</summary>
+    public List<PipelineJobContext> JobContexts;
 
     /// <summary>从 SO 填充步骤开关，并带上单文件源。</summary>
     public static PipelineOptions FromSettings(PipelineStepSettings settings, string sourcePath = null)

@@ -12,11 +12,14 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: b9ddfb229140f9347a0ad46ce9c8bf44, type: 3}
   m_Name: ModelProcessSettings
   m_EditorClassIdentifier: 
-  modelUseExternalMaterials: 1
   modelStripLightsAndCameras: 1
+  modelCalculateNormalsForObj: 1
+  modelUseExternalMaterials: 0
   supportedExtensions:
   - .fbx
   - .glb
+  - .gltf
+  - .obj
   importAutoOperationIds: []
   masterBatchOperationIds:
   - set_vertex_colors_white

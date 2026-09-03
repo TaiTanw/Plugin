@@ -3,7 +3,7 @@
 返回 [总目录](../README.md) · [流程与中间层](./pipeline-flow.md) · [待办](../03_open-items/backlog.md)
 
 > CLI = 无头外壳；内核仍是 `PipelineRunner.Run(options)`。面板继续直调 Runner，不改成「面板调 CLI」。  
-> **第一刀已写** `PipelineCli.Run`：必填 `-source`，可选 `-materialId`；步骤跟 SO。
+> **D5 已完成（2026-09-02）：** 本机 `-batchmode` 验收通过；参数/退出码按现状冻结。
 
 ---
 
@@ -27,7 +27,7 @@ EditorApplication.Exit(code) ← = PipelineResult.ExitCode
 |---|---|---|
 | (A) 总面板 | **有** | 人填 Options → Runner |
 | (A) Runner / 窄口 | **有** | 见 [pipeline-flow](./pipeline-flow.md) |
-| (B) `PipelineCli` | **有（第一刀）** | 只解析 argv、组 Options、调 Runner、Exit |
+| (B) `PipelineCli` | **有（已验收）** | 只解析 argv、组 Options、调 Runner、Exit |
 | 网页/队列 | **无** | 不在本迭代 |
 
 ---
@@ -39,7 +39,7 @@ Assets/Plugin/Pipeline/Editor/
 ├─ PipelineRunner.cs          # 内核（CLI 禁止绕过）
 ├─ PipelineOptions.cs         # CLI 填这个，不另造配置类型
 ├─ PipelineResult.cs          # ExitCode / Messages
-├─ PipelineErrorCodes.cs      # 与进程退出码对齐
+├─ PipelineErrorCodes.cs      # 与 CLI 退出码对齐（已冻）
 ├─ PipelineWindow.cs          # (A) 人机；与 CLI 并行
 └─ PipelineCli.cs             # (B) public static void Run()
 ```
@@ -66,23 +66,25 @@ Unity.exe
   [-materialId <name>]
 ```
 
-要点：
+要点（已冻）：
 
 - 入口必须是 Editor 程序集里 **`public static void` 无参**方法。
 - CLI **强制** `Quiet=true`（batchmode 禁 Dialog）。**Quiet ≠ `-quit`**。
 - 退出码 = `PipelineResult.ExitCode`。缺 `-source` → `10`（BadArgs）。⑤ `FailedCount>0` → `50`。未捕获异常 → `80`（Other）。
-- `70` LicenseOrEnv **预留，本入口不赋值**。⑥ 部分成功仍可能 `0`。
+- `70` LicenseOrEnv **预留，本入口不赋值**。⑥ 至少打出一端（`PartialOk`）仍 `0`；全失败才 `60`。
+
+无头时工程须关掉占用该 `-projectPath` 的 Editor，否则 batchmode 进不去。
 
 ---
 
-## 4. 参数（第一刀）
+## 4. 参数（已冻）
 
 | 参数 | 必填 | 映射 Options | 说明 |
 |---|---|---|---|
 | `-source <path>` 或 `-source=` | 是 | `SourcePath` | 工程外 **.glb/.fbx/.gltf/.obj** 或 `Assets/…`。`.gltf` 会整包入库（旁路一起拷）；不必先转 GLB |
 | `-materialId <name>` | 否 | `MaterialId` | 覆盖 Prefab 三层命名 |
 
-步骤开关全部跟 `PipelineStepSettings` SO，不做 flag 覆盖。
+步骤开关全部跟 `PipelineStepSettings` SO，**不加 flag 覆盖**。扩步骤 flag / 输出根 / 多源（D10）/ 清 Incoming（D11）须另开项。
 
 ```text
 1. 解析 -source / 可选 -materialId
@@ -92,13 +94,13 @@ Unity.exe
 5. EditorApplication.Exit(r.ExitCode)
 ```
 
-后续可加（不进第一刀）：步骤 flag、输出根、多源（D10）、清 Incoming（D11）。⑤ 扫描夹已由 **D17** 在 Runner 内写 Art 单元。
+⑤ 扫描夹已由 **D17** 在 Runner 内写 Art 单元。
 
 ---
 
-## 5. 验收
+## 5. 验收（2026-09-02 已过）
 
-本机示例（路径按机器改）：
+本机：Unity `2022.3.54f1c1`，`-source` 工程外 `直18.gltf`，`-materialId GLTF直18`，日志 `[Pipeline] exit=0 OK`。
 
 ```text
 "<Unity2022.3>\Unity.exe"
@@ -106,7 +108,8 @@ Unity.exe
   -projectPath "D:\UnityMyCSProject\UnityProject\Plugin2022"
   -executeMethod PipelineCli.Run
   -logFile "D:\temp\pipeline-cli.log"
-  -source "D:\path\to\sample.glb"
+  -source "<工程外 .gltf/.fbx/.glb>"
+  [-materialId <name>]
 ```
 
 | 检查 | 期望 |
@@ -118,17 +121,17 @@ Unity.exe
 | Prefab 夹顶点色 | **不**算 CLI 失败（可选 D20；色在 `Model/*.FBX`） |
 | FBX 刷白 / 导出 GLB 黄 | **不**算 CLI 失败（D19 已降级；需白 GLB 见 backlog **L**） |
 
-先回切工程等 `PipelineCli` 编译进 Editor 程序集，再跑无头命令。
+跑前关掉占用本工程的 Editor。
 
 ---
 
-## 6. 缺口（相对 CLI）
+## 6. 本迭代不做（相对 CLI）
 
-| 缺口 | 影响 CLI？ | 代办 |
-|---|---|---|
-| 参数格式未钉死全表 | 第一刀已死 `-source` | backlog **B.CLI** |
-| `SourceBindings` Runner 未消费 | 多文件 CLI 不可用 | **D10** |
-| `LicenseOrEnv(70)` | 表有洞 | 预留 |
-| ⑥ 部分失败仍 Ok | CI 语义 | 随错误码表拍板 |
+| 项 | 说明 |
+|---|---|
+| 步骤 flag / 环境变量 / 临时 SO | backlog **B.CLI**；D5 不扩 |
+| `SourceBindings` 多行 | **D10-2 已做**（CLI 仍一个 `-source`） |
+| `LicenseOrEnv(70)` | 预留；本入口不赋值 |
+| ⑥ 部分失败改非 0 | **已冻**为仍 `0`；改码另开项 |
 
 **已复用：** `PipelineOptions.FromSettings`、`PipelineRunner`、窄口、D17 Art 单元路径、D16 `ToolPostProcessResult`。

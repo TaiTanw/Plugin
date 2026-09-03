@@ -105,16 +105,16 @@ C 在 `image/Texture/` 的副本与 B′ 子树里那份**并存**：前者给 U
 
 ## 4. 从插件 1 抽离？能力分离之后
 
-战略仍是 **平铺暂留插件 1、不整包迁插件 2**。拆开改变的是「以后能不能抽」，不是本迭代搬家。
+**2026-09-03 再翻案（D27）：** 插件 1 只留 ⑥ AB。④ 实现要从 Retinar 迁出，让插件 1 不再影响 ①–⑤。D24-5 的「加能力、不搬家」是窄口，不是终态。
 
 | 抽离形态 | 是否具备 | 说明 |
 |---|---|---|
-| **窄口变薄** | **具备，这是分离的收益** | 现网一个 `FlattenPaths` 吞 A–E。之后 `40_Api` 可拆成写 Prefab / 拆依赖 / 原子搬迁 / 另存球 / remap；Pipeline 只组合。实现仍住 Retinar |
-| **编排认能力** | **D23b 后局部具备** | Runner 用 ctx 选 B 或 B′；不必搬走 `CreatePackagedAdjustedPrefab` |
-| **整段④迁插件 2** | **本阶段不具备、也不该做** | ⑥ 门禁、菜单平铺、FBX Extract/InPrefab、动画 remap、自愈仍绑 PACKAGING_RULES。迁走会复制 Art 契约 |
-| **只把 B′ 放到插件 2** | **不建议** | 路径表、布局、随后 D/C/⑥ 仍在插件 1；跨插件传 map 更脏 |
+| **窄口变薄** | **已落地（D24-5）** | `RetinarFlattenApi` 七步；表住 `RetinarFlattenWork`。实现仍住 Retinar |
+| **编排认能力** | **已落地** | `PipelineRunner.FlattenPerPrefab` 组合；B ↔ B′ 互斥 |
+| **整段④迁出插件 1** | **下一刀（D27）** | 目标：插件 1 只剩 `RetinarAbApi` + 交付 IO + 导出 SO。实现宿主是中间层还是插件 2 另定，但**不得**再让 Retinar 改 Incoming / Art Importer / Prefab |
+| **只把 B′ 先搬走** | **不建议作第一刀** | 路径表、布局、随后 D/C 仍在大文件里；横切不如按「菜单 FBX 直平铺 vs 管线 Prefab 平铺」切开 |
 
-结论：分离是为了 **在插件 1 内可组合、可闸**，并为更薄的 Flatten API 打底。抽离若做，也只加 `RetinarFlattenApi` 能力方法，不搬目录。
+D26（总闸 / 缺伴生仍 `exit=0`）是编排语义，**不挡**本刀。D26-2 的 B′ 成功准则（拷到文件就算成功）在搬 B′ 时一并收紧即可。
 
 ---
 
