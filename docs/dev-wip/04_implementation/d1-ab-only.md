@@ -77,10 +77,10 @@
 
 | 能力 | 挂在哪 | 只出 AB（⑥） | 开④平铺时 | 规范化导出 |
 |---|---|---|---|---|
-| 碰撞体 | ④ 平铺末（Prefs `FlattenPostProcessSettings.AddBoxCollider`，默认开） | 不跑 | **会跑**（除非 Prefs 关） | 可能再规范化 |
+| 碰撞体 | ④ 平铺末（本趟 `FlattenOperationPolicy.AddBoxCollider`；默认关） | 不跑 | **按平铺 SO 快照决定** | 可能再规范化 |
 | SafeZone 缩放 | ④ 内核（FBX 入口更明显；外来 Prefab 多套壳不缩放） | 不跑 | **可能改 Prefab** | 可能再跑 |
 | 门禁/SafeZone 校验阻断 | 规范化 `PartitionAssetsThatPassValidation` | **不跑** | 不跑 | **会跑** |
 | `IRetinarAcceptanceGate` | 未接线 | — | — | Legacy 硬编码校验 |
 
 结论：管线默认 ③→⑥、④关 → **碰撞体/缩放/门禁都不介入**。  
-开④ → 碰撞体/缩放属**平铺副作用**，与⑥无关；若只要干净 AB，保持④关，或关 `AddBoxCollider` Prefs。  
+开④ → 碰撞体/缩放属**平铺副作用**，与⑥无关；若只要干净 AB，保持④关，或在本入口对应的平铺 SO 中关闭 `AddBoxCollider`。  

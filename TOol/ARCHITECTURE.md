@@ -7,7 +7,7 @@
 本文说明目录层级、类职责、自动化两层语义，以及和打包工具的边界。便于扩展新 Operation / 新资源类型时对照。  
 扩展名识别与加 Op / 加后缀 / 加大类、以及「总可处理文件 → Evaluate → Execute」数据流：[docs/dev-wip/04_implementation/op-recognition-and-extend.md](../docs/dev-wip/04_implementation/op-recognition-and-extend.md)
 
-### 配置归属（EditorPrefs vs 三份 SO，必读）
+### 配置归属（EditorPrefs 与 SO，必读）
 
 | 数据 | 存哪 | 改哪里 | 作用 | 不做什么 |
 |------|------|--------|------|----------|
@@ -15,6 +15,8 @@
 | **贴图 `excludedPathPrefixes`** | `TextureProcessSettings.asset` | **贴图高级设置 → 子处理配置** | 设置自动 / 后处理自动 **跳过**这些前缀（默认 `Assets/Art/`） | 不拦批量 FBX 拷贝目标 |
 | **模型 `excludedPathPrefixes`** | `ModelProcessSettings.asset` | **模型高级设置 → 子处理配置** | 同上（模型侧） | 同上 |
 | **`deliveryAlertPathPrefixes`** | `BatchFbxImportSettings.asset` | **批量 FBX 导入**面板 | 导入根/目标落在前缀上 → **Conflict，禁止执行** | 不参与导入后贴图/模型自动跳过 |
+| **人工④平铺细节** | `TOol/ConfigData/Manual/**` 下的 `FlattenOperationSettings` SO | 平铺操作面板，可拖入同目录 SO | 分类、清本次 Art 单元、根碰撞体 | 不控制管线④ |
+| **管线④平铺细节** | `Pipeline/ConfigData/**` 下的同类 SO | 自动化管线总面板 | 同上；运行前冻结为 policy | 不被人工面板改写 |
 
 **为何分两块（三份列表）：**  
 - 批量路径要本机可改、不进版本库 → EP；**L1 默认种子含 `Assets/Art`**，总批量本就是打交付区。  
@@ -22,6 +24,7 @@
 - **切勿**把 `excludedPathPrefixes` 理解成「⑤ 也扫不到 Art」——⑤ `RunMasterBatch` **不读**该列表。  
 - **切勿**把中间层⑤也叫成「导入自动流」。管线勾选⑤ = 编排代调 L1「执行全部」同一内核（手动路径），不是 `AssetPostprocessor`。  
 - 默认值都是 `Assets/Art/`，**改一处不会自动同步**。若团队改交付根目录，请在 L3 贴图/模型高级设置与批量 FBX 配置里对照改三处。
+- 平铺人工/管线 SO 用**来源文件夹**判定归属。所在面板只能编辑自己的目录；另一作用域或未归类目录只读，但可按本趟快照执行。
 
 导入期 Console 常见信息（可忽略与否）：
 
@@ -48,15 +51,15 @@
 
 |         | 插件 1 `RetinarBatchBuilder_Share` | 插件 2 `TOol`                    |
 | ------- | -------------------------------- | ------------------------------ |
-| 定位      | 交付打包：平铺 Art、导出 AB/UnityPackage/报告 | 导入期设置 + 源文件/模型后处理              |
-| 主菜单     | `Tools > Retinar > 平铺到 Art` / `从 Art 导出交付物`（全部·选中）/ `打开交付文件夹` | `Tools > 资源处理总面板`（唯一入口）        |
-| 介入目录    | **写入** `Assets/Art/`             | **导入期自动跳过** Art；**⑤/L1 总批量故意打 Art**（默认路径） |
+| 定位      | 交付打包：导出 AB / 可选 UnityPackage | 导入期设置 + 源文件/模型后处理 + ③ Prefab + **④ 平铺 Art** |
+| 主菜单     | `Tools > Retinar > 平铺到 Art`（现转调插件 2）/ `打开交付文件夹` | `Tools > 资源处理总面板`（唯一入口）        |
+| 介入目录    | ⑥ 读 Art Prefab 打 AB，不写平铺 | **④ 写入** `Assets/Art/`；导入期自动跳过 Art Importer；**⑤/L1 总批量故意打 Art** |
 | 改贴图像素？  | 否（只归档告警）；重导时保留已压缩 Art            | 是（压缩 / 转 PNG / 亮度→Alpha）       |
 | 改 Mesh？ | 重导时保留已写入顶点色                      | 是（如顶点色全白）                      |
 
 
 **硬边界（PACKAGING_RULES 规则 33 / D24-6）：**  
-两边不得同时改同一 Importer 属性。赋值集中在 `ModelImporterProfiles`：`ApplyIncoming*` 只写导入区，`ApplyArtDelivery` 只写 `Assets/Art/**`。插件 2 的 `OnPreprocessModel` **硬跳过 Art**（不单靠 SO 排除表）。交付区 `InPrefab`+`Local` 只由 ④ 调用 `ApplyArtDelivery`。
+两边不得同时改同一 Importer 属性。赋值集中在 `ModelImporterProfiles`：`ApplyIncoming*` 只写导入区，`ApplyArtDelivery` 只写 `Assets/Art/**`。插件 2 的 `OnPreprocessModel` **硬跳过 Art**（不单靠 SO 排除表）。交付区 `InPrefab`+`Local` 只由 ④ `FlattenBuildService` 调用 `ApplyArtDelivery`。
 
 ---
 
@@ -78,8 +81,10 @@ TOol/
    │  └─ BatchFbxImportService.cs       # 夹名解析、冲突、单 FBX 拷贝+Import
    ├─ Shared/                           # 横切工具 / 将来对外窄口（见 Shared/README_SHARED.md）
    │  └─ （根下历史扁平：开关/批量路径/导入后调度…）
-   ├─ Generated/                        # 中间资产能力（非 Art、非⑤原地改）
-   │  └─ Prefab/                        # ★ ③ 自动预设体：Config / Layout / Service
+   ├─ Generated/                        # 中间资产能力（非⑤原地改）
+   │  ├─ Prefab/                        # ★ ③ 自动预设体：Config / Layout / Service
+   │  └─ Flatten/                       # ★ ④ 平铺 Art：Config / Layout / Service / Category
+   │                                      窄口 ToolFlattenApi（接 ctx）
    ├─ Texture/
    │  ├─ Config/     TextureProcessSettings.cs
    │  ├─ Codec/      编解码 + 缩放
@@ -131,7 +136,7 @@ TOol/
 
 | 开关                      | 默认     | 作用                                    |
 | ----------------------- | ------ | ------------------------------------- |
-| **总开关** `MasterEnabled` | **开启** | 关掉后，任何设置自动 / 后处理自动都不跑；**手动**子面板执行不受影响 |
+| **总开关** `MasterEnabled` | **开启** | 关掉后，用户设置自动 / 后处理自动都不跑；**手动**子面板执行不受影响。配置导入根内的模型安全基线例外 |
 | 贴图 / 模型 · **设置自动**      | 关      | 导入前改 Importer（需总开关开）                  |
 | 贴图 / 模型 · **后处理自动**     | **关**   | 导入后跑 Operation（需总开关开）。**仅导入区预览**；交付靠平铺后手动 |
 
@@ -151,7 +156,7 @@ TOol/
 
 | 档 | 项 | 开关来源 | 为何这样分 |
 |---|---|---|---|
-| **导入区基线** | 剔灯剔相机、`.obj` 法线 Calculate | `ModelProcessSettings`（SO）+ **总闸**（D26-1 未改） | 管线产物形状不能由本机 Prefs 决定。相机灯光必须早于 ③ 剔掉 |
+| **导入区基线** | 剔灯剔相机、`.obj` 法线 Calculate | `ModelProcessSettings`（SO）；在 `BatchFbxImportSettings.importRootPath` 内不受本机总闸与 `excludedPathPrefixes` | 管线产物形状不能由本机 Prefs 决定。相机灯光必须早于 ③ 剔掉；例外不扩到其它 `Assets` 路径 |
 | **导入区策略** | `materialLocation = External` | SO + 本机「模型 · 设置自动」勾选 | 会让 Incoming 旁生成 `Materials/`，改变 ④ 的输入。默认关（D24-3） |
 | **交付区** | InPrefab + Local + isReadable + 剔灯剔相机 + OBJ Calculate | 无开关，④ 必写 | PACKAGING_RULES 20/21/37；与导入区策略互斥 |
 
@@ -341,7 +346,7 @@ TOol/
 | 类                              | 职能                                                                                      |
 | ------------------------------ | --------------------------------------------------------------------------------------- |
 | `ModelImporterProfiles` | D24-6 两档口径。`ApplyIncomingBaseline` / `ApplyIncomingPolicy` / `ApplyArtDelivery`；`IsArtDeliveryPath` 给 Processor 硬跳过。 |
-| `ModelImportSettingsProcessor` | 设置自动闸。Art 硬跳过 → 总闸 → 扩展名/排除表 → Incoming 基线；勾分项再跑 Incoming 策略。 |
+| `ModelImportSettingsProcessor` | 设置自动闸。Art 硬跳过 → 扩展名 → 基线（配置导入根内绕过总闸/排除表）；未排除且总闸与分项都开才跑 Incoming 策略。 |
 | `ModelSourceFileProcessor`     | `OnPostprocessModel` 立刻跑 importAuto；`OnPostprocessAllAssets` 入队 Scheduler。              |
 
 
@@ -446,4 +451,3 @@ TOol/
 建议复制 `Model/` 或 `Texture/` 整棵纵切 + Shared 增加开关与 Scheduler 阶段；总面板加一块。不要把逻辑塞进现有贴图/模型类。
 
 ---
-

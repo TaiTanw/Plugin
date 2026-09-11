@@ -1,7 +1,8 @@
 using System.Collections.Generic;
 
 // =====================================================================================
-// 40_Api — ④ 平铺执行开关（目的/能力闸）。不引用 PipelineJobContext。
+// Generated / Flatten / Config — 内核执行闸。不引用 PipelineJobContext。
+// 由 FlattenBuildService.CreateOptions(ctx, request) 填写。
 // =====================================================================================
 
 /// <summary>
@@ -11,9 +12,13 @@ public sealed class RetinarFlattenOptions
 {
     public static readonly RetinarFlattenOptions Default = new RetinarFlattenOptions();
 
+    /// <summary>本趟冻结的 SO 快照；分类和碰撞体只读这里。</summary>
+    public FlattenOperationPolicy OperationPolicy =
+        FlattenOperationPolicy.CreateDefaults(FlattenSettingsScope.Manual);
+
     /// <summary>
     /// true：整段不跑按后缀拆依赖（拷贝循环）。改走 B′ 原子搬迁。
-    /// 由编排把「有外 URI」映射过来，本类不读 ctx。
+    /// 由 FlattenBuildService 把 ctx.HasExternalUris 映射过来，本类不读 ctx。
     /// </summary>
     public bool SkipDependencySplit;
 
@@ -22,6 +27,11 @@ public sealed class RetinarFlattenOptions
 
     /// <summary>相对主文件的伴生（.bin / 外图等）。菜单 Default 为空。</summary>
     public List<string> SidecarPaths = new List<string>();
+
+    /// <summary>
+    /// glTF 已声明但 2.5 探测时不存在的必需伴生。B′ 必须拒绝执行，不能只拷主文件后报成功。
+    /// </summary>
+    public List<string> MissingUris = new List<string>();
 
     /// <summary>
     /// true：平铺前只删本次 <c>Art/&lt;名&gt;/</c>，再按现网拷。菜单 Default 为 false（不清 Art）。
@@ -35,4 +45,7 @@ public sealed class RetinarFlattenOptions
     /// 规则 23 锁的是外壳根必须 Identity，内容节点带轴向旋转是 Unity 对 FBX 的既有形态。
     /// </summary>
     public bool ConvertZUpToYUp;
+
+    /// <summary>是否在最终 Prefab 根节点添加/更新 BoxCollider。</summary>
+    public bool AddBoxCollider;
 }

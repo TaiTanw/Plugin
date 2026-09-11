@@ -437,7 +437,7 @@ public static class PipelineRunner
         return prefabPaths;
     }
 
-    /// <summary>④ 按该份 Prefab 对应的 ctx 映射闸（gltf B′ / 普通拆夹）。失败返回 null。</summary>
+    /// <summary>④ 按该份 Prefab 对应的 ctx 分支（gltf B′ / 普通拆夹）。失败返回 null。</summary>
     private static List<string> FlattenPerPrefab(
         PipelineOptions options,
         List<string> prefabPaths,
@@ -447,6 +447,11 @@ public static class PipelineRunner
         var allArt = new List<string>();
         IList<PipelineJobContext> contexts = options.JobContexts;
         bool loggedClear = false;
+
+        result.Info("[Pipeline] ④ 平铺 SO 快照：" +
+                    (options.FlattenPolicy == null
+                        ? "<null，使用管线默认>"
+                        : options.FlattenPolicy.ToLogString()));
 
         for (int i = 0; i < prefabPaths.Count; i++)
         {
@@ -466,51 +471,67 @@ public static class PipelineRunner
                 binding = options.SourceBindings[i];
             }
 
-            RetinarFlattenOptions flattenOpt = PipelineFlattenBridge.ToFlattenOptions(ctx, binding);
-            if (flattenOpt != null && flattenOpt.ConvertZUpToYUp)
+            ToolFlattenRequest request = ToolFlattenRequest.ForPipeline(options.FlattenPolicy);
+            request.ConvertZUpToYUp = binding != null && binding.ConvertZUpToYUp;
+
+            if (request.ConvertZUpToYUp)
             {
                 result.Info("[Pipeline] ④ [" + (i + 1) + "] 轴向修正：内容节点叠 −90°X");
             }
             else if (ctx != null && !string.IsNullOrEmpty(ctx.ZUpExporterNote))
             {
-                // 嗅到默认 Z-up 却没开修正：可能是人没勾，也可能是开关没传到这里。
-                // 两者从产物上看一模一样（都是「没变化」），不打这条就只能靠翻 Prefab 里的四元数。
                 result.Info("[Pipeline] ④ [" + (i + 1) + "] 未开轴向修正（该源导出器默认 Z-up）");
             }
 
-            if (!loggedClear && flattenOpt != null && flattenOpt.ClearDestinationArtFolder)
+            if (!loggedClear && request.ClearDestinationArtFolder)
             {
                 result.Info("[Pipeline] ④ 清空本次 Art/<名>/ 再写（不扫整棵 Art）");
                 loggedClear = true;
             }
 
-            if (flattenOpt != null && flattenOpt.SkipDependencySplit)
+            if (ToolFlattenApi.ShouldRelocateAtomic(ctx))
             {
                 result.Info("[Pipeline] ④ [" + (i + 1) + "] SkipDependencySplit + B′ 原子搬迁");
             }
 
+            if (ToolFlattenApi.HasMissingSidecars(ctx))
+            {
+                result.Info("[Pipeline] ④ [" + (i + 1) + "] glTF 缺必需伴生 × " +
+                            ctx.MissingUris.Count + "，停止本行平铺");
+                for (int missingIndex = 0; missingIndex < ctx.MissingUris.Count; missingIndex++)
+                {
+                    result.Info("  missing URI: " + ctx.MissingUris[missingIndex]);
+                }
+
+                result.Fail(
+                    PipelineErrorCodes.FlattenFailed,
+                    "④ glTF 缺必需伴生，无法执行 B′: " + ctx.PrimaryAssetPath +
+                    "（缺 " + ctx.MissingUris.Count + "）");
+                return null;
+            }
+
             RetinarFlattenWork work;
-            if (!RetinarFlattenApi.TryBegin(prefabPaths[i], flattenOpt, out work))
+            if (!ToolFlattenApi.TryBegin(prefabPaths[i], ctx, request, out work))
             {
                 result.Fail(PipelineErrorCodes.FlattenFailed, "平铺 Begin 失败: " + prefabPaths[i]);
                 return null;
             }
 
-            bool copied = flattenOpt != null && flattenOpt.SkipDependencySplit
-                ? RetinarFlattenApi.RelocateAtomic(work)
-                : RetinarFlattenApi.SplitDependencies(work);
+            bool copied = ToolFlattenApi.ShouldRelocateAtomic(ctx)
+                ? ToolFlattenApi.RelocateAtomic(work)
+                : ToolFlattenApi.SplitDependencies(work);
             if (!copied)
             {
                 result.Fail(PipelineErrorCodes.FlattenFailed,
-                    (flattenOpt != null && flattenOpt.SkipDependencySplit ? "B′ 原子搬迁失败: " : "B 拆依赖失败: ") +
+                    (ToolFlattenApi.ShouldRelocateAtomic(ctx) ? "B′ 原子搬迁失败: " : "B 拆依赖失败: ") +
                     prefabPaths[i]);
                 return null;
             }
 
-            RetinarFlattenApi.ApplyImportAndExtract(work);
-            RetinarFlattenApi.Remap(work);
-            RetinarFlattenApi.CopyRendererMaterials(work);
-            if (!RetinarFlattenApi.TryFinish(work) || string.IsNullOrEmpty(work.PrefabPath))
+            ToolFlattenApi.ApplyImportAndExtract(work, ctx);
+            ToolFlattenApi.Remap(work);
+            ToolFlattenApi.CopyRendererMaterials(work);
+            if (!ToolFlattenApi.TryFinish(work) || string.IsNullOrEmpty(work.PrefabPath))
             {
                 result.Fail(PipelineErrorCodes.FlattenFailed, "平铺 Finish 失败: " + prefabPaths[i]);
                 return null;

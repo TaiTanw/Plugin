@@ -1,19 +1,15 @@
 using System.Collections.Generic;
 
 // =====================================================================================
-// 40_Api — ④ 平铺窄口
-//
-// 2026-09-03（backlog D24-5）：FlattenPaths 仍是菜单/兼容入口；管线④按能力组合：
-//   Begin(0+A) → B 或 B′ → E → D → C → Finish（自愈 / 空壳 / 动画 / AB 名）
-// 实现仍住 RetinarBatchModelBuilder，本类只转发。
+// Generated / Flatten / Config — 菜单 / 兼容窄口（管线④请用 ToolFlattenApi）
 // =====================================================================================
 
-/// <summary>插件 1 · 平铺到 Art 对外接口。</summary>
+/// <summary>平铺兼容入口。管线④走 <see cref="ToolFlattenApi"/>（接 ctx）。</summary>
 public static class RetinarFlattenApi
 {
     /// <summary>
     /// 按路径平铺到 Art。quiet=true 时无 DisplayDialog（编排默认）。
-    /// 菜单与兼容路径用这个；管线④请按能力方法组合。
+    /// 菜单与兼容路径用这个；管线④请用 <see cref="ToolFlattenApi"/>。
     /// </summary>
     public static int FlattenPaths(IList<string> sourcePaths, bool quiet = true)
     {
@@ -23,7 +19,13 @@ public static class RetinarFlattenApi
 
     public static int FlattenPaths(IList<string> sourcePaths, bool quiet, out List<string> artPrefabPaths)
     {
-        return FlattenPaths(sourcePaths, quiet, RetinarFlattenOptions.Default, out artPrefabPaths);
+        FlattenOperationSettings settings = FlattenOperationSettings.LoadManualOrDefaults();
+        FlattenOperationPolicy policy = settings != null
+            ? settings.CreatePolicy()
+            : FlattenOperationPolicy.CreateDefaults(FlattenSettingsScope.Manual);
+        RetinarFlattenOptions options = FlattenBuildService.CreateOptions(
+            null, ToolFlattenRequest.ForManual(policy));
+        return FlattenPaths(sourcePaths, quiet, options, out artPrefabPaths);
     }
 
     public static int FlattenPaths(

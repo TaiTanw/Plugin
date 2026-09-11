@@ -2,7 +2,7 @@
 
 返回 [总目录](../README.md) · [流程](./pipeline-flow.md) · [相位入参/返回值](./pipeline-phase-io.md) · [待办](../03_open-items/backlog.md)
 
-> **状态：D23a/b + B′ 已落；gltf 编辑器实跑已通。** 现状与谁读 ctx → [d23-slice-report](./d23-slice-report.md)。探测扩展见 [§7](#7-probe-extend)。  
+> **状态：D23a/b + B′ 已落；D26-2 已把缺伴生收成 typed `MissingUris` 与④失败闸。** 现状与谁读 ctx → [d23-slice-report](./d23-slice-report.md)。探测扩展见 [§7](#7-probe-extend)。  
 > ④ 查封 → [pipeline-flatten-capabilities](./pipeline-flatten-capabilities.md)。
 
 ---
@@ -16,7 +16,7 @@
 | Options / SO 是什么 | **目的**：本趟要不要跑 ③④⑤⑥。不写进 ctx |
 | ④ 拆文件唯一闸 | **`HasExternalUris`**。执行层不 `if (.gltf)` |
 | D22 | **不开发**。`.gltf` 可直接入库；转 GLB 可选 |
-| 2–3 之间 | **不加**用户可见相位。`Build` 不是步骤；**仅④**经 Bridge 读 ctx |
+| 2–3 之间 | **不加**用户可见相位。`Build` 不是步骤；**仅④**读 ctx（`ToolFlattenApi`，不再经 Bridge） |
 
 **刻意不等 delayCall 再③：** 后处理自动可关、开着会再导入抢资产、CLI 常在 `delayCall` 前 `Exit`。交付处理走⑤。
 
@@ -33,11 +33,11 @@
 | `.glb`（二进制自包含） | `false` | 现网：整文件进 `Model/`，内嵌图本来就不是独立贴图后缀 |
 | `.gltf` 且 JSON 里 buffer/image 全是 `data:`、磁盘无 `.bin`/外图 | `false` | **物理上已是单文件**，和 GLB 同类。走现网「按后缀分类拷」时，可拆的只有这一份 `.gltf` → `Model/`，没有旁路文件可被拆走 |
 | `.gltf` + 相对 URI（有 `.bin` / 外 png 等） | `true` | **禁止**把 json / bin / png 按后缀拆到 `Model/` `Texture/` `Unknown/` |
-| JSON 写了相对 URI，但伴生缺失 | 仍 `true` | **不要**当成单文件包。补 `Warnings`（缺文件 / 可能损坏），让人评估；不要为了「能拆」把闸打成 false |
+| JSON 写了相对 URI，但伴生缺失 | 仍 `true` | **不要**当成单文件包。写入 typed `MissingUris`，同时保留 Warning 给人看；④在 Begin 前失败 |
 
 所以第 3 点 = **闸跟物理布局走，不跟产品格式名走**。全内嵌 gltf 与 GLB 共用「可拆后缀」这条能力，不是给 gltf 开第三套管线。
 
-缺文件 ≠ 无外 URI。缺的是损坏事实（Warnings），闸仍是 true。
+缺文件 ≠ 无外 URI。`HasExternalUris` 仍为 true；`MissingUris` 是独立损坏事实，并由④映射为 `FlattenFailed(40)`。
 
 ---
 
@@ -125,9 +125,10 @@ FBX = A + B + C + D + E。
 | `ImporterKind` | `ModelImporter` / `ScriptedImporter` / `Unknown` | `AssetImporter.GetAtPath` |
 | `HasExternalUris` | `bool` | ④ 拆文件**唯一闸**。见 §2 |
 | `SidecarPaths` | `List<string>` | 相对主文件解析到的 `.bin` / 外图等（可空） |
+| `MissingUris` | `List<string>` | JSON 已声明但磁盘不存在的 URI；结构化控制事实，④直接据此失败 |
 | `MainAssetOk` | `bool` | 主资产能加载为 GameObject |
 | `MaterialForm` | `SubAssetOnly` / `HasStandaloneMat` / `Unknown` | 依赖里有没有独立 `.mat` 文件 |
-| `Warnings` | `List<string>` | **非失败**。供人评估包是否残缺/损坏；默认不改 ExitCode |
+| `Warnings` | `List<string>` | 展示诊断，不参与控制流；缺伴生虽也留 Warning，但实际闸只读 `MissingUris` |
 
 启发式（可被磁盘/JSON 推翻）：
 
@@ -137,13 +138,13 @@ FBX = A + B + C + D + E。
 .gltf        → 先看 JSON URI + 伴生；全 data: 且无伴生 → false；有相对 URI → true
 ```
 
-### 6.2 Warnings 建议（评估损坏，不是步骤开关）
+### 6.2 结构化失败与 Warnings
 
-Build 时写入、Runner 打日志即可。第一刀 **不** 因 Warning 自动 Fail（残缺是否挡③由你以后另拍）。
+Build 时把缺伴生同时写入 `MissingUris` 与 Warning。Runner 不因普通 Warning 自动 Fail，但会在④ Begin 前读取 `MissingUris` 并返回 40；不得解析 Warning 文案。
 
 | 建议码/文案方向 | 何时 |
 |---|---|
-| 缺伴生 | JSON 相对 URI 指向的 `.bin`/图磁盘上没有 |
+| 缺伴生 | JSON 相对 URI 指向的 `.bin`/图磁盘上没有；同时进入 `MissingUris`，④失败 |
 | JSON 不可用 | `.gltf` 读失败 / 非对象 |
 | 主资产空 | Import 声称成功但 `LoadMainAssetAtPath` 不是 GO（应与 `MainAssetOk=false` 同时出现） |
 | 启发式被推翻 | 后缀像单文件，但扫到外 URI 或伴生 |
@@ -184,7 +185,7 @@ PipelineJobContext.Build
     → 扩展名 .gltf
     → PipelineGltfUriProbe.Apply(ctx)
          → GltfPackageFiles.Scan(磁盘路径)     ★ 只改这里
-         → 填 HasExternalUris / SidecarPaths / Warnings
+         → 填 HasExternalUris / SidecarPaths / MissingUris / Warnings
 ```
 
 | 改法 | 文件 |

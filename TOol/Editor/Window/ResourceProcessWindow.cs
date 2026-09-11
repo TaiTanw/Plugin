@@ -40,11 +40,12 @@ public class ResourceProcessWindow : EditorWindow
 
             EditorGUILayout.LabelField("自动化开关（本机 EditorPrefs，不进版本库）", EditorStyles.boldLabel);
             EditorGUILayout.HelpBox(
-                "总开关：关掉后设置自动/后处理自动都不跑；手动「执行全部」不受影响。" +
+                "总开关：关掉后用户设置自动/后处理自动都不跑；手动「执行全部」不受影响。" +
                 "与【自动化管线】导入区「总自动化处理」是同一 Prefs。\n" +
                 "设置自动：导入前改 Importer（导入区建议按需开启；Art 被 exclude，不会改交付 Importer）。\n" +
-                "模型基线例外：剔灯剔相机、OBJ 法线 Calculate 只受总开关约束，勾不勾「设置自动」都跑——" +
-                "相机灯光必须早于③生成 Prefab 剔掉，否则会被烤成节点。基线开关在 ModelProcessSettings（SO，进版本库）。\n" +
+                "模型基线例外：在 BatchFbxImportSettings 配置的导入根内，剔灯剔相机、OBJ 法线 Calculate " +
+                "不受本机总开关/分项勾选；相机灯光必须早于③生成 Prefab 剔掉，否则会被烤成节点。" +
+                "基线各项在 ModelProcessSettings（SO，进版本库）。\n" +
                 "后处理自动：导入后跑 Operation——默认跳过 Art，不保证交付生效；" +
                 "内嵌贴图/顶点色须平铺后再用下方批量路径（默认 Art）点「执行全部」。" +
                 "自动化管线⑤走的是同一按钮内核，不是这条导入自动流。\n" +
@@ -61,7 +62,10 @@ public class ResourceProcessWindow : EditorWindow
 
                 if (!ResourceProcessSwitches.MasterEnabled)
                 {
-                    EditorGUILayout.HelpBox("总开关已关闭：下方分项即使勾选也不会自动执行。", MessageType.Warning);
+                    EditorGUILayout.HelpBox(
+                        "总开关已关闭：下方用户自动分项即使勾选也不会执行；" +
+                        "配置导入根内的模型安全基线仍会执行。",
+                        MessageType.Warning);
                 }
             }
 

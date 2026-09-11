@@ -12,13 +12,25 @@ public static class FlattenCopyRunner
 {
     public static string ResolveRelativeFolder(string assetPath)
     {
+        return ResolveRelativeFolder(assetPath, FlattenCategorySettings.Load());
+    }
+
+    public static string ResolveRelativeFolder(string assetPath, FlattenOperationPolicy operationPolicy)
+    {
+        return ResolveRelativeFolder(
+            assetPath,
+            operationPolicy == null ? null : operationPolicy.Categories);
+    }
+
+    public static string ResolveRelativeFolder(string assetPath, FlattenCategorySettings settings)
+    {
         string path = (assetPath ?? string.Empty).Replace("\\", "/");
         if (!path.StartsWith("Assets/", System.StringComparison.OrdinalIgnoreCase))
         {
             return null;
         }
 
-        FlattenCategorySettings settings = FlattenCategorySettings.Load();
+        settings = settings ?? FlattenCategorySettings.CreateDefaults();
         IList<IFlattenCategoryProcessor> processors = FlattenCategoryRegistry.All;
         for (int i = 0; i < processors.Count; i++)
         {

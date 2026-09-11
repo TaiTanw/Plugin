@@ -6,7 +6,8 @@ using UnityEditor;
 //   不做任何贴图/模型处理。状态全部放 EditorPrefs（本机个人设置，不进版本库）。
 //
 // 层级：
-//   总开关 MasterEnabled —— 关掉则任何设置自动、后处理自动都不跑（手动面板仍可用）
+//   总开关 MasterEnabled —— 关掉则设置自动、后处理自动都不跑（手动面板仍可用）。
+//   D26-1 例外：配置导入根内的模型安全基线不属于用户自动策略，不受此闸控制。
 //   分项：贴图/模型 × 设置自动/后处理自动 —— 总开关打开时才生效
 //
 //   设置自动   = AssetPostprocessor 里改 Importer 参数
@@ -40,7 +41,10 @@ public static class ResourceProcessSwitches
     private static bool? masterBatchIncludeModel;
     private static bool? masterBatchIncludeMaterial;
 
-    /// <summary>总开关。默认 true。关闭后所有导入设置自动与后处理自动均不执行。</summary>
+    /// <summary>
+    /// 自动策略总开关。默认 true。关闭后设置自动与后处理自动均不执行；
+    /// 配置导入根内的模型安全基线由 ModelImportSettingsProcessor 独立保证。
+    /// </summary>
     public static bool MasterEnabled
     {
         get { return Get(ref masterEnabled, MasterEnabledKey, true); }

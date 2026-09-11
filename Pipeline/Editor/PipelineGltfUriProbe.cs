@@ -29,6 +29,7 @@ public static class PipelineGltfUriProbe
 
         for (int i = 0; i < scan.MissingUris.Count; i++)
         {
+            AddUnique(ctx.MissingUris, scan.MissingUris[i]);
             ctx.Warnings.Add("缺伴生: " + scan.MissingUris[i]);
         }
 

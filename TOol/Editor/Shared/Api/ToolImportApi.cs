@@ -349,7 +349,8 @@ public static class ToolImportApi
 
         if (scan.MissingUris.Count > 0)
         {
-            Debug.LogWarning("[1 入库] gltf 缺伴生 × " + scan.MissingUris.Count + "（ctx 会记 Warnings）");
+            Debug.LogWarning("[1 入库] gltf 缺伴生 × " + scan.MissingUris.Count +
+                             "（ctx 会记 MissingUris + Warnings，④将失败）");
         }
     }
 

@@ -15,6 +15,8 @@ public class PipelineWindow : EditorWindow
 {
     private PipelineStepSettings settings;
     private RetinarExportSettings exportSettings;
+    private FlattenOperationSettings flattenSettings;
+    private bool flattenSettingsFoldout;
     private string sourcePath = string.Empty;
     private string materialId = string.Empty;
     /// <summary>上次已为 materialId 同步过的源路径；源变化时才重写默认 Id。</summary>
@@ -51,6 +53,7 @@ public class PipelineWindow : EditorWindow
     {
         settings = PipelineStepSettings.GetOrCreateAsset();
         exportSettings = RetinarExportSettings.GetOrCreateAsset();
+        flattenSettings = FlattenOperationSettings.GetOrCreatePipelineAsset();
     }
 
     private void OnGUI()
@@ -58,6 +61,11 @@ public class PipelineWindow : EditorWindow
         if (settings == null)
         {
             settings = PipelineStepSettings.GetOrCreateAsset();
+        }
+
+        if (flattenSettings == null)
+        {
+            flattenSettings = FlattenOperationSettings.GetOrCreatePipelineAsset();
         }
 
         using (var scrollScope = new EditorGUILayout.ScrollViewScope(scroll))
@@ -114,6 +122,12 @@ public class PipelineWindow : EditorWindow
                 {
                     Selection.activeObject = RetinarExportSettings.GetOrCreateAsset();
                 }
+            }
+
+            if (GUILayout.Button("选中管线平铺 SO", GUILayout.Height(24f)))
+            {
+                Selection.activeObject = flattenSettings;
+                EditorGUIUtility.PingObject(flattenSettings);
             }
 
             if (!string.IsNullOrEmpty(lastResultText))
@@ -211,8 +225,8 @@ public class PipelineWindow : EditorWindow
             if (!ResourceProcessSwitches.MasterEnabled)
             {
                 EditorGUILayout.HelpBox(
-                    "总闸已关：ImportAsset 仍会入库，但设置自动 / 后处理自动回调里直接 return，不改 Importer、不跑导入期 Op。\n" +
-                    "资源总面板里的分项勾选此时无效。⑤ 手动总批量不受此闸影响。",
+                    "总闸已关：ImportAsset 仍会入库；配置导入根内的模型安全基线（剔灯剔相机 / OBJ 法线）仍会写入。\n" +
+                    "用户设置自动 / 后处理自动不执行，资源总面板里的分项勾选此时无效。⑤ 手动总批量不受此闸影响。",
                     MessageType.Warning);
             }
             else
@@ -280,8 +294,16 @@ public class PipelineWindow : EditorWindow
             }
 
             EditorGUILayout.HelpBox(
-                "须开前一步才能开后一步。④ 根路径写死 Assets/Art；开④+⑤时扫本次 Art 单元（D17）。",
+                "须开前一步才能开后一步。④ 根路径写死 Assets/Art；详细分类、清夹和碰撞体来自管线平铺 SO，并在运行前冻结。",
                 MessageType.None);
+
+            flattenSettingsFoldout = EditorGUILayout.Foldout(
+                flattenSettingsFoldout, "④ 管线平铺操作配置", true);
+            if (flattenSettingsFoldout)
+            {
+                FlattenOperationSettingsGui.Draw(
+                    flattenSettings, FlattenSettingsScope.Pipeline, drawCategories: true);
+            }
 
             EditorGUILayout.Space(4f);
             if (sourceBindings.Count > 1)

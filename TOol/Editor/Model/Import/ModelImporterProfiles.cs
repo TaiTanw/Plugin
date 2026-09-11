@@ -10,7 +10,7 @@ using UnityEditor;
 //
 // 现网分区：
 //   Incoming —— 只由本类 ApplyIncoming* 写，入口是 ModelImportSettingsProcessor。
-//   Art      —— 只由 ApplyArtDelivery 写，入口是 ④ FlattenApplyImportAndExtract。
+//   Art      —— 只由 ApplyArtDelivery 写，入口是 ④ FlattenBuildService.ApplyImportAndExtract。
 // Art 路径在 Processor 里硬跳过（不只靠 SO 排除表），清空 excludedPathPrefixes 也不能复现打架。
 // =====================================================================================
 
@@ -25,8 +25,8 @@ public static class ModelImporterProfiles
         }
 
         string p = assetPath.Replace("\\", "/");
-        return p.Equals(RetinarPaths.ArtRoot, StringComparison.OrdinalIgnoreCase) ||
-               p.StartsWith(RetinarPaths.ArtRoot + "/", StringComparison.OrdinalIgnoreCase);
+        return p.Equals(FlattenBuildSettings.ArtRoot, StringComparison.OrdinalIgnoreCase) ||
+               p.StartsWith(FlattenBuildSettings.ArtRoot + "/", StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>导入区基线。读 SO，不写材质来源。</summary>

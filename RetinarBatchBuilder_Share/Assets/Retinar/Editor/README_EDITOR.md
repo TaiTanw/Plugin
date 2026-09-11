@@ -8,9 +8,10 @@
 
 | 入口 | 何时用 | 会不会改 Art / Prefab | Deliverables |
 |------|--------|----------------------|--------------|
-| 管线 ④ `RetinarFlattenApi.FlattenPaths` | 管线主路径（唯一调用方：`PipelineRunner`） | 写入 `Assets/Art/<名>/…` | 无（出包是 ⑥） |
-| **批量汇总 → 平铺到 Art（选中）** | 手工把外部 FBX/Prefab 整理进规范目录 | 同上 | 无 |
-| **批量汇总 → 平铺分类面板** | 勾选大类、改后缀；看只读输出路径 | 否（只改本机 EditorPrefs） | 无 |
+| 管线 ④ `ToolFlattenApi` | 管线主路径（`PipelineRunner` → 插件 2 `Generated/Flatten`） | 写入 `Assets/Art/<名>/…` | 无（出包是 ⑥） |
+| **批量汇总 → 平铺到 Art（选中）** | 人工普通分支 B；随后执行完整④ | 同上 | 无 |
+| **批量汇总 → 原子迁移到 Art** | 相对 URI glTF 走 B′；随后执行完整④ | 同上；缺伴生拒绝 | 无 |
+| **批量汇总 → 平铺操作与配置面板** | 拖入平铺 SO、编辑人工目录资产、执行上述两个完整相位入口 | 配置本身不改 Art；按钮会改 | 无 |
 | **打开交付文件夹** | 验收 | 否 | 打开工程根 `Deliverables/` |
 | 管线 ⑥ `RetinarAbApi` | 出包 | **不改** Art | `02_unity` + `03_assetbundles` |
 
@@ -20,34 +21,26 @@
 
 ```text
 Assets/Retinar/Editor/
-  00_RetinarPaths.cs           路径常量
+  00_RetinarPaths.cs           路径常量（ArtRoot 须与 FlattenBuildSettings 同字面量）
   00_RetinarEditorUtil.cs      弹窗/安全名/开交付夹
-  01_RetinarMenu.cs            仅 MenuItem（平铺两项 + 打开交付夹）
-  10_Flatten/
-    RetinarFlattenScheduler.cs 平铺调度 → Legacy
-    FlattenLayout.cs           Art/<名>/ 单元路径（夹名来自 Processor const）
-    FlattenCopyRunner.cs       依赖分类：无人认领 → Unknown/
-    FlattenReferenceAudit.cs   源预制体 Missing 提醒（只打 Error，不修复）
-    FlattenAnimationClipRemapper.cs 原地改 m_PPtrCurves classID 23；删错误绑定重复曲线
-    FlattenPostProcessSettings.cs  后处理开关（本期：是否加碰撞体）
-    FlattenWindow.cs           分类面板（勾选+后缀）
-    Category/                  大类处理器 + 注册表
+  01_RetinarMenu.cs            仅 MenuItem（平铺两项转调插件 2 + 打开交付夹）
   20_Package/
     RetinarDeliverableIo.cs    02/03 目录写出（⑥ RetinarAbApi 在用）
   40_Api/
-    RetinarFlattenApi.cs       ④ 窄口
     RetinarAbApi.cs            ⑥ 窄口
   README_EDITOR.md             本文件
-  RetinarBatchModelBuilder*.cs Legacy：平铺规范化（暂不拆碎）
 ```
 
-建议阅读顺序：`01_RetinarMenu` → `RetinarFlattenScheduler` → 需要改规范化时再进 `RetinarBatchModelBuilder.cs`。
+④ 平铺实现：`Assets/Plugin/TOol/Editor/Generated/Flatten/`（`ToolFlattenApi`）。
+
+建议阅读顺序：`01_RetinarMenu` → 插件 2 `Generated/Flatten/README.md`。
 
 ## 3. 数据流
 
 ```text
-管线 / 菜单平铺：外部 Prefab/FBX
-  → FlattenPaths / FlattenScheduler → CreateNormalizedPrefab（Legacy）
+管线 / 菜单平铺：外部 Prefab/FBX/glTF
+  → PipelineRunner 或 ManualFlattenService
+  → Begin → (B 分类拆分 | B′ 原子迁移) → E? → D → C → Finish
      Prefab：拷依赖 + 套空父外壳（不缩放）+ 可选碰撞体 + 可选 OBJ 轴向修正
      FBX：空根 + 子模型 SafeZone 缩放（暂保持）
   → Assets/Art/<名>/{Model,image/Texture,Material,Prefab,…}
@@ -60,7 +53,7 @@ Assets/Retinar/Editor/
 
 ## 4. 为何 Legacy 暂不拆
 
-`CreatePackagedAdjustedPrefab` 与 AssetResolution 强耦合（Extract、顶点色、外部依赖自愈）。自愈主调用已在平铺结束。形态见 backlog D24-5：在插件 1 内部把 `FlattenPaths` 拆薄成能力方法，不搬目录。
+`RetinarBatchModelBuilder` 三份 partial 已物理迁到插件 2，但仍把菜单、管线④、Extract、外部依赖自愈等混在约 3,500 行内。当前 ctx 驱动的相位编排暂归中间层；后续按能力文件逐刀拆，不再一次性切大文件。详见 D24 边界计划。
 
 ## 5. 常量同步
 

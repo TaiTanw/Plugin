@@ -1,9 +1,21 @@
-# D13 · GLB 安卓洋红 / 交付 Shader（归档）
+# D13 · GLB 安卓洋红 / 交付 Shader（主体归档；R1 验证中）
 
 > 从 backlog **H** 抽出；**D13 已归类完成**（工程结构 + ggdddd 安卓验通）。  
-> 残余：完整槽表、纯 URP 若仍洋红换 Lit、D15 单单元路径 —— 低优 / 遇到再说。
+> 2026-09-10 重开 **D13-R1**：歼15 glTF 暴露“Shader 已换对、透明模式却被⑤写死 Opaque”的残余正确性问题。
 
 返回 [backlog](./backlog.md) · [总目录](../README.md)
+
+## D13-R1 · glTF 窗户发黄（2026-09-10）
+
+| 项 | 结论 |
+|---|---|
+| 样本事实 | 原始歼15 glTF 有 41 个材质；ID03、05、20、25 明确声明 `alphaMode=BLEND`。ID20 为黄橙色、alpha≈0.1，并被窗户网格引用 |
+| 故障 | `NormalizeDeliverableShaderOperation` 换成 Standard 后统一 `_Mode=0`，没有恢复混合、ZWrite、队列和透明关键字，导致 4 个 BLEND 全变 Opaque |
+| 归属 | **插件 2 / ⑤ Material OP**。这是单个材质的渲染契约，不属于模型级 `PipelineJobContext`，也不改④或 B/B′ |
+| 修复 | 换 Shader 前捕获 Opaque/Cutout/Blend 与 cutoff；换后写回 Standard 完整状态。glTF `BLEND` 映射 Standard Fade（Mode 2），并清理 UnityGLTF 遗留透明关键字 |
+| 防误判 | 不用 `_Color.a` 单独猜透明；只认 Surface 属性、RenderType、渲染队列与透明/裁切关键字 |
+| 自动测试 | 7 个 EditMode 测试通过：Opaque、Cutout、Blend、cutoff、三模式往返、低 alpha 的 Opaque 不误判 |
+| 当前闸 | 代码完成；**尚未覆盖现有 Art**。须从原始 glTF 重跑④⑤，验收 4 Fade / 37 Opaque、ID20 窗户，再打移动端 AB 后归档 R1 |
 
 ## 原 H 全文
 

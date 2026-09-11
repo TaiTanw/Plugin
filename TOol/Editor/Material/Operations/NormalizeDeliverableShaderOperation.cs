@@ -4,12 +4,27 @@ using UnityEngine.Rendering;
 
 // =====================================================================================
 // 交付 Shader 规范化：不合规 .mat（如 UnityGLTF PBRGraph）→ 目标 Shader（默认 Standard）
-// + 基础属性槽映射。第一刀对齐 FBX 现网能亮。
+// + 基础属性槽映射，并保留材质自身的 Opaque / Cutout / Blend 语义。
 // =====================================================================================
 
 /// <summary>把交付材质烤到 APP 可解析的 Shader。</summary>
 public class NormalizeDeliverableShaderOperation : IMaterialAssetOperation
 {
+    private static readonly string[] SourceSurfaceKeywords =
+    {
+        "_ALPHATEST_ON",
+        "_ALPHABLEND_ON",
+        "_ALPHAPREMULTIPLY_ON",
+        "_SURFACE_TYPE_TRANSPARENT",
+        "_BUILTIN_ALPHATEST_ON",
+        "_BUILTIN_AlphaClip",
+        "_BUILTIN_ALPHABLEND_ON",
+        "_BUILTIN_ALPHAPREMULTIPLY_ON",
+        "_BUILTIN_SURFACE_TYPE_TRANSPARENT",
+        "_DISABLE_SSR_TRANSPARENT",
+        "_ENABLE_FOG_ON_TRANSPARENT"
+    };
+
     public string Id
     {
         get { return MaterialProcessSettings.OpNormalizeDeliverableShader; }
@@ -25,7 +40,7 @@ public class NormalizeDeliverableShaderOperation : IMaterialAssetOperation
         get
         {
             return "将 UnityGLTF/PBRGraph 等不合规材质烘焙到目标 Shader（默认 Standard），" +
-                   "并映射 baseColor→_MainTex/_Color 等基础槽。用于消除 APP 整片洋红。";
+                   "映射基础槽并保留透明/裁切语义。用于消除 APP 洋红与透明材质失真。";
         }
     }
 
@@ -114,7 +129,7 @@ public class NormalizeDeliverableShaderOperation : IMaterialAssetOperation
 
         string oldName = material.shader != null ? material.shader.name : "(null)";
 
-        // 先读旧槽（换 Shader 后属性名会丢）
+        // 先读旧槽与表面类型（换 Shader 后源属性名会丢）
         Texture baseMap = GetTex(material, "baseColorTexture", "_BaseMap", "_MainTex");
         Color baseColor = GetColor(material, "baseColorFactor", "_BaseColor", "_Color", Color.white);
         Texture normalMap = GetTex(material, "normalTexture", "_BumpMap", "_NormalMap");
@@ -126,6 +141,7 @@ public class NormalizeDeliverableShaderOperation : IMaterialAssetOperation
         float glossiness = roughness >= 0f
             ? Mathf.Clamp01(1f - roughness)
             : GetFloat(material, "_Glossiness", "_Smoothness", 0.5f);
+        MaterialSurfaceSnapshot surface = CaptureSurface(material);
 
         material.shader = target;
 
@@ -179,14 +195,110 @@ public class NormalizeDeliverableShaderOperation : IMaterialAssetOperation
             material.SetFloat("_Glossiness", glossiness);
         }
 
-        // Opaque
-        if (material.HasProperty("_Mode"))
-        {
-            material.SetFloat("_Mode", 0f);
-        }
+        ApplyTargetSurface(material, surface);
 
         EditorUtility.SetDirty(material);
-        return MaterialOperationResult.Changed(oldName + " → " + targetName);
+        return MaterialOperationResult.Changed(
+            oldName + " → " + targetName + "；表面=" + surface.Mode);
+    }
+
+    /// <summary>
+    /// 在替换 Shader 前捕获材质自己的表面契约。颜色 alpha 只是颜色数据，
+    /// 不能单独证明材质声明为透明，因此不参与分类。
+    /// </summary>
+    internal static MaterialSurfaceSnapshot CaptureSurface(Material material)
+    {
+        float cutoff = GetFirstFloat(
+            material,
+            0.5f,
+            "_Cutoff",
+            "alphaCutoff",
+            "_AlphaCutoff");
+
+        string renderType = material != null
+            ? material.GetTag("RenderType", false, string.Empty)
+            : string.Empty;
+
+        if (HasAnyEnabledFloat(material, "_BUILTIN_AlphaClip", "_AlphaClip", "_AlphaClipEnabled") ||
+            HasMode(material, 1f) ||
+            HasKeyword(material, "_ALPHATEST_ON", "_BUILTIN_ALPHATEST_ON", "_BUILTIN_AlphaClip") ||
+            string.Equals(renderType, "TransparentCutout", System.StringComparison.OrdinalIgnoreCase) ||
+            (material != null && material.renderQueue == (int)RenderQueue.AlphaTest))
+        {
+            return new MaterialSurfaceSnapshot(MaterialSurfaceMode.Cutout, cutoff);
+        }
+
+        if (HasAnyEnabledFloat(material, "_BUILTIN_Surface", "_Surface") ||
+            HasMode(material, 2f, 3f) ||
+            HasKeyword(
+                material,
+                "_ALPHABLEND_ON",
+                "_ALPHAPREMULTIPLY_ON",
+                "_SURFACE_TYPE_TRANSPARENT",
+                "_BUILTIN_ALPHABLEND_ON",
+                "_BUILTIN_ALPHAPREMULTIPLY_ON",
+                "_BUILTIN_SURFACE_TYPE_TRANSPARENT") ||
+            string.Equals(renderType, "Transparent", System.StringComparison.OrdinalIgnoreCase) ||
+            (material != null && material.renderQueue >= (int)RenderQueue.Transparent))
+        {
+            return new MaterialSurfaceSnapshot(MaterialSurfaceMode.Blend, cutoff);
+        }
+
+        return new MaterialSurfaceSnapshot(MaterialSurfaceMode.Opaque, cutoff);
+    }
+
+    /// <summary>把已捕获的表面契约应用到目标 Shader；当前完整覆盖 Standard，并兼容常见 _Surface 目标。</summary>
+    internal static void ApplyTargetSurface(Material material, MaterialSurfaceSnapshot surface)
+    {
+        if (material == null)
+        {
+            return;
+        }
+
+        bool cutout = surface.Mode == MaterialSurfaceMode.Cutout;
+        bool blend = surface.Mode == MaterialSurfaceMode.Blend;
+        bool usesSurfaceProperty = material.HasProperty("_Surface");
+
+        SetFloatIfPresent(material, "_Mode", cutout ? 1f : blend ? 2f : 0f);
+        SetFloatIfPresent(material, "_Surface", blend ? 1f : 0f);
+        SetFloatIfPresent(material, "_BUILTIN_Surface", blend ? 1f : 0f);
+        SetFloatIfPresent(material, "_AlphaClip", cutout ? 1f : 0f);
+        SetFloatIfPresent(material, "_BUILTIN_AlphaClip", cutout ? 1f : 0f);
+        ClearSurfaceKeywords(material);
+
+        if (cutout)
+        {
+            material.SetOverrideTag("RenderType", "TransparentCutout");
+            SetIntIfPresent(material, "_SrcBlend", (int)BlendMode.One);
+            SetIntIfPresent(material, "_DstBlend", (int)BlendMode.Zero);
+            SetIntIfPresent(material, "_ZWrite", 1);
+            SetFloatIfPresent(material, "_Cutoff", surface.Cutoff);
+            material.EnableKeyword("_ALPHATEST_ON");
+            material.renderQueue = (int)RenderQueue.AlphaTest;
+            return;
+        }
+
+        if (blend)
+        {
+            material.SetOverrideTag("RenderType", "Transparent");
+            SetIntIfPresent(material, "_SrcBlend", (int)BlendMode.SrcAlpha);
+            SetIntIfPresent(material, "_DstBlend", (int)BlendMode.OneMinusSrcAlpha);
+            SetIntIfPresent(material, "_ZWrite", 0);
+            material.EnableKeyword("_ALPHABLEND_ON");
+            if (usesSurfaceProperty)
+            {
+                material.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+            }
+
+            material.renderQueue = (int)RenderQueue.Transparent;
+            return;
+        }
+
+        material.SetOverrideTag("RenderType", "Opaque");
+        SetIntIfPresent(material, "_SrcBlend", (int)BlendMode.One);
+        SetIntIfPresent(material, "_DstBlend", (int)BlendMode.Zero);
+        SetIntIfPresent(material, "_ZWrite", 1);
+        material.renderQueue = (int)RenderQueue.Geometry;
     }
 
     private static Texture GetTex(Material material, params string[] names)
@@ -244,5 +356,123 @@ public class NormalizeDeliverableShaderOperation : IMaterialAssetOperation
         }
 
         return fallback;
+    }
+
+    private static float GetFirstFloat(Material material, float fallback, params string[] names)
+    {
+        if (material == null || names == null)
+        {
+            return fallback;
+        }
+
+        for (int i = 0; i < names.Length; i++)
+        {
+            if (!string.IsNullOrEmpty(names[i]) && material.HasProperty(names[i]))
+            {
+                return material.GetFloat(names[i]);
+            }
+        }
+
+        return fallback;
+    }
+
+    private static bool HasAnyEnabledFloat(Material material, params string[] names)
+    {
+        if (material == null || names == null)
+        {
+            return false;
+        }
+
+        for (int i = 0; i < names.Length; i++)
+        {
+            if (!string.IsNullOrEmpty(names[i]) &&
+                material.HasProperty(names[i]) &&
+                material.GetFloat(names[i]) > 0.5f)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool HasMode(Material material, params float[] expectedModes)
+    {
+        if (material == null || !material.HasProperty("_Mode") || expectedModes == null)
+        {
+            return false;
+        }
+
+        float actual = material.GetFloat("_Mode");
+        for (int i = 0; i < expectedModes.Length; i++)
+        {
+            if (Mathf.Approximately(actual, expectedModes[i]))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool HasKeyword(Material material, params string[] keywords)
+    {
+        if (material == null || keywords == null)
+        {
+            return false;
+        }
+
+        for (int i = 0; i < keywords.Length; i++)
+        {
+            if (material.IsKeywordEnabled(keywords[i]))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static void ClearSurfaceKeywords(Material material)
+    {
+        for (int i = 0; i < SourceSurfaceKeywords.Length; i++)
+        {
+            material.DisableKeyword(SourceSurfaceKeywords[i]);
+        }
+    }
+
+    private static void SetFloatIfPresent(Material material, string propertyName, float value)
+    {
+        if (material.HasProperty(propertyName))
+        {
+            material.SetFloat(propertyName, value);
+        }
+    }
+
+    private static void SetIntIfPresent(Material material, string propertyName, int value)
+    {
+        if (material.HasProperty(propertyName))
+        {
+            material.SetInt(propertyName, value);
+        }
+    }
+}
+
+internal enum MaterialSurfaceMode
+{
+    Opaque,
+    Cutout,
+    Blend
+}
+
+internal struct MaterialSurfaceSnapshot
+{
+    public readonly MaterialSurfaceMode Mode;
+    public readonly float Cutoff;
+
+    public MaterialSurfaceSnapshot(MaterialSurfaceMode mode, float cutoff)
+    {
+        Mode = mode;
+        Cutoff = Mathf.Clamp01(cutoff);
     }
 }

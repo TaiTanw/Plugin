@@ -41,10 +41,11 @@
 
 | 来源 | 描述 |
 |---|---|
-| `PipelineJobContext` | **事实**（2.5）：后缀、Importer、外 URI、伴生、Warnings |
+| `PipelineJobContext` | **事实**（2.5）：后缀、Importer、外 URI、伴生、typed `MissingUris`、Warnings |
 | `PipelineOptions` / 步骤 SO | **目的**：开不开 ③④⑤⑥ |
+| `FlattenOperationPolicy` | **④操作快照**：来自人工或管线 `FlattenOperationSettings` SO；分类、清夹、碰撞体 |
 
-③ **不读** ctx。④ **不读** ctx 类型，只收 Runner 用 `PipelineFlattenBridge` 映射后的 `RetinarFlattenOptions`。
+③ **不读** ctx。④ **读 ctx**：`ToolFlattenApi` 用 `HasExternalUris` 选 B/B′、用 `ImporterKind` 决定是否跑 E。轴向不在 ctx，走 `ToolFlattenRequest.ConvertZUpToYUp`（绑定行）。
 
 ---
 
@@ -171,8 +172,8 @@ PipelineJobContext.Build(工程内主路径)
 |---|---|
 | **入** | **每一份** 入库成功的模型 |
 | **出** | `JobContexts` 与 `ModelPaths` 对齐；`JobContext` = 第一份 |
-| **失败** | 只 Warning；不单独改退出码 |
-| **给谁** | 仅④经 Bridge → `RetinarFlattenOptions`（B′ / 清 Art 夹）。③ 仍不读 |
+| **失败** | Build 本身不改退出码；普通 Warning 仅展示。`MissingUris` 由④在 Begin 前映射为 40 |
+| **给谁** | 仅④经 `ToolFlattenApi` → `RetinarFlattenOptions`（B′ / 清 Art 夹）。③ 仍不读 |
 
 无文件夹 ctx：父目录几个内核文件只用于建议 ID2，不进本类型。
 
@@ -191,31 +192,34 @@ List<string> BuildPrefabs(IList<string> sourceModelPaths, string materialId = nu
 
 一个 `materialId` 罩 N 个模型时内核会追加 stem，**那不是工单多 ID2**。Runner 已改为逐条调用，避免踩这条。
 
-### ④ `RetinarFlattenApi` 能力组合
+### ④ `ToolFlattenApi` 能力组合
 
 管线④不再调 `FlattenPaths`。按行：
 
 ```text
-TryBegin(prefab, options, out work)           // 0 清单元夹 + A 写 Prefab
-SkipDependencySplit ? RelocateAtomic(work)    // B′
-                    : SplitDependencies(work) // B
-ApplyImportAndExtract(work)                   // E
+request = ForPipeline(options.FlattenPolicy)
+request.ConvertZUpToYUp = binding.ConvertZUpToYUp
+TryBegin(prefab, ctx, request, out work)      // 0 清单元夹 + A 写 Prefab
+ShouldRelocateAtomic(ctx) ? RelocateAtomic(work) : SplitDependencies(work)
+ApplyImportAndExtract(work, ctx)              // E；非 ModelImporter 跳过
 Remap(work)                                   // D
 CopyRendererMaterials(work)                   // C
 TryFinish(work)                               // 自愈 / 空壳 / 动画 / AB 名
 ```
 
-`FlattenPaths` 仍给菜单（含 FBX 直平铺那条 `CreateNormalizedPrefab`）。
+`FlattenPaths` 仍给菜单（含 FBX 直平铺那条 `CreateNormalizedPrefab`）。**管线禁止调它。**
 
 | | 现网 |
 |---|---|
-| **入** | **按行** ③ 的该 Prefab + Bridge(该行 ctx)：`ClearDestinationArtFolder=true`；`HasExternalUris` → B′；绑定行 `ConvertZUpToYUp` → Finish 里叠 −90°X |
+| **入** | **按行** ③ 的该 Prefab + ctx + request：管线 SO policy 提供分类/清夹/碰撞体；`HasExternalUris` → B′；绑定行 `ConvertZUpToYUp` → Finish 里叠 −90°X |
 | **出** | 各行 `work.PrefabPath` 拼成列表，**覆盖** 局部 `prefabPaths` |
 | **旁路** | 各 Art 单元根 → `PostProcessFolderPaths`（⑤开且该字段仍空） |
-| **失败** | 任一步 false 或 Prefab 路径空 → 40 |
+| **失败** | typed `MissingUris` 非空，或任一步 false / Prefab 路径空 → 40 |
 | **给谁** | ⑥ 用 Art Prefab；⑤ 用单元根 |
 
 gltf 整包：②/1 已入库伴生；④ 禁止按后缀拆相对 URI。不是新相位。
+
+人工面板也调用同一套完整④组合，但提供两个显式入口选择 B 或 B′。人工点击时从选中的模型或 Prefab 依赖构建一次 ctx；并非把 B/B′ 暴露成跑完即停的裸步骤。
 
 ### ⑤ `ToolPostProcessApi.RunMasterBatch`
 
@@ -235,6 +239,7 @@ gltf 整包：②/1 已入库伴生；④ 禁止按后缀拆相对 URI。不是�
 | `SourceBindings` | **Runner 主输入**（source + ID2） |
 | `MaterialId` | 单行 ID2；多行以 Bindings 各行为准（同步为第一行） |
 | `RunImport/…` | 开不开步 |
+| `FlattenPolicy` | `PipelineStepSettings.ApplyTo` 从固定管线平铺 SO 生成；运行中的分类、清夹、碰撞体快照 |
 | `ModelPaths` | 1 写出、③ 按行读 |
 | `PrefabPaths` | 关③时预填⑥ |
 | `PostProcessFolderPaths` | ④→⑤；多单元累加各 `Art/<ID2>/` |

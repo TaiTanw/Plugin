@@ -22,6 +22,17 @@ public static partial class RetinarBatchModelBuilder
         var copied = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         flattenOptions = flattenOptions ?? RetinarFlattenOptions.Default;
 
+        if (flattenOptions.MissingUris != null && flattenOptions.MissingUris.Count > 0)
+        {
+            for (int i = 0; i < flattenOptions.MissingUris.Count; i++)
+            {
+                Debug.LogError("[Retinar] B′ 缺必需伴生: " + flattenOptions.MissingUris[i]);
+            }
+
+            Debug.LogError("[Retinar] B′ 已拒绝：缺必需伴生 × " + flattenOptions.MissingUris.Count);
+            return null;
+        }
+
         string primary = (flattenOptions.PrimaryAssetPath ?? string.Empty).Replace("\\", "/");
         if (string.IsNullOrEmpty(primary))
         {
@@ -55,13 +66,16 @@ public static partial class RetinarBatchModelBuilder
 
         AddUniquePath(sources, primary);
 
+        bool allCopied = true;
+        int copiedFileCount = 0;
         for (int i = 0; i < sources.Count; i++)
         {
             string src = sources[i];
             string srcFull = ResolveFullPath(src);
             if (string.IsNullOrEmpty(srcFull) || !File.Exists(srcFull))
             {
-                Debug.LogWarning("[Retinar] B′ 跳过缺失: " + src);
+                Debug.LogError("[Retinar] B′ 必需输入在执行时已缺失: " + src);
+                allCopied = false;
                 continue;
             }
 
@@ -71,7 +85,8 @@ public static partial class RetinarBatchModelBuilder
             if (!destAsset.StartsWith(destRoot + "/", StringComparison.OrdinalIgnoreCase) &&
                 !destAsset.Equals(destRoot, StringComparison.OrdinalIgnoreCase))
             {
-                Debug.LogWarning("[Retinar] B′ 拒绝跳出原子夹: " + src + " → " + destAsset);
+                Debug.LogError("[Retinar] B′ 拒绝跳出原子夹: " + src + " → " + destAsset);
+                allCopied = false;
                 continue;
             }
             string destFolder = Path.GetDirectoryName(destAsset);
@@ -81,15 +96,33 @@ public static partial class RetinarBatchModelBuilder
             }
 
             string copiedPath = CopyPackageFileToArt(src, srcFull, destAsset);
-            if (!string.IsNullOrEmpty(copiedPath) &&
-                !copiedPath.Equals(src, StringComparison.OrdinalIgnoreCase))
+            string copiedFull = ResolveFullPath(copiedPath);
+            if (string.IsNullOrEmpty(copiedPath) ||
+                !copiedPath.Equals(destAsset, StringComparison.OrdinalIgnoreCase) ||
+                string.IsNullOrEmpty(copiedFull) ||
+                !File.Exists(copiedFull))
+            {
+                Debug.LogError("[Retinar] B′ 未生成必需目标: " + src + " → " + destAsset);
+                allCopied = false;
+                continue;
+            }
+
+            copiedFileCount++;
+            if (!copiedPath.Equals(src, StringComparison.OrdinalIgnoreCase))
             {
                 copied[NormalizeAssetOrFull(src)] = copiedPath;
             }
         }
 
         AssetDatabase.Refresh();
-        Debug.Log("[Retinar] B′ 原子搬迁 " + copied.Count + " 条 → " + destRoot);
+        if (!allCopied || copiedFileCount != sources.Count)
+        {
+            Debug.LogError("[Retinar] B′ 原子搬迁不完整：成功 " + copiedFileCount +
+                           " / 必需 " + sources.Count + " → " + destRoot);
+            return null;
+        }
+
+        Debug.Log("[Retinar] B′ 原子搬迁 " + copiedFileCount + " 条 → " + destRoot);
         return copied;
     }
 

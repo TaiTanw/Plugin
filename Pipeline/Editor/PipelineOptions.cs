@@ -6,7 +6,7 @@ using System.Collections.Generic;
 
 /// <summary>
 /// 一次运行的选项。步骤开关默认来自 <see cref="PipelineStepSettings"/>（SO）；
-/// 资源总面板的「设置自动」等仍用 EditorPrefs，本类不写入那些开关。
+/// 平铺详细配置从 SO 冻结到 <see cref="FlattenPolicy"/>；运行中不再读 EditorPrefs。
 /// </summary>
 public sealed class PipelineOptions
 {
@@ -36,6 +36,10 @@ public sealed class PipelineOptions
 
     /// <summary>禁止 DisplayDialog（编排默认 true）。</summary>
     public bool Quiet = true;
+
+    /// <summary>④开始前从管线平铺 SO 冻结的本趟配置。</summary>
+    public FlattenOperationPolicy FlattenPolicy =
+        FlattenOperationPolicy.CreateDefaults(FlattenSettingsScope.Pipeline);
 
     /// <summary>CLI/任务 Id；非空时 1 入库夹名与 ③ Prefab 名都用它（D10-1）。</summary>
     public string MaterialId;

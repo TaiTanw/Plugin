@@ -13,7 +13,11 @@ using UnityEngine;
 /// <summary>平铺时把 AnimationClip 对象曲线改到本包材质。</summary>
 public static class FlattenAnimationClipRemapper
 {
-    public static void CopyAndRemapPrefabClips(string prefabPath, string assetFolder, string assetName)
+    public static void CopyAndRemapPrefabClips(
+        string prefabPath,
+        string assetFolder,
+        string assetName,
+        FlattenOperationPolicy operationPolicy)
     {
         if (string.IsNullOrEmpty(prefabPath) || string.IsNullOrEmpty(assetFolder))
         {
@@ -43,7 +47,8 @@ public static class FlattenAnimationClipRemapper
                 for (int c = 0; c < clips.Length; c++)
                 {
                     removedDupes += RemoveDuplicatePPtrCurves(clips[c]);
-                    remapped += RemapClipInPlace(clips[c], searchRoot, assetFolder, leftover);
+                    remapped += RemapClipInPlace(
+                        clips[c], searchRoot, assetFolder, operationPolicy, leftover);
                 }
             }
 
@@ -194,6 +199,7 @@ public static class FlattenAnimationClipRemapper
         AnimationClip clip,
         Transform searchRoot,
         string assetFolder,
+        FlattenOperationPolicy operationPolicy,
         List<string> leftover)
     {
         SerializedObject serializedClip = new SerializedObject(clip);
@@ -228,7 +234,8 @@ public static class FlattenAnimationClipRemapper
                 SerializedProperty keyProp = keyframes.GetArrayElementAtIndex(k);
                 keys[k].time = keyProp.FindPropertyRelative("time").floatValue;
                 Object current = keyProp.FindPropertyRelative("value").objectReferenceValue;
-                Object replacement = ResolveCurveValue(current, path, attribute, bindingType, searchRoot, assetFolder);
+                Object replacement = ResolveCurveValue(
+                    current, path, attribute, bindingType, searchRoot, assetFolder, operationPolicy);
                 if (replacement != null)
                 {
                     keys[k].value = replacement;
@@ -316,11 +323,12 @@ public static class FlattenAnimationClipRemapper
         string attribute,
         System.Type bindingType,
         Transform searchRoot,
-        string assetFolder)
+        string assetFolder,
+        FlattenOperationPolicy operationPolicy)
     {
         if (current != null)
         {
-            Object copied = CopyIntoPackIfExternal(current, assetFolder);
+            Object copied = CopyIntoPackIfExternal(current, assetFolder, operationPolicy);
             if (copied != null)
             {
                 return copied;
@@ -330,7 +338,10 @@ public static class FlattenAnimationClipRemapper
         return FindFallbackOnPrefab(path, attribute, bindingType, searchRoot);
     }
 
-    private static Object CopyIntoPackIfExternal(Object source, string assetFolder)
+    private static Object CopyIntoPackIfExternal(
+        Object source,
+        string assetFolder,
+        FlattenOperationPolicy operationPolicy)
     {
         string sourcePath = AssetDatabase.GetAssetPath(source).Replace("\\", "/");
         if (string.IsNullOrEmpty(sourcePath))
@@ -343,7 +354,7 @@ public static class FlattenAnimationClipRemapper
             return source;
         }
 
-        string relative = FlattenCopyRunner.ResolveRelativeFolder(sourcePath);
+        string relative = FlattenCopyRunner.ResolveRelativeFolder(sourcePath, operationPolicy);
         if (string.IsNullOrEmpty(relative))
         {
             return source;

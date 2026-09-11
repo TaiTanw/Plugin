@@ -359,7 +359,10 @@ public static partial class RetinarBatchModelBuilder
     /// 旧逻辑在"材质已在 Art"时直接 continue，导致材质仍引用导入区 .fbm 的情况
     /// 完全得不到自愈（Plane_Jian31：Texture 已拷进 Art，但依赖校验仍报 AAA/.../fbx.fbm）。
     /// </summary>
-    private static bool TryHealExternalDependencies(GeneratedAsset asset, out List<string> healedPaths)
+    private static bool TryHealExternalDependencies(
+        GeneratedAsset asset,
+        FlattenOperationPolicy operationPolicy,
+        out List<string> healedPaths)
     {
         healedPaths = new List<string>();
         string materialFolder = FlattenLayout.MaterialFolder(asset.AssetFolder);
@@ -400,6 +403,16 @@ public static partial class RetinarBatchModelBuilder
                     {
                         string targetMaterialPath = materialFolder + "/" + Path.GetFileName(materialPath);
                         string copiedMaterialPath = CopyAssetToExactPath(materialPath, targetMaterialPath);
+                        if (string.IsNullOrEmpty(copiedMaterialPath) ||
+                            copiedMaterialPath.Equals(materialPath, StringComparison.OrdinalIgnoreCase) ||
+                            !copiedMaterialPath.StartsWith(asset.AssetFolder + "/", StringComparison.OrdinalIgnoreCase))
+                        {
+                            Debug.LogError(
+                                "[Retinar] 自愈复制外部材质失败，拒绝直接修改源材质: " +
+                                materialPath + " -> " + targetMaterialPath);
+                            continue;
+                        }
+
                         Material copiedMaterial = AssetDatabase.LoadAssetAtPath<Material>(copiedMaterialPath);
                         if (copiedMaterial == null)
                         {
@@ -438,7 +451,7 @@ public static partial class RetinarBatchModelBuilder
             PrefabUtility.UnloadPrefabContents(instance);
         }
 
-        if (CopyRemainingExternalDependencies(asset, healedPaths))
+        if (CopyRemainingExternalDependencies(asset, operationPolicy, healedPaths))
         {
             changed = true;
         }
@@ -465,7 +478,7 @@ public static partial class RetinarBatchModelBuilder
         // 切断 Model FBX 对导入区 .fbm 的依赖：
         // materialSearch=Local 不够——内嵌贴图提取仍会复用工程里已有的同名 .fbm。
         // 必须 ExtractTextures 到本模型 Texture/，再按文件名把外部依赖 remap 回来。
-        if (ExtractAndBindPackagedModelTextures(asset.AssetFolder))
+        if (ExtractAndBindPackagedModelTextures(asset.AssetFolder, operationPolicy))
         {
             changed = true;
             healedPaths.Add("ExtractTextures + remap -> " + FlattenLayout.TextureFolder(asset.AssetFolder));
@@ -495,7 +508,10 @@ public static partial class RetinarBatchModelBuilder
     /// GetDependencies 全量补拷：动画 PPtr、兄弟 Art 包、源导入区等 Renderer 扫不到的引用。
     /// 目标已存在则只加入 remap 表（含 .anim），不覆盖本包副本。
     /// </summary>
-    private static bool CopyRemainingExternalDependencies(GeneratedAsset asset, List<string> healedPaths)
+    private static bool CopyRemainingExternalDependencies(
+        GeneratedAsset asset,
+        FlattenOperationPolicy operationPolicy,
+        List<string> healedPaths)
     {
         var copied = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         string[] dependencies = AssetDatabase.GetDependencies(asset.PrefabPath, true);
@@ -512,7 +528,7 @@ public static partial class RetinarBatchModelBuilder
                 continue;
             }
 
-            string targetFolder = FlattenCopyRunner.ResolveRelativeFolder(path);
+            string targetFolder = FlattenCopyRunner.ResolveRelativeFolder(path, operationPolicy);
             if (string.IsNullOrEmpty(targetFolder))
             {
                 continue;
@@ -551,7 +567,9 @@ public static partial class RetinarBatchModelBuilder
     /// 贴图名复用工程里先存在的 Assets/AAA/.../fbx.fbm，GetDependencies 于是一直挂外部路径。
     /// materialSearch=Local 只影响材质搜索，管不到这层“同名贴图复用”。
     /// </summary>
-    private static bool ExtractAndBindPackagedModelTextures(string assetFolder)
+    private static bool ExtractAndBindPackagedModelTextures(
+        string assetFolder,
+        FlattenOperationPolicy operationPolicy)
     {
         string modelFolder = FlattenLayout.ModelFolder(assetFolder);
         string textureFolder = FlattenLayout.TextureFolder(assetFolder);
@@ -686,7 +704,7 @@ public static partial class RetinarBatchModelBuilder
             }
         }
 
-        FlattenModelCompanionFolders(assetFolder);
+        FlattenModelCompanionFolders(assetFolder, operationPolicy);
         Debug.Log("[Retinar] ExtractAndBind 结束 assetFolder=" + assetFolder + " changed=" + changed);
         return changed;
     }

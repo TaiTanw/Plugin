@@ -1,7 +1,8 @@
 # TOol / Editor / Shared — 目录说明
 
 > 横切能力：不绑 Texture / Model 单纵切，也不承载「中间资产写盘」能力。  
-> ③ 预设体已迁至 [`../Generated/Prefab/`](../Generated/Prefab/)。
+> ③ 预设体已迁至 [`../Generated/Prefab/`](../Generated/Prefab/)。  
+> ④ 平铺已迁至 [`../Generated/Flatten/`](../Generated/Flatten/)。
 
 ## 当前文件（尚未全部迁入子夹）
 

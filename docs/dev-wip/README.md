@@ -8,7 +8,8 @@
 |---|---|---|
 | **1. 需求与战略** | [01_requirements/](./01_requirements/) | 已确认战略；技术选型 / 知识 / 操作要点；Converter 契约 |
 | **2. 当前整体结构** | [02_structure/overview.md](./02_structure/overview.md) | 按文件夹分类的类与中文职能 |
-| **3. 待处理 / 模糊项** | [03_open-items/backlog.md](./03_open-items/backlog.md) | 进行中待办；文末历史结束；D13 见 [d13-glb-magenta](./03_open-items/d13-glb-magenta.md) |
+| **3. 当前待办 / 模糊项** | [03_open-items/backlog.md](./03_open-items/backlog.md) | 按严重程度排序的唯一当前队列；完成项在文末归档 |
+| **3b. D24 边界拆分** | [03_open-items/d24-boundary-plan.md](./03_open-items/d24-boundary-plan.md) | 3,518 行平铺内核接管、ctx 临时中间层归属、平铺 SO 与插件 1 输出格式白名单 |
 | **4. 流程与对外接口（A 中间层）** | [04_implementation/pipeline-flow.md](./04_implementation/pipeline-flow.md) | 两块总览；窄口表；错误码；就绪度 |
 | **4h. 各相位入参/返回值** | [04_implementation/pipeline-phase-io.md](./04_implementation/pipeline-phase-io.md) | 现网 + Bindings/ID2；批量输出到编排接口；1 与 2.5 |
 | **4b. D1 AB 核对** | [04_implementation/d1-ab-only.md](./04_implementation/d1-ab-only.md) | 仅双端 AB **已锁**；文件名重开见开发日志 |
@@ -18,6 +19,7 @@
 | **4f. Op 识别与扩展** | [04_implementation/op-recognition-and-extend.md](./04_implementation/op-recognition-and-extend.md) | ⑤ 扩展名识别；加 Op / 加后缀 / 加大类 |
 | **4g. 导入 ctx（D23）** | [04_implementation/pipeline-job-context.md](./04_implementation/pipeline-job-context.md) | 事实归类；探测 [§7](./04_implementation/pipeline-job-context.md#7-probe-extend) |
 | **4i. ④ 能力查封** | [04_implementation/pipeline-flatten-capabilities.md](./04_implementation/pipeline-flatten-capabilities.md) | 拷贝循环 vs B′；`Art/<名>/<名>/` |
+| **4k. D24-R1 黑盒审计** | [04_implementation/flatten-core-audit.md](./04_implementation/flatten-core-audit.md) | 调用图、方法归类、高风险耦合、安全拆分与人工步进决策口 |
 | **4j. D23 本刀报告** | [04_implementation/d23-slice-report.md](./04_implementation/d23-slice-report.md) | **现状**；2.5/谁读 ctx/③ 默认；D18 见报告 4-1 |
 | **5. 开发日志** | [05_dev-log/timeline.md](./05_dev-log/timeline.md) | 提交次第、#274、标签、Plugin 仓 CLI 前决策 |
 
@@ -33,6 +35,6 @@ D18 正文（勿点表内链接）：[d18k](./03_open-items/backlog.md#d18k) · 
 **可选：** ④ 平铺、⑤ 压图/刷白、⑥ 门禁/扩展产物  
 **优先已做：** 窄口 + Runner + D3 总面板 + D2 单文件 + **D1 契约收口** + **D4 GLB 入库** + **D5 无头 CLI**  
 **GLB 样例：** `Assets/Art/ggdddd` 编辑器内已跑通；洋红 **D13 已归档**  
-**下一步：** AB 文件名仍退化，评估见 [开发日志 §2](./05_dev-log/timeline.md#2-issue-274)。本版 **v1.5.3**。  
+**下一步：** P0 静态查封、Incoming 基线闸、glTF 缺伴生闸、平铺 SO 快照和两个人工完整相位入口已完成；按 [D24 边界拆分](./03_open-items/d24-boundary-plan.md) 补真实模型回归，再拆结构化结果。AB 文件名仍退化，评估见 [开发日志 §2](./05_dev-log/timeline.md#2-issue-274)。本版 **v1.5.3**。
 **对外接口：** (A) 中间层已可用 · (B) **D5 已验收** → [cli-getting-started](./04_implementation/cli-getting-started.md)  
-**配置分层：** 总步骤 → Pipeline SO；资源自动细节 → 资源总面板 Prefs
+**配置分层：** 总步骤 → Pipeline SO；平铺细节 → 同类 `FlattenOperationSettings` 的人工/管线独立资产；其它资源自动细节 → 资源总面板 Prefs

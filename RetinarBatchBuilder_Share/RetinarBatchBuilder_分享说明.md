@@ -4,6 +4,8 @@
 更新日期：2026-08-21  
 适用环境：Unity 2020.3 / 2022.3、Built-in Render Pipeline、Windows Editor
 
+> **历史手册，不代表 v1.5.3 现行入口。** 2026-09-03 已删除“规范化导出”和“成品直达”；2026-09-10 人工④改为“普通平铺 / 原子迁移”两个完整相位入口，配置改用人工/管线分离的 `FlattenOperationSettings` SO。现行入口见仓库根 README 与 `docs/dev-wip/`。
+
 ## 1. 工具用途
 
 本工具用于把已经在 Unity 中检查和调整完成的三维模型 Prefab，整理成规范目录并输出：

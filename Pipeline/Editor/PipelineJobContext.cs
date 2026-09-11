@@ -18,6 +18,11 @@ public sealed class PipelineJobContext
     public PipelineImporterKind ImporterKind;
     public bool HasExternalUris;
     public readonly List<string> SidecarPaths = new List<string>();
+    /// <summary>
+    /// glTF 中声明、但在 2.5 探测时无法解析到磁盘文件的外部 URI。
+    /// 这是供编排判定失败的结构化事实；Warnings 只用于展示，不参与控制流。
+    /// </summary>
+    public readonly List<string> MissingUris = new List<string>();
     public bool MainAssetOk;
     public PipelineMaterialForm MaterialForm;
     public readonly List<string> Warnings = new List<string>();
@@ -103,6 +108,7 @@ public sealed class PipelineJobContext
         sb.Append(" mainOk=").Append(MainAssetOk);
         sb.Append(" mat=").Append(MaterialForm);
         sb.Append(" sidecars=").Append(SidecarPaths.Count);
+        sb.Append(" missingUris=").Append(MissingUris.Count);
         sb.Append(" warnings=").Append(Warnings.Count);
         if (SidecarPaths.Count > 0)
         {
@@ -110,6 +116,14 @@ public sealed class PipelineJobContext
             for (int i = 0; i < SidecarPaths.Count; i++)
             {
                 sb.Append("  sidecar: ").AppendLine(SidecarPaths[i]);
+            }
+        }
+
+        if (MissingUris.Count > 0)
+        {
+            for (int i = 0; i < MissingUris.Count; i++)
+            {
+                sb.Append("  missing URI: ").AppendLine(MissingUris[i]);
             }
         }
 

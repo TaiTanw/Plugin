@@ -12,7 +12,7 @@ public class ModelProcessSettings : ScriptableObject
 {
     public const string DefaultAssetPath = "Assets/Plugin/TOol/ConfigData/ModelProcessSettings.asset";
 
-    [Header("导入区 Importer · 基线（只受总闸约束，不看本机分项勾选）")]
+    [Header("导入区 Importer · 基线（配置导入根内不受本机自动总闸）")]
     [Tooltip("导入时剔除 DCC 带出来的灯光与摄像机节点。\n" +
              "必须在 ③ 生成 Prefab 之前生效：③ 存出的是独立 Prefab 资产，" +
              "相机灯光一旦烤成节点，④ 再写 importCameras=false 也回收不掉。")]
@@ -43,6 +43,7 @@ public class ModelProcessSettings : ScriptableObject
 
     [Header("不介入的目录（自动流）")]
     [Tooltip("路径以此列表任一前缀开头时，仅「设置自动 / 后处理自动」（导入期钩子）跳过。默认排除 Assets/Art/。" +
+             "配置导入根内的模型安全基线例外：即使此处误排除 Incoming，仍会剔灯剔相机并处理 OBJ 法线。" +
              "L1「执行全部」、子面板手动、中间层⑤（代跑同一总批量）都不读本列表，可以对 Art 刷顶点色。" +
              "注意：本列表与 TextureProcessSettings.excludedPathPrefixes、BatchFbxImportSettings.deliveryAlertPathPrefixes " +
              "是三份独立配置（默认都写 Assets/Art/），改一处不会自动同步；改交付根时请三处对照。")]

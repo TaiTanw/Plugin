@@ -10,9 +10,10 @@ using UnityEngine;
 //
 // 菜单入口已迁到 01_RetinarMenu.cs。请先读 Editor/README_EDITOR.md。
 //
-// 入口只剩两个：
-//   RetinarFlattenApi.FlattenPaths  → 管线④（PipelineRunner 唯一调用方）
-//   RetinarFlattenScheduler         → 菜单「平铺到交付中间区 Art（选中）」
+// 入口：
+//   ToolFlattenApi（管线④，接 ctx）
+//   RetinarFlattenScheduler / FlattenPaths（菜单，含 FBX 直平铺 SafeZone）
+// 本文件是插件 2 Generated/Flatten 内核，不再给 Pipeline 直接调用。
 //
 // 2026-09-03（backlog D24-7）删除「【遗产】从 Art 规范化导出」与「成品直达」两条链：
 //   一阶段：两条菜单 + 调度器 + DirectPackage + 出包前三道校验 + 30_Business 整层。
@@ -26,7 +27,7 @@ using UnityEngine;
 // =====================================================================================
 public static partial class RetinarBatchModelBuilder
 {
-    private const string ArtRoot = "Assets/Art";
+    private const string ArtRoot = FlattenBuildSettings.ArtRoot;
     private const string AssetBundleVariant = "assetbundle";
     private const float SafeZonePadding = 0.8f;
     private const string FbxNormalizedModelChildSuffix = "_Model";
@@ -88,7 +89,8 @@ public static partial class RetinarBatchModelBuilder
 
         List<string> unknownLines;
         List<string> artPrefabPaths;
-        int generatedCount = FlattenSourcePaths(sourcePaths, false, out unknownLines, out artPrefabPaths);
+        int generatedCount = FlattenSourcePaths(
+            sourcePaths, false, CreateManualDefaultOptions(), out unknownLines, out artPrefabPaths);
 
         string unknownHint = string.Empty;
         if (unknownLines != null && unknownLines.Count > 0)
@@ -115,7 +117,8 @@ public static partial class RetinarBatchModelBuilder
     {
         List<string> unknownLines;
         List<string> artPrefabPaths;
-        return FlattenSourcePaths(sourcePaths, quiet, RetinarFlattenOptions.Default, out unknownLines, out artPrefabPaths);
+        return FlattenSourcePaths(
+            sourcePaths, quiet, CreateManualDefaultOptions(), out unknownLines, out artPrefabPaths);
     }
 
     /// <summary>按路径平铺；返回成功数，并输出未归类清单与 Art Prefab 路径。</summary>
@@ -125,7 +128,8 @@ public static partial class RetinarBatchModelBuilder
         out List<string> unknownLines,
         out List<string> artPrefabPaths)
     {
-        return FlattenSourcePaths(sourcePaths, quiet, RetinarFlattenOptions.Default, out unknownLines, out artPrefabPaths);
+        return FlattenSourcePaths(
+            sourcePaths, quiet, CreateManualDefaultOptions(), out unknownLines, out artPrefabPaths);
     }
 
     /// <summary>带执行闸的平铺。菜单路径请传 Default。</summary>
@@ -214,6 +218,15 @@ public static partial class RetinarBatchModelBuilder
     public static bool ValidateFlattenSelectedToArt()
     {
         return !EditorApplication.isCompiling;
+    }
+
+    private static RetinarFlattenOptions CreateManualDefaultOptions()
+    {
+        FlattenOperationSettings settings = FlattenOperationSettings.LoadManualOrDefaults();
+        FlattenOperationPolicy policy = settings != null
+            ? settings.CreatePolicy()
+            : FlattenOperationPolicy.CreateDefaults(FlattenSettingsScope.Manual);
+        return FlattenBuildService.CreateOptions(null, ToolFlattenRequest.ForManual(policy));
     }
 
     /// <summary>兼容旧调用；菜单入口已迁到 RetinarMenu → RetinarEditorUtil.OpenDeliverablesFolder。</summary>
@@ -335,7 +348,7 @@ public static partial class RetinarBatchModelBuilder
         {
             ApplyModelImportSettings(unityModelPath);
         }
-        FlattenModelCompanionFolders(assetFolder);
+        FlattenModelCompanionFolders(assetFolder, flattenOptions.OperationPolicy);
 
         string prefabPath = prefabFolder + "/" + assetName + "_prefab.prefab";
 
@@ -375,7 +388,7 @@ public static partial class RetinarBatchModelBuilder
             model.transform.position += offset;
         }
 
-        AddOrUpdateBoxCollider(root);
+        AddOrUpdateBoxCollider(root, flattenOptions.AddBoxCollider);
         SetupAnimationController(model, unityModelPath, animationFolder, assetName);
         ApplyMaterialCopies(root, materialFolder, textureFolder, assetName);
 
@@ -406,14 +419,16 @@ public static partial class RetinarBatchModelBuilder
 
         var generated = new GeneratedAsset(assetName, assetFolder, sourcePath, unityModelPath, prefabPath, bundleName + "." + AssetBundleVariant);
         List<string> healedPaths;
-        if (TryHealExternalDependencies(generated, out healedPaths) && healedPaths.Count > 0)
+        if (TryHealExternalDependencies(
+                generated, flattenOptions.OperationPolicy, out healedPaths) && healedPaths.Count > 0)
         {
             Debug.Log("[Retinar] " + assetName + "：平铺结束自愈 " + healedPaths.Count + " 条：\n" +
                 string.Join("\n", healedPaths.ToArray()));
         }
 
         FlattenCopyRunner.LogUnknownIfAny(assetFolder, assetName);
-        FlattenAnimationClipRemapper.CopyAndRemapPrefabClips(prefabPath, assetFolder, assetName);
+        FlattenAnimationClipRemapper.CopyAndRemapPrefabClips(
+            prefabPath, assetFolder, assetName, flattenOptions.OperationPolicy);
         RemapAllArtMaterialsToLocalTextures(assetFolder);
         return generated;
     }
@@ -486,6 +501,16 @@ public static partial class RetinarBatchModelBuilder
         FlattenReferenceAudit.LogSourcePrefabMissingReferences(sourcePath, assetName);
 
         string prefabPath = PreparePackagePrefab(sourcePath, prefabFolder, assetName);
+        if (string.IsNullOrEmpty(prefabPath) ||
+            !prefabPath.Replace("\\", "/").StartsWith(
+                prefabFolder + "/", System.StringComparison.OrdinalIgnoreCase))
+        {
+            Debug.LogError(
+                "[Retinar] Begin 拒绝继续：未生成目标 Art Prefab。源=" + sourcePath +
+                " 目标夹=" + prefabFolder);
+            return false;
+        }
+
         AssetDatabase.SaveAssets();
         AssetDatabase.Refresh();
 
@@ -510,9 +535,10 @@ public static partial class RetinarBatchModelBuilder
             return false;
         }
 
-        work.CopiedDependencies = CopyAdjustedPrefabDependencies(work.PrefabPath, work.AssetFolder);
+        work.CopiedDependencies = CopyAdjustedPrefabDependencies(
+            work.PrefabPath, work.AssetFolder, work.Options.OperationPolicy);
         CopyObjMaterialLibrariesBesideCopiedModels(work.CopiedDependencies);
-        FlattenModelCompanionFolders(work.AssetFolder);
+        FlattenModelCompanionFolders(work.AssetFolder, work.Options.OperationPolicy);
         FlattenCopyRunner.LogUnknownIfAny(work.AssetFolder, work.AssetName);
         AssetDatabase.SaveAssets();
         AssetDatabase.Refresh();
@@ -529,9 +555,9 @@ public static partial class RetinarBatchModelBuilder
 
         work.CopiedDependencies = RelocateAtomicPackage(
             work.AssetFolder, work.AssetName, work.Options, work.SourceModelPath);
-        if (work.CopiedDependencies == null || work.CopiedDependencies.Count == 0)
+        if (work.CopiedDependencies == null)
         {
-            Debug.LogError("[Retinar] B′ 原子搬迁未写入文件: " + work.SourcePath);
+            Debug.LogError("[Retinar] B′ 原子搬迁未完整写入必需文件: " + work.SourcePath);
             return false;
         }
 
@@ -553,7 +579,7 @@ public static partial class RetinarBatchModelBuilder
         ApplyImportSettingsToPackagedModels(work.AssetFolder);
         Debug.Log("[Retinar] " + work.AssetName + "：开始 ExtractTextures/重绑（打包流程第 1 次） -> " +
                   FlattenLayout.TextureFolder(work.AssetFolder));
-        ExtractAndBindPackagedModelTextures(work.AssetFolder);
+        ExtractAndBindPackagedModelTextures(work.AssetFolder, work.Options.OperationPolicy);
         RemapPackagedModelImporterMaterials(work.AssetFolder, work.CopiedDependencies);
     }
 
@@ -591,7 +617,8 @@ public static partial class RetinarBatchModelBuilder
         var healTarget = new GeneratedAsset(
             work.AssetName, work.AssetFolder, work.SourcePath, string.Empty, work.PrefabPath, string.Empty);
         List<string> healedPaths;
-        if (TryHealExternalDependencies(healTarget, out healedPaths) && healedPaths.Count > 0)
+        if (TryHealExternalDependencies(
+                healTarget, work.Options.OperationPolicy, out healedPaths) && healedPaths.Count > 0)
         {
             Debug.Log("[Retinar] " + work.AssetName + "：平铺结束自愈 " + healedPaths.Count + " 条：\n" +
                 string.Join("\n", healedPaths.ToArray()));
@@ -610,7 +637,8 @@ public static partial class RetinarBatchModelBuilder
 
         AssetDatabase.SaveAssets();
         AssetDatabase.Refresh();
-        FlattenAnimationClipRemapper.CopyAndRemapPrefabClips(work.PrefabPath, work.AssetFolder, work.AssetName);
+        FlattenAnimationClipRemapper.CopyAndRemapPrefabClips(
+            work.PrefabPath, work.AssetFolder, work.AssetName, work.Options.OperationPolicy);
         if (RemapAllArtMaterialsToLocalTextures(work.AssetFolder))
         {
             Debug.Log("[Retinar] " + work.AssetName + "：动画重绑后再次收敛材质贴图到本包");
@@ -620,7 +648,7 @@ public static partial class RetinarBatchModelBuilder
 
         bool convertZUp = work.Options != null && work.Options.ConvertZUpToYUp;
         WrapIncomingPrefabInEmptyShell(work.PrefabPath, work.AssetName, convertZUp);
-        AddOrUpdateBoxColliderInPrefab(work.PrefabPath);
+        AddOrUpdateBoxColliderInPrefab(work.PrefabPath, work.Options.AddBoxCollider);
         NormalizePreparedPrefabAnimations(
             work.PrefabPath, FlattenLayout.AnimationFolder(work.AssetFolder), work.AssetName);
 
@@ -772,7 +800,7 @@ public static partial class RetinarBatchModelBuilder
             if (saved == null)
             {
                 Debug.LogWarning("Failed to create package prefab copy: " + requestedDestinationPath);
-                return sourcePath;
+                return null;
             }
 
             return requestedDestinationPath;
@@ -815,7 +843,10 @@ public static partial class RetinarBatchModelBuilder
         return null;
     }
 
-    private static Dictionary<string, string> CopyAdjustedPrefabDependencies(string prefabPath, string assetFolder)
+    private static Dictionary<string, string> CopyAdjustedPrefabDependencies(
+        string prefabPath,
+        string assetFolder,
+        FlattenOperationPolicy operationPolicy)
     {
         var copied = new Dictionary<string, string>();
         foreach (string dependency in AssetDatabase.GetDependencies(prefabPath, true))
@@ -826,7 +857,7 @@ public static partial class RetinarBatchModelBuilder
                 continue;
             }
 
-            string targetFolder = FlattenCopyRunner.ResolveRelativeFolder(path);
+            string targetFolder = FlattenCopyRunner.ResolveRelativeFolder(path, operationPolicy);
             if (string.IsNullOrEmpty(targetFolder))
             {
                 continue;
@@ -1523,7 +1554,9 @@ public static partial class RetinarBatchModelBuilder
         }
     }
 
-    private static void FlattenModelCompanionFolders(string assetFolder)
+    private static void FlattenModelCompanionFolders(
+        string assetFolder,
+        FlattenOperationPolicy operationPolicy)
     {
         string modelFolder = FlattenLayout.ModelFolder(assetFolder);
         if (!AssetDatabase.IsValidFolder(modelFolder))
@@ -1564,7 +1597,7 @@ public static partial class RetinarBatchModelBuilder
                 continue;
             }
 
-            string targetFolder = FlattenCopyRunner.ResolveRelativeFolder(assetPath);
+            string targetFolder = FlattenCopyRunner.ResolveRelativeFolder(assetPath, operationPolicy);
             if (string.IsNullOrEmpty(targetFolder))
             {
                 continue;
@@ -1611,12 +1644,17 @@ public static partial class RetinarBatchModelBuilder
         }
     }
 
-    private static void AddOrUpdateBoxColliderInPrefab(string prefabPath)
+    private static void AddOrUpdateBoxColliderInPrefab(string prefabPath, bool enabled)
     {
+        if (!enabled)
+        {
+            return;
+        }
+
         GameObject instance = PrefabUtility.LoadPrefabContents(prefabPath);
         try
         {
-            AddOrUpdateBoxCollider(instance);
+            AddOrUpdateBoxCollider(instance, true);
             PrefabUtility.SaveAsPrefabAsset(instance, prefabPath);
         }
         finally
@@ -1948,9 +1986,9 @@ public static partial class RetinarBatchModelBuilder
         return normalizedFullPath.Substring(normalizedProjectRoot.Length + 1);
     }
 
-    private static void AddOrUpdateBoxCollider(GameObject root)
+    private static void AddOrUpdateBoxCollider(GameObject root, bool enabled)
     {
-        if (!FlattenPostProcessSettings.AddBoxCollider)
+        if (!enabled)
         {
             return;
         }

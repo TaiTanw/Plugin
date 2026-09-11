@@ -77,12 +77,12 @@ D18 交叉见 [§4](#4-notes)。
 
 ### 2.2 当前只有④从 ctx 拿到参数
 
-Runner 用 `PipelineFlattenBridge.ToFlattenOptions` 把事实映射成平铺开关。**ctx 与 Flatten 类型不互相引用。**
+Runner 把 ctx 交给 `ToolFlattenApi`（插件 2）。B/B′ 与 E 的分支在 `FlattenBuildService` 内读 ctx。轴向走 `ToolFlattenRequest`，不进 ctx。
 
 | 步 | 读 ctx？ | 实际吃什么 |
 |---|---|---|
 | ③ | **否** | `options.ModelPaths` |
-| ④ | **是（经 Bridge）** | `HasExternalUris` → `SkipDependencySplit` + 主文件/伴生路径 |
+| ④ | **是（`ToolFlattenApi`）** | `HasExternalUris` → B′；`ImporterKind` → 是否跑 E |
 | ⑤ | **否** | Art 单元夹 Collector（文件夹，不是 ctx 文件列表） |
 | ⑥ | **否** | Art Prefab 路径 |
 
@@ -98,16 +98,15 @@ Runner 用 `PipelineFlattenBridge.ToFlattenOptions` 把事实映射成平铺开�
 
 | 层 | 路径 | 干什么 |
 |---|---|---|
-| 编排 | `Pipeline/Editor/PipelineRunner.cs` | `AttachJobContext`（② 后、③ 前）；④ 调 Bridge |
+| 编排 | `Pipeline/Editor/PipelineRunner.cs` | `AttachJobContext`；④ 调 `ToolFlattenApi` |
+| ④ 窄口 | `TOol/Editor/Shared/Api/ToolFlattenApi.cs` | 接 ctx + request |
 | 事实 | `Pipeline/Editor/PipelineJobContext.cs` | `Build(primary)`：外 URI、伴生、`MainAssetOk`… |
 | 挂载 | `Pipeline/Editor/PipelineOptions.cs` | 字段 `JobContext` |
 | 探测 | `Pipeline/Editor/PipelineGltfUriProbe.cs` | 填 ctx；转调 Scan |
 | 探测核 | `TOol/Editor/Shared/GltfPackageFiles.cs` | `Scan()`：当前正则 `"uri":"..."`，跳过 `data:`。**换解析器只改这里** |
-| 映射 | `Pipeline/Editor/PipelineFlattenBridge.cs` | **仅④用。** 事实 → `RetinarFlattenOptions` |
-| ④ 闸 | `RetinarBatchBuilder_Share/.../40_Api/RetinarFlattenOptions.cs` | `SkipDependencySplit` + `ClearDestinationArtFolder` + 主文件/伴生 |
-| ④ 门面 | `RetinarBatchBuilder_Share/.../40_Api/RetinarFlattenApi.cs` | 编排只调这个窄口 |
+| ④ 闸 | `TOol/.../Generated/Flatten/Config/RetinarFlattenOptions.cs` | `FlattenBuildService.CreateOptions(ctx, request)` 填写 |
 | ④ B | `RetinarBatchModelBuilder.CopyAdjustedPrefabDependencies` | 拷贝循环，**内部未改** |
-| ④ B′ | `RetinarBatchBuilder_Share/.../RetinarBatchModelBuilder.AtomicRelocate.cs` | `RelocateAtomicPackage` → `Art/<名>/<名>/` |
+| ④ B′ | `TOol/.../Generated/Flatten/Service/RetinarBatchModelBuilder.AtomicRelocate.cs` | `RelocateAtomicPackage` → `Art/<名>/<名>/` |
 | ② 落盘 | `TOol/Editor/Shared/Api/ToolImportApi.cs` | 管线：先清本趟 `Incoming/<三层>/` 再拷（D18）；`CopyGltfSidecarsBeside` |
 | 删单元夹 | `TOol/Editor/Shared/AssetUnitFolder.cs` | 只删 `parent/单段`；② Incoming、④ Art 共用 |
 

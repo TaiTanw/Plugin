@@ -35,6 +35,23 @@ public class BatchFbxImportSettings : ScriptableObject
         }
     }
 
+    /// <summary>
+    /// 路径是否就是导入根或位于其下。按目录边界判断，避免
+    /// Assets/IncomingElse 被误认为 Assets/Incoming 的子路径。
+    /// </summary>
+    public bool ContainsAssetPath(string assetPath)
+    {
+        if (string.IsNullOrWhiteSpace(assetPath))
+        {
+            return false;
+        }
+
+        string root = NormalizedImportRoot;
+        string path = assetPath.Trim().Replace("\\", "/").TrimEnd('/');
+        return path.Equals(root, System.StringComparison.OrdinalIgnoreCase) ||
+               path.StartsWith(root + "/", System.StringComparison.OrdinalIgnoreCase);
+    }
+
     public bool IsDeliveryAlertPath(string assetPath)
     {
         return ResourceExcludeUtility.IsExcludedPath(assetPath, deliveryAlertPathPrefixes);

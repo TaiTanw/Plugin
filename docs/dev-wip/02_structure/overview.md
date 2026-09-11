@@ -23,9 +23,8 @@ Assets/Plugin/
 | `Pipeline/Editor/PipelineSourceAccept.cs` | 批量「输出到编排」→ `AcceptBindings` |
 | `Pipeline/Editor/PipelineMaterialId.cs` | 建议 ID2（三层 / 三层+文件全名） |
 | `Pipeline/Editor/PipelineRunner.cs` | **(A/B 共用)** 1 入库→③→④→⑤→⑥；1 后 `AttachJobContext`（不调③） |
-| `Pipeline/Editor/PipelineJobContext.cs` | D23 事实：外 URI / 伴生 / `MainAssetOk` |
+| `Pipeline/Editor/PipelineJobContext.cs` | D23 事实：外 URI / 伴生 / `MainAssetOk`；④ `ToolFlattenApi` 直接读 |
 | `Pipeline/Editor/PipelineOptions.cs` | 步骤开关；字段 `JobContext`（③⑤⑥ 不读） |
-| `Pipeline/Editor/PipelineFlattenBridge.cs` | **仅④**读 ctx → FlattenOptions（类型不互相引用） |
 | `Pipeline/Editor/PipelineGltfUriProbe.cs` | ② 后探测；转调 `GltfPackageFiles.Scan` |
 | `Pipeline/Editor/PipelineCli.cs` | **(B)** CLI `-executeMethod PipelineCli.Run` · **D5 已验收**（`-source` / `-materialId`） |
 | 文档 | [d23 报告](../04_implementation/d23-slice-report.md) · [pipeline-flow](../04_implementation/pipeline-flow.md) · [cli-getting-started](../04_implementation/cli-getting-started.md) |

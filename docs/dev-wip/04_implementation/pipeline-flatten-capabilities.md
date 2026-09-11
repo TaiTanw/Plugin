@@ -105,16 +105,16 @@ C 在 `image/Texture/` 的副本与 B′ 子树里那份**并存**：前者给 U
 
 ## 4. 从插件 1 抽离？能力分离之后
 
-**2026-09-03 再翻案（D27）：** 插件 1 只留 ⑥ AB。④ 实现要从 Retinar 迁出，让插件 1 不再影响 ①–⑤。D24-5 的「加能力、不搬家」是窄口，不是终态。
+**2026-09-03 D27：** ④ 已在插件 2。管线只调 `ToolFlattenApi`（接 ctx）。D24-5 的七步仍在，Bridge 已删。
 
 | 抽离形态 | 是否具备 | 说明 |
 |---|---|---|
-| **窄口变薄** | **已落地（D24-5）** | `RetinarFlattenApi` 七步；表住 `RetinarFlattenWork`。实现仍住 Retinar |
+| **窄口变薄** | **已落地（D24-5）** | 七步仍在；管线入口换成 `ToolFlattenApi` |
 | **编排认能力** | **已落地** | `PipelineRunner.FlattenPerPrefab` 组合；B ↔ B′ 互斥 |
-| **整段④迁出插件 1** | **下一刀（D27）** | 目标：插件 1 只剩 `RetinarAbApi` + 交付 IO + 导出 SO。实现宿主是中间层还是插件 2 另定，但**不得**再让 Retinar 改 Incoming / Art Importer / Prefab |
+| **整段④迁出插件 1** | **2026-09-03 已落地（D27）** | 文件在 `TOol/Editor/Generated/Flatten/`；管线只调 `ToolFlattenApi`。内核类名未改。菜单 FBX SafeZone 仍同文件，管线不走。 |
 | **只把 B′ 先搬走** | **不建议作第一刀** | 路径表、布局、随后 D/C 仍在大文件里；横切不如按「菜单 FBX 直平铺 vs 管线 Prefab 平铺」切开 |
 
-D26（总闸 / 缺伴生仍 `exit=0`）是编排语义，**不挡**本刀。D26-2 的 B′ 成功准则（拷到文件就算成功）在搬 B′ 时一并收紧即可。
+D26 是编排语义，不属于目录迁移。2026-09-10：D26-1 已让配置导入根的安全基线脱离总闸；D26-2 已用 typed `MissingUris` 在④ Begin 前 Fail(40)，B′ 也改为全部必需输入生成精确目标才成功。
 
 ---
 

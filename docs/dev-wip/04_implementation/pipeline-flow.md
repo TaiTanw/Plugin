@@ -16,7 +16,7 @@
 │           ↓                                                    │
 │      PipelineOptions → PipelineRunner.Run → PipelineResult     │
 │           ↓ 只调窄口                                           │
-│      ② ToolImportApi │ ③ ToolPrefabApi │ ④ RetinarFlattenApi   │
+│      ② ToolImportApi │ ③ ToolPrefabApi │ ④ ToolFlattenApi      │
 │      ⑤ ToolPostProcessApi │ ⑥ RetinarAbApi                     │
 └─────────────────────────────────────────────────────────────┘
                               ↑ 同一 Runner
@@ -49,6 +49,8 @@
 
 gltf / 多文件包：同一编排；② 后建 ctx，**仅④**经 Bridge 消费（B′）。③ 不读 ctx。→ [pipeline-job-context](./pipeline-job-context.md) · [d23 报告](./d23-slice-report.md)。
 
+人工④另有两个完整相位入口：“普通平铺（B）”与“原子迁移（B′）”。它们只显式选择内部互斥分支，均继续 E?/D/C/Finish；内部拆步只服务代码结构、中间层组合和测试，不开放为任意顺序的产品按钮。
+
 ---
 
 ## 2. A steps to APIs
@@ -71,9 +73,9 @@ SourcePath
 | 步 | 窄口（对外） | 实现落点 | 编排消费方式（入 → 出） |
 |---|---|---|---|
 | 1 入库 / ② | `ToolImportApi.ImportSingleModel` | TOol `Shared/Api` | 入 `SourcePath`；出 `assetModelPath` → `ModelPaths`。总面板跑管线时始终入库 |
-| 2 总闸 | 不调窄口 | `ResourceProcessSwitches.MasterEnabled` | 只决定导入期回调进不进 `Is*Effective`；不替代 L1 分项 |
+| 2 总闸 | 不调窄口 | `ResourceProcessSwitches.MasterEnabled` | 决定用户设置自动 / 后处理自动是否生效；不替代 L1 分项。配置导入根内的模型安全基线不受此闸控制 |
 | ③ | `ToolPrefabApi.BuildPrefabs` | → `PrefabBuildService` | 入 `ModelPaths` + `MaterialId`；出 `List` Prefab 路径 |
-| ④ | `RetinarFlattenApi` 能力方法 | Retinar `40_Api` | 入 ③ 的 Prefab + Bridge(ctx)；编排按行 Begin→B\|B′→E→D→C→Finish；出 Art Prefab 覆盖⑥；D17 推 Art 单元给⑤ |
+| ④ | `ToolFlattenApi` 能力方法 | TOol `Generated/Flatten`（职责暂归中间层） | 入 ③ 的 Prefab + **ctx** + 含 `FlattenOperationPolicy` 的 request；编排按行 Begin→B\|B′→E→D→C→Finish；出 Art Prefab覆盖⑥；D17 推 Art 单元给⑤ |
 | ⑤ | `ToolPostProcessApi.RunMasterBatch` | → L1 总批量 | 入 D17 的 `PostProcessFolderPaths`；出 `ToolPostProcessResult`（FailedCount 复用三层 Summary；细节在 Report） |
 | ⑥ | `RetinarAbApi.Build` | Retinar `40_Api` | 入当前 `prefabPaths` + `AbBuildOptions`（从导出 SO 填：根目录 / 是否 UP / 是否拷交付）；步骤 SO 只提供 `RunAb` |
 
@@ -85,7 +87,9 @@ SourcePath
 
 ```text
 Assets/Plugin/Pipeline/
-├─ ConfigData/PipelineStepSettings.asset   # 总步骤开关 SO
+├─ ConfigData/
+│  ├─ PipelineStepSettings.asset           # 总步骤开关 SO
+│  └─ FlattenOperationSettings.asset       # ④ 管线平铺细节 SO
 └─ Editor/
    ├─ PipelineOptions / Result / ErrorCodes
    ├─ PipelineStepSettings.cs
@@ -111,6 +115,7 @@ Assets/Plugin/Pipeline/
 | `ExportUnityPackage` | 从导出 SO 的快照，便于日志；执行以 `AbBuildOptions` 为准 |
 | `MaterialId` | 覆盖 Prefab 三层命名 |
 | `PostProcessFolderPaths` | ⑤扫描根；开④时 D17 写入本次 Art 单元。null → L1 Prefs（编排不改这份 Prefs） |
+| `FlattenPolicy` | 从固定管线平铺 SO 冻结的本趟快照；分类、清单元、碰撞体。运行中不再读取平铺 EditorPrefs |
 | `Quiet` | 禁 Dialog；**≠** 进程退出 |
 | `SourceBindings` | Runner 主输入；空则合成一行 |
 
@@ -140,7 +145,7 @@ Assets/Plugin/Pipeline/
 |---|---|---|---|
 | `ToolImportApi` | ✓ 单文件 | ✓ | 批量非主入口 |
 | `ToolPrefabApi` | ✓ | ✓ | 多 materialId 靠 D10 |
-| `RetinarFlattenApi` | ✓ + Art 路径 out | ✓ | — |
+| `ToolFlattenApi` | ✓ 接 ctx | ✓ | D26-2 已收口：typed `MissingUris` 在 Begin 前 Fail(40) |
 | `ToolPostProcessApi` | ✓ 返回 **`ToolPostProcessResult`** | ✓ | FailedCount→50（D16 已做） |
 | `RetinarAbApi` | ✓ | ✓ | **D5 已冻**：`PartialOk` 仍 0；全失败 60 |
 | `PipelineRunner` | ✓（面板已用） | ✓ | — |

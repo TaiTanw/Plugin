@@ -66,9 +66,9 @@
 - [ ] 搬移 `.fbm` 抽取出来的贴图时，Console 不得出现 `Assertion failed on expression: 'm_hasValue'` 或 `Asset to move is not in asset database`；`Model/` 里不得残留 `.fbm` 目录。
 - [ ] Extract/remap 自愈开启时，压缩后再打包仍不得把 Art 贴图盖回大图（与外部 `.fbm` 切断可同时成立）。
 - [ ] **顶点色**：对 `Art/Model` FBX 手动「顶点色设为全白」后，不删 Art、选 Prefab 再**导出**；Model 子 Mesh 顶点色须仍为白。Console 可出现「SaveAndReimport 后已恢复 Mesh 顶点色」，或因无外部 `.fbm` 而跳过 Extract。
-- [ ] **菜单拆分**：`Tools/Retinar` 见「批量汇总」（平铺 / 平铺分类面板 / 从 Art 导出规范化 全部|选中）、「成品直达 > 选中预制体直通打包」、「打开交付文件夹」；无旧「从 Art 导出交付物」与 Batch Build。选导入区 Prefab 点规范化「导出选中」应警告跳过；「导出全部」不依赖选中。
+- [ ] **菜单拆分（现网）**：`Tools/Retinar` 见「批量汇总」（普通平铺 / 原子迁移 / 平铺操作与配置面板）与「打开交付文件夹」；无旧规范化导出、成品直达与 Batch Build。普通/原子都跑完整④，外部 URI glTF 不得走普通分支，缺伴生不得通过原子分支。
 - [ ] **自愈位置**：平铺结束 Console 可出现「平铺结束自愈」；导出校验不得再打「开始自愈外部依赖」，仅在仍有外部 `.fbm` 时强制 Extract。
-- [ ] **成品直达**：选中 Art 成品 Prefab → Deliverables 仅 `02_unity` + `03_assetbundles`；Art/Prefab 内容未变；AB manifest 的 Assets 只有该 Prefab。若 Prefab 仍引用本包外资源，完成弹窗与 `Deliverables/_diagnostics/direct_package_dropped_deps.txt` 必须列出路径，且**不因这些路径失败**。
+- [ ] **管线⑥直出**：关闭④⑤、给定已验收 Prefab → ⑥仅按导出 SO 生成目标产物；Art/Prefab 内容未变。旧“成品直达”菜单不得重新出现。
 - [ ] **动画换材质曲线**：含 `m_PPtrCurves` 换槽的 Prefab 平铺后，`.anim` 的 classID 23 曲线 GUID 必须落在本包 `Material/`；不得残留源导入区 GUID，不得出现同 path 的 classID 2 重复曲线。导入其它工程播放不得因 Missing 材质变紫。
 - [ ] **业务 SO 未接线**：即使创建了 `RetinarBusinessProfile` 资产，规范化导出仍跑硬编码门禁并写全套 00–06，直通仍只写 02+03。
 - [ ] **外来 Prefab 套壳**：含动画/UI 的源 Prefab（如点扩散镜片）须**删除** `Assets/Art/<名>/` 后从源再平铺。外壳 Identity、无 Animator；内容节点源名与源 local；播放朝向与源工程一致。再平铺不得套第三层。已被旧逻辑 Bake 过的 Art 副本重跑不会自愈。

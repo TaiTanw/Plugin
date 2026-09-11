@@ -95,6 +95,11 @@ public class PipelineStepSettings : ScriptableObject
         options.RunAb = runAb;
         options.Quiet = quiet;
 
+        FlattenOperationSettings flatten = FlattenOperationSettings.LoadPipelineOrDefaults();
+        options.FlattenPolicy = flatten != null
+            ? flatten.CreatePolicy()
+            : FlattenOperationPolicy.CreateDefaults(FlattenSettingsScope.Pipeline);
+
         RetinarExportSettings export = RetinarExportSettings.Current;
         if (export != null)
         {
