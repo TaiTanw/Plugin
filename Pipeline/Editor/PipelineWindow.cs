@@ -74,13 +74,13 @@ public class PipelineWindow : EditorWindow
 
             EditorGUILayout.LabelField("自动化管线", EditorStyles.boldLabel);
             EditorGUILayout.HelpBox(
-                "三区：导入（1 入库 / 2 总自动化）→ 处理（③④⑤）→ 输出（⑥）。\n" +
+                "步骤用 [数字] 标注：[1] 入库 → [2] 总闸 → [③] Prefab → [④] 平铺 → [⑤] 总批量 → [⑥] 导出。\n" +
                 "内核格式：" + ToolImportApi.FormatSupportedExtensionsDisplay() +
                 "（编排始终认全表；批量勾选只筛那次收集）。\n" +
-                "处理区须开前一步才能开后一步：③开才能④，④开才能⑤。\n" +
-                "导入区 2 只开总闸（与资源总面板「总开关」同一 Prefs）；" +
-                "哪些资源、设置自动/后处理自动仍在资源总面板。\n" +
-                "多文件：用批量面板「输出到编排」填表。行号由 Runner 调度：每行 1 入库 → 2.5 ctx → ③（该行 ID2）。",
+                "处理区须开前一步才能开后一步：[③] 开才能 [④]，[④] 开才能 [⑤]。\n" +
+                "[2] 只开总闸（与资源处理总面板「总开关」同一 Prefs）；" +
+                "分项设置自动 / 后处理自动仍在该面板留存。\n" +
+                "多文件：在 [1] 打开批量选择器，「输出到编排」填表。行号由 Runner 调度：每行 [1] → 2.5 ctx → [③]（该行 ID2）。",
                 MessageType.Info);
 
             DrawImportZone();
@@ -101,33 +101,9 @@ public class PipelineWindow : EditorWindow
             }
 
             EditorGUILayout.Space(8f);
-            using (new EditorGUILayout.HorizontalScope())
+            if (GUILayout.Button("选中步骤 SO", GUILayout.Height(26f)))
             {
-                if (GUILayout.Button("打开批量选择器", GUILayout.Height(26f)))
-                {
-                    BatchFbxImportWindow.ShowWindow();
-                }
-
-                if (GUILayout.Button("打开资源处理总面板", GUILayout.Height(26f)))
-                {
-                    ResourceProcessWindow.ShowWindow();
-                }
-
-                if (GUILayout.Button("选中步骤 SO", GUILayout.Height(26f)))
-                {
-                    Selection.activeObject = settings;
-                }
-
-                if (GUILayout.Button("选中导出 SO", GUILayout.Height(26f)))
-                {
-                    Selection.activeObject = RetinarExportSettings.GetOrCreateAsset();
-                }
-            }
-
-            if (GUILayout.Button("选中管线平铺 SO", GUILayout.Height(24f)))
-            {
-                Selection.activeObject = flattenSettings;
-                EditorGUIUtility.PingObject(flattenSettings);
+                Selection.activeObject = settings;
             }
 
             if (!string.IsNullOrEmpty(lastResultText))
@@ -190,18 +166,19 @@ public class PipelineWindow : EditorWindow
         }
     }
 
-    /// <summary>导入区：1 入库（无勾选）+ 2 总自动化处理（MasterEnabled）。</summary>
+    /// <summary>导入区：[1] 入库（无勾选，框末批量选择器）+ [2] 总自动化（勾选在开头）。</summary>
     private void DrawImportZone()
     {
         EditorGUILayout.Space(8f);
         EditorGUILayout.LabelField("导入区", EditorStyles.boldLabel);
+
         using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
         {
+            EditorGUILayout.LabelField("[1] 入库（导入器，无开关）", EditorStyles.miniBoldLabel);
             DrawSourceSection();
             DrawBindingsTable();
 
             EditorGUILayout.Space(4f);
-            EditorGUILayout.LabelField("1 入库（导入器，无开关）", EditorStyles.miniBoldLabel);
             BatchFbxImportSettings importSettings = BatchFbxImportSettings.Current;
             string importRoot = importSettings != null
                 ? importSettings.NormalizedImportRoot
@@ -213,10 +190,26 @@ public class PipelineWindow : EditorWindow
                 "当前导入根：" + importRoot,
                 MessageType.None);
 
+            if (IsGltfSourcePath(ActiveSourcePath()))
+            {
+                EditorGUILayout.HelpBox(
+                    "源是 .gltf（JSON + 旁路 .bin/贴图）。管线会整包入库，[④] 按原子夹搬迁，不必先转 GLB。\n" +
+                    "转成 GLB 仍可用（DCC / gltf-pipeline），不是必须。编辑器不会做 DCC 重导。",
+                    MessageType.Info);
+            }
+
             EditorGUILayout.Space(4f);
-            EditorGUILayout.LabelField("2 自动化设置", EditorStyles.miniBoldLabel);
+            if (GUILayout.Button("打开批量选择器", GUILayout.Height(26f)))
+            {
+                BatchFbxImportWindow.ShowWindow();
+            }
+        }
+
+        EditorGUILayout.Space(4f);
+        using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
+        {
             bool master = EditorGUILayout.ToggleLeft(
-                "总自动化处理（导入期回调总闸）", ResourceProcessSwitches.MasterEnabled);
+                "[2] 总自动化处理（导入期回调总闸）", ResourceProcessSwitches.MasterEnabled);
             if (master != ResourceProcessSwitches.MasterEnabled)
             {
                 ResourceProcessSwitches.MasterEnabled = master;
@@ -226,14 +219,14 @@ public class PipelineWindow : EditorWindow
             {
                 EditorGUILayout.HelpBox(
                     "总闸已关：ImportAsset 仍会入库；配置导入根内的模型安全基线（剔灯剔相机 / OBJ 法线）仍会写入。\n" +
-                    "用户设置自动 / 后处理自动不执行，资源总面板里的分项勾选此时无效。⑤ 手动总批量不受此闸影响。",
+                    "用户设置自动 / 后处理自动不执行，资源处理总面板里的分项勾选此时无效。[⑤] 手动总批量不受此闸影响。",
                     MessageType.Warning);
             }
             else
             {
                 EditorGUILayout.HelpBox(
-                    "总闸已开。模型基线（剔灯剔相机 / OBJ 法线）此时必跑，不看下面的分项勾选；" +
-                    "其余由【资源处理总面板】决定：贴图/模型谁开、是「设置自动」还是「后处理自动」。\n" +
+                    "总闸已开。模型基线（剔灯剔相机 / OBJ 法线）此时必跑，不看分项勾选；" +
+                    "其余由【资源处理总面板】留存：贴图/模型谁开、是「设置自动」还是「后处理自动」。\n" +
                     "现状（只读）：贴图 设置" +
                     (ResourceProcessSwitches.TextureSettingsAuto ? "开" : "关") +
                     " / 后处理" +
@@ -242,21 +235,13 @@ public class PipelineWindow : EditorWindow
                     (ResourceProcessSwitches.ModelSettingsAuto ? "开" : "关") +
                     " / 后处理" +
                     (ResourceProcessSwitches.ModelPostProcessAuto ? "开" : "关") +
-                    "。改分项请打开资源总面板。",
+                    "。改分项请打开 [⑤] 处的资源处理总面板。",
                     MessageType.None);
-            }
-
-            if (IsGltfSourcePath(ActiveSourcePath()))
-            {
-                EditorGUILayout.HelpBox(
-                    "源是 .gltf（JSON + 旁路 .bin/贴图）。管线会整包入库，④ 按原子夹搬迁，不必先转 GLB。\n" +
-                    "转成 GLB 仍可用（DCC / gltf-pipeline），不是必须。编辑器不会做 DCC 重导。",
-                    MessageType.Info);
             }
         }
     }
 
-    /// <summary>处理区：③→④→⑤ 连锁。</summary>
+    /// <summary>处理区：[③]→[④]→[⑤] 连锁。勾选在各框开头。</summary>
     private void DrawProcessZone()
     {
         EditorGUILayout.Space(8f);
@@ -264,68 +249,108 @@ public class PipelineWindow : EditorWindow
         using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
         {
             EditorGUI.BeginChangeCheck();
-            settings.runPrefab = EditorGUILayout.ToggleLeft("③ Prefab", settings.runPrefab);
-            if (!settings.runPrefab)
+
+            using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
             {
-                settings.runFlatten = false;
-                settings.runPostProcess = false;
+                settings.runPrefab = EditorGUILayout.ToggleLeft("[③] Prefab", settings.runPrefab);
+                if (!settings.runPrefab)
+                {
+                    settings.runFlatten = false;
+                    settings.runPostProcess = false;
+                }
+
+                DrawProcessMaterialId();
             }
 
-            using (new EditorGUI.DisabledScope(!settings.runPrefab))
+            using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
             {
-                settings.runFlatten = EditorGUILayout.ToggleLeft(
-                    "④ 平铺到交付中间区（Art）", settings.runFlatten);
+                using (new EditorGUI.DisabledScope(!settings.runPrefab))
+                {
+                    settings.runFlatten = EditorGUILayout.ToggleLeft(
+                        "[④] 平铺到交付中间区（Art）", settings.runFlatten);
+                }
+
+                if (!settings.runFlatten)
+                {
+                    settings.runPostProcess = false;
+                }
+
+                EditorGUILayout.HelpBox(
+                    "须开 [③] 才能开 [④]。根路径写死 Assets/Art；详细分类、清夹和碰撞体来自管线平铺 SO，运行前冻结。\n" +
+                    "下方「打开平铺面板」是人工 B/B′；管线运行仍读本区管线平铺 SO，不是人工 SO。",
+                    MessageType.None);
+
+                flattenSettingsFoldout = EditorGUILayout.Foldout(
+                    flattenSettingsFoldout, "[④] 管线平铺操作配置", true);
+                if (flattenSettingsFoldout)
+                {
+                    FlattenOperationSettingsGui.Draw(
+                        flattenSettings, FlattenSettingsScope.Pipeline, drawCategories: true);
+                }
+
+                EditorGUILayout.Space(4f);
+                using (new EditorGUILayout.HorizontalScope())
+                {
+                    if (GUILayout.Button("打开平铺面板", GUILayout.Height(26f)))
+                    {
+                        FlattenWindow.Open();
+                    }
+
+                    if (GUILayout.Button("选中管线平铺 SO", GUILayout.Height(26f)))
+                    {
+                        Selection.activeObject = flattenSettings;
+                        EditorGUIUtility.PingObject(flattenSettings);
+                    }
+                }
             }
 
-            if (!settings.runFlatten)
+            using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
             {
-                settings.runPostProcess = false;
-            }
+                using (new EditorGUI.DisabledScope(!settings.runPrefab || !settings.runFlatten))
+                {
+                    settings.runPostProcess = EditorGUILayout.ToggleLeft(
+                        "[⑤] 资源总批量（压图 / 材质 / 刷顶点色）", settings.runPostProcess);
+                }
 
-            using (new EditorGUI.DisabledScope(!settings.runPrefab || !settings.runFlatten))
-            {
-                settings.runPostProcess = EditorGUILayout.ToggleLeft(
-                    "⑤ 资源总批量（压图 / 材质 / 刷顶点色）", settings.runPostProcess);
+                EditorGUILayout.HelpBox(
+                    "须开 [④] 才能开 [⑤]。【资源处理总面板】同时留存自动化设置参数（总闸分项、设置自动 / 后处理自动）。\n" +
+                    "在那边调整后，管线用 [1][2][③][④][⑤][⑥] 标注同一步骤；[⑤] 跑该面板「执行全部」内核。",
+                    MessageType.None);
+
+                if (GUILayout.Button("打开资源处理总面板", GUILayout.Height(26f)))
+                {
+                    ResourceProcessWindow.ShowWindow();
+                }
             }
 
             if (EditorGUI.EndChangeCheck())
             {
                 EditorUtility.SetDirty(settings);
             }
-
-            EditorGUILayout.HelpBox(
-                "须开前一步才能开后一步。④ 根路径写死 Assets/Art；详细分类、清夹和碰撞体来自管线平铺 SO，并在运行前冻结。",
-                MessageType.None);
-
-            flattenSettingsFoldout = EditorGUILayout.Foldout(
-                flattenSettingsFoldout, "④ 管线平铺操作配置", true);
-            if (flattenSettingsFoldout)
-            {
-                FlattenOperationSettingsGui.Draw(
-                    flattenSettings, FlattenSettingsScope.Pipeline, drawCategories: true);
-            }
-
-            EditorGUILayout.Space(4f);
-            if (sourceBindings.Count > 1)
-            {
-                EditorGUILayout.HelpBox(
-                    "多行时请在导入区表内改各行 ID2。运行时每行用自己的 ID2 入库并建 Prefab。",
-                    MessageType.Info);
-            }
-            else
-            {
-                EditorGUI.BeginChangeCheck();
-                materialId = EditorGUILayout.TextField("materialId / ID2（可选）", materialId);
-                if (EditorGUI.EndChangeCheck())
-                {
-                    SyncRowZeroFromLegacyFields();
-                }
-
-                EditorGUILayout.HelpBox(
-                    "选源时自动填：父目录仅一个内核文件 → 三层名；同夹还有其它内核文件或三层不足（Warning）→ 三层+文件全名。手填覆盖。③ 用该 Id。",
-                    MessageType.None);
-            }
         }
+    }
+
+    private void DrawProcessMaterialId()
+    {
+        EditorGUILayout.Space(4f);
+        if (sourceBindings.Count > 1)
+        {
+            EditorGUILayout.HelpBox(
+                "多行时请在 [1] 表内改各行 ID2。运行时每行用自己的 ID2 入库并建 Prefab。",
+                MessageType.Info);
+            return;
+        }
+
+        EditorGUI.BeginChangeCheck();
+        materialId = EditorGUILayout.TextField("materialId / ID2（可选）", materialId);
+        if (EditorGUI.EndChangeCheck())
+        {
+            SyncRowZeroFromLegacyFields();
+        }
+
+        EditorGUILayout.HelpBox(
+            "选源时自动填：父目录仅一个内核文件 → 三层名；同夹还有其它内核文件或三层不足（Warning）→ 三层+文件全名。手填覆盖。[③] 用该 Id。",
+            MessageType.None);
     }
 
     /// <summary>输出区：⑥。</summary>
@@ -336,11 +361,11 @@ public class PipelineWindow : EditorWindow
         using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
         {
             EditorGUI.BeginChangeCheck();
-            settings.runAb = EditorGUILayout.ToggleLeft("⑥ 导出", settings.runAb);
+            settings.runAb = EditorGUILayout.ToggleLeft("[⑥] 导出", settings.runAb);
             settings.quiet = EditorGUILayout.ToggleLeft("Quiet（无确认框）", settings.quiet);
             EditorGUILayout.HelpBox(
-                "⑥ 只决定这次跑不跑导出。打 AB / 是否 UP / 交付根与 AB 根都在导出 SO。\n" +
-                "开④+⑥时打的是平铺返回的 Art Prefab。Quiet 只禁弹窗，不是 -quit。",
+                "[⑥] 只决定这次跑不跑导出。打 AB / 是否 UP / 交付根与 AB 根都在导出 SO。\n" +
+                "开 [④]+[⑥] 时打的是平铺返回的 Art Prefab。Quiet 只禁弹窗，不是 -quit。",
                 MessageType.None);
             if (EditorGUI.EndChangeCheck())
             {

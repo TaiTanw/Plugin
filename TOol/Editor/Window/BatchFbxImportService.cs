@@ -401,6 +401,10 @@ public static class BatchFbxImportService
         {
             ToolImportApi.CopyObjSidecarsBeside(item.SourceFbxPath, destFull);
         }
+        else if (item.SourceFbxPath.EndsWith(".fbx", StringComparison.OrdinalIgnoreCase))
+        {
+            ToolImportApi.CopyFbxSidecarsBeside(item.SourceFbxPath, destFull);
+        }
 
         AssetDatabase.ImportAsset(item.TargetFbxAssetPath, ImportAssetOptions.ForceUpdate);
         item.Status = ItemStatus.Success;

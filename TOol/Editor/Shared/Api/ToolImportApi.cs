@@ -149,6 +149,7 @@ public static class ToolImportApi
             File.Copy(fullDisk, destFull, false);
             CopyGltfSidecarsBeside(fullDisk, destFull);
             CopyObjSidecarsBeside(fullDisk, destFull);
+            CopyFbxSidecarsBeside(fullDisk, destFull);
         }
         catch (Exception ex)
         {
@@ -411,6 +412,67 @@ public static class ToolImportApi
         {
             Debug.LogWarning("[1 入库] obj 缺伴生 × " + scan.MissingUris.Count +
                              "（源目录没有 .mtl/贴图则 Unity 会白膜）");
+        }
+    }
+
+    /// <summary>
+    /// .fbx 入库时跟拷同目录/Texture/.fbm 及 FBX 写出的相对贴图。缺文件只 Warning，仍导入网格。
+    /// 不 Extract、不改 Importer。内嵌贴图仍等④。
+    /// </summary>
+    public static void CopyFbxSidecarsBeside(string sourceFbxFull, string destFbxFull)
+    {
+        if (string.IsNullOrEmpty(sourceFbxFull) ||
+            !sourceFbxFull.EndsWith(".fbx", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        FbxExternalScan scan = FbxPackageFiles.Scan(sourceFbxFull);
+        string destRoot = Path.GetDirectoryName(destFbxFull);
+        if (string.IsNullOrEmpty(destRoot))
+        {
+            return;
+        }
+
+        for (int i = 0; i < scan.SidecarFullPaths.Count; i++)
+        {
+            string srcFull = scan.SidecarFullPaths[i];
+            string rel = FbxPackageFiles.MakeRelativeToFbxDir(sourceFbxFull, srcFull);
+            string destFull = Path.GetFullPath(Path.Combine(destRoot, rel)).Replace("\\", "/");
+            string destDir = Path.GetDirectoryName(destFull);
+            try
+            {
+                if (!string.IsNullOrEmpty(destDir) && !Directory.Exists(destDir))
+                {
+                    Directory.CreateDirectory(destDir);
+                }
+
+                if (!File.Exists(destFull))
+                {
+                    File.Copy(srcFull, destFull, false);
+                }
+
+                string destAsset = FullPathUnderAssets(destFull);
+                if (!string.IsNullOrEmpty(destAsset))
+                {
+                    AssetDatabase.ImportAsset(destAsset, ImportAssetOptions.ForceUpdate);
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning("[1 入库] fbx 伴生拷贝失败: " + srcFull + " → " + destFull + " " + ex.Message);
+            }
+        }
+
+        if (scan.SidecarFullPaths.Count > 0)
+        {
+            Debug.Log("[1 入库] fbx 已跟拷伴生 × " + scan.SidecarFullPaths.Count);
+        }
+
+        if (scan.MissingUris.Count > 0)
+        {
+            Debug.LogWarning("[1 入库] fbx 缺伴生 × " + scan.MissingUris.Count +
+                             "（源旁没有独立贴图则 Unity 会白膜；内嵌图仍等④ Extract）");
         }
     }
 

@@ -4,7 +4,7 @@ using System.IO;
 using System.Text.RegularExpressions;
 
 // =====================================================================================
-// Shared — glTF 外 URI 扫描。② 伴生拷与 ctx.Build 共用。
+// Shared — glTF 外 URI 扫描。① 伴生拷、ctx.Build、人工 FlattenPlan 共用。
 // 换解析器：只改 Scan() 内部，或新增 ScanXxx 再由 Scan 转调。
 // =====================================================================================
 

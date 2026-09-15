@@ -2,7 +2,7 @@
 
 返回 [D24 边界计划](../03_open-items/d24-boundary-plan.md) · [④能力查封](./pipeline-flatten-capabilities.md) · [ctx](./pipeline-job-context.md)
 
-> 审计快照：2026-09-09。按当日工作树逐个核对 C# 定义与 `Assets/**/*.cs` 的实际引用；不是对旧文档的转述。当日三份 `RetinarBatchModelBuilder` partial 合计 **3,483 行**（2253 + 1006 + 224，含安全护栏）。2026-09-10 增补 SO 快照与人工入口后的当前合计为 **3,518 行**（2280 + 1014 + 224）。本文件不授权据此批量删除或一次性重写。2026-09-14 换实现评估见 [d24 R3](../03_open-items/d24-boundary-plan.md#r3-flatten-split)：先冻结 plan 口，旧代码对照切开后再删。
+> 审计快照：2026-09-09。按当日工作树逐个核对 C# 定义与 `Assets/**/*.cs` 的实际引用；不是对旧文档的转述。当日三份 `RetinarBatchModelBuilder` partial 合计 **3,483 行**（2253 + 1006 + 224，含安全护栏）。2026-09-10 增补 SO 快照与人工入口后的当前合计为 **3,518 行**（2280 + 1014 + 224）。本文件不授权据此批量删除或一次性重写。2026-09-14 换实现评估见 [d24 R3](../03_open-items/d24-boundary-plan.md#r3-flatten-split)：先冻结 plan 口，旧代码对照切开后再删。**2026-09-15：** 人工 FBX 产品口已不再走 SafeZone（步骤 7）；④ 已停写 Importer AB 标签（步骤 8）。下文入口图仍是 09-09 快照。
 
 ## 1. 先给结论
 

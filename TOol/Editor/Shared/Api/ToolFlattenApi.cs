@@ -3,7 +3,7 @@ using System.Collections.Generic;
 // =====================================================================================
 // Shared / Api — ④ 平铺窄口（对齐 ToolPrefabApi）
 //
-// 中间层只调本类。步骤 1：Run(plan) 不读 ctx。分步窄口仍可读 ctx，换口是步骤 2。
+// 中间层只调本类。Run(plan) 不读 ctx。分步窄口仍可读 ctx。
 // =====================================================================================
 
 /// <summary>插件 2 · 平铺到 Art 对外接口。</summary>
@@ -16,7 +16,7 @@ public static class ToolFlattenApi
 
     /// <summary>
     /// 一行完整④：Begin→B|B′→E?→D→C→Finish。不读 ctx。
-    /// 管线/人工仍走下面分步窄口，换口是步骤 2 / 4。
+    /// 管线 FromContext 后进本口；人工组 plan 后进本口。
     /// </summary>
     public static FlattenRowResult Run(FlattenPlan plan)
     {
@@ -90,7 +90,7 @@ public static class ToolFlattenApi
         FlattenBuildService.CopyRendererMaterials(work);
     }
 
-    /// <summary>收尾：自愈、空壳（含轴向）、碰撞盒、动画、AB 名。</summary>
+    /// <summary>收尾：自愈、空壳（含轴向）、碰撞盒、动画。不写 AB 标签。</summary>
     public static bool TryFinish(RetinarFlattenWork work)
     {
         return FlattenBuildService.TryFinish(work);
@@ -100,12 +100,5 @@ public static class ToolFlattenApi
     public static void FlattenSelectedToArt()
     {
         RetinarFlattenScheduler.FlattenSelectedToArt();
-    }
-
-    /// <summary>菜单兼容：按路径平铺。管线不要调（会走 FBX SafeZone 那条）。</summary>
-    public static int FlattenPaths(IList<string> sourcePaths, bool quiet = true)
-    {
-        List<string> artPrefabPaths;
-        return RetinarFlattenApi.FlattenPaths(sourcePaths, quiet, out artPrefabPaths);
     }
 }

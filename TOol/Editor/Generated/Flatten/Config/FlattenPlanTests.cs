@@ -34,6 +34,10 @@ public class FlattenPlanTests
         Assert.That(result.FailedStep, Is.EqualTo(FlattenStep.Begin));
         Assert.That(result.SourcePrefabPath, Is.EqualTo(plan.SourcePrefabPath));
         Assert.That(result.Message, Does.Contain("Begin"));
+        Assert.That(result.CopiedDependencyCount, Is.EqualTo(0));
+        Assert.That(result.ExtractTexturesCallCount, Is.EqualTo(0));
+        Assert.That(result.LeftoverExternalFbm, Is.Empty);
+        Assert.That(result.UnboundTextureSlots, Is.Empty);
     }
 
     [Test]

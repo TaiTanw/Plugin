@@ -89,40 +89,5 @@ public class FlattenOperationSettingsTests
         Assert.That(options.AddBoxCollider, Is.True);
         Assert.That(options.ConvertZUpToYUp, Is.True);
     }
-
-    [Test]
-    public void ManualSplit_RejectsExternalUriPackage()
-    {
-        var ctx = new PipelineJobContext { HasExternalUris = true };
-
-        bool accepted = ManualFlattenService.ValidateBranch(
-            ctx, "Assets/Test/model.gltf", ManualFlattenMode.SplitDependencies, out string error);
-
-        Assert.That(accepted, Is.False);
-        Assert.That(error, Does.Contain("原子迁移"));
-    }
-
-    [Test]
-    public void ManualAtomic_RequiresExternalUrisAndCompleteSidecars()
-    {
-        var embedded = new PipelineJobContext { HasExternalUris = false };
-        Assert.That(
-            ManualFlattenService.ValidateBranch(
-                embedded, "embedded.gltf", ManualFlattenMode.RelocateAtomic, out _),
-            Is.False);
-
-        var missing = new PipelineJobContext { HasExternalUris = true };
-        missing.MissingUris.Add("data.bin");
-        Assert.That(
-            ManualFlattenService.ValidateBranch(
-                missing, "missing.gltf", ManualFlattenMode.RelocateAtomic, out _),
-            Is.False);
-
-        var complete = new PipelineJobContext { HasExternalUris = true };
-        Assert.That(
-            ManualFlattenService.ValidateBranch(
-                complete, "complete.gltf", ManualFlattenMode.RelocateAtomic, out _),
-            Is.True);
-    }
 }
 #endif

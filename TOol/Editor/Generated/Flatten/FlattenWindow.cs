@@ -38,9 +38,10 @@ public sealed class FlattenWindow : EditorWindow
         }
 
         EditorGUILayout.HelpBox(
-            "普通平铺使用 B（按分类拆依赖）；若检测到相对 URI，会拒绝并提示改用原子迁移。\n" +
+            "普通平铺使用 B（按分类拆依赖）。若 Scan 到相对 URI，会确认：仍要平铺才继续，取消或关闭则中止。\n" +
             "原子迁移使用 B′，接受 .gltf 或恰好依赖一个外部 URI glTF 的 Prefab；缺伴生直接失败。\n" +
-            "两种操作都执行完整④收尾，不是可乱序的 Begin/B/D 单步。",
+            "直接选 .fbx/.obj/.glb/.gltf 都先③再建 plan，与管线同一套空壳 Finish，不再缩进 0.8 立方体。\n" +
+            "两种操作都执行完整④收尾，不是可乱序的 Begin/B/D 单步。不建 PipelineJobContext。",
             MessageType.Info);
 
         using (var scope = new EditorGUILayout.ScrollViewScope(scroll))

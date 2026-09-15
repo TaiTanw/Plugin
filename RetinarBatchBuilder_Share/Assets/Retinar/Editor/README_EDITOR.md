@@ -42,7 +42,7 @@ Assets/Retinar/Editor/
   → PipelineRunner 或 ManualFlattenService
   → Begin → (B 分类拆分 | B′ 原子迁移) → E? → D → C → Finish
      Prefab：拷依赖 + 套空父外壳（不缩放）+ 可选碰撞体 + 可选 OBJ 轴向修正
-     直接选FBX的人工普通入口：另走CreateNormalizedPrefab/SafeZone（非管线Prefab七步入口）
+     直接选模型（含 FBX）：先③再同一套七步，不再走 CreateNormalizedPrefab/SafeZone
   → Assets/Art/<名>/{Model,image/Texture,Material,Prefab,…}
   → 平铺结束 TryHeal（补拷+Extract+remap）——④ 是最后一道，之后没有兜底校验
 

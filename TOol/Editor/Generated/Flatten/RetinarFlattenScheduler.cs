@@ -2,7 +2,7 @@
 // 10_Flatten — 资源平铺：流程调度
 //
 // 职责：把选中的 Prefab/模型送入人工完整④；普通 B 与原子 B′ 是互斥入口。
-// 具体搬文件 / Importer / SafeZone 仍在 RetinarBatchModelBuilder（后续按能力拆文件）。
+// 具体搬文件 / Importer 仍在 RetinarBatchModelBuilder（后续按能力拆文件）。
 // =====================================================================================
 
 /// <summary>平铺到 Art 的菜单调度入口。</summary>

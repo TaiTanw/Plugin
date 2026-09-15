@@ -97,7 +97,7 @@ public class BatchFbxImportSettings : ScriptableObject
             {
                 fallbackWarningLogged = true;
                 Debug.LogWarning("[BatchFbxImportSettings] 工程里还没有配置资产，本次使用内存默认值。" +
-                    "打开「批量FBX导入」面板会自动创建 " + DefaultAssetPath);
+                    "打开「批量选择器」面板会自动创建 " + DefaultAssetPath);
             }
 
             return fallbackInstance;

@@ -36,6 +36,6 @@ D18 正文（勿点表内链接）：[d18k](./03_open-items/backlog.md#d18k) · 
 **当前默认：** SO 开启②③④⑤⑥；④⑤可关，⑥可选 UP。旧门禁/全套报告已删除\
 **优先已做：** 窄口 + Runner + D3 总面板 + D2 单文件 + **D1 契约收口** + **D4 GLB 入库** + **D5 无头 CLI**  
 **GLB 样例：** `Assets/Art/ggdddd` 编辑器内已跑通；原洋红 **D13 主体已归档**；R1 透明修复、Art 玻璃与移动端 AB **均已验收**\
-**下一步：** ④ [步骤第 4 步](./03_open-items/d24-flatten-steps.md)（手动组 plan、禁止 ctx）。1–3 已落地。不因本轮创建新版本标签。
+**下一步：** ④ 第 10 步 CLI 已核（Extract 只归 E）。第 11 步暂定 Fail，因现网空槽事实会误杀 GLTF/GLB，先停。D25-2（A）① FBX 外置图已跟拷。
 **对外接口：** (A) 中间层已可用 · (B) **D5 已验收** → [cli-getting-started](./04_implementation/cli-getting-started.md)  
 **配置分层：** 总步骤 → Pipeline SO；平铺细节 → 同类 `FlattenOperationSettings` 的人工/管线独立资产；其它资源配置仍为 Prefs + SO 混合；⑤ Material SO 尚未分人工/管线

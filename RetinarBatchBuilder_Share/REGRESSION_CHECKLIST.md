@@ -16,16 +16,16 @@
 
 ## 2. ④完整相位与两个人工按钮
 
-- [ ] 管线只走 ToolFlattenApi 七步；不借 FlattenPaths 进入 FBX SafeZone 调度器。
-- [ ] 普通平铺选择 B，遇外 URI glTF 拒绝；原子迁移选择 B′，缺件/无外 URI/多个 glTF 主包拒绝。
-- [ ] 人工按钮输入已导入的 Assets 模型/Prefab；非 FBX 原模型先经③生成 Prefab。
+- [ ] 管线与人工④都走 `ToolFlattenApi.Run(plan)`；调度层不出现 `FlattenPaths` / SafeZone 创建链。
+- [ ] 普通平铺选择 B，遇外 URI glTF **确认后才平铺**（取消/叉号中止）；原子迁移选择 B′，缺件/无外 URI/多个 glTF 主包拒绝。
+- [ ] 人工按钮输入已导入的 Assets 模型/Prefab；原模型（含 FBX）先经③生成 Prefab。
 - [ ] 两个人工按钮均完成 Begin→B/B′→E?→D→C→Finish，而不是只搬文件；不会自动追加⑤⑥。
-- [ ] 自动每模型②.5一次 ctx；人工每次操作建立自身 ctx，相位内不重扫。普通兼容 Prefab 的 ctx=null 路径单独验收。
+- [ ] 自动每模型②.5一次 ctx；人工**不** `PipelineJobContext.Build`。
 - [ ] 缺 sidecar（glTF）：typed MissingUris 在 Begin 前失败，管线 exit=40，整趟④停；执行时文件消失也使 B′失败。OBJ 缺 `.mtl`/贴图当前不要求 40，记录白膜/`exit=0` 事实。
 - [ ] B′在 Art/名称/名称/ 保持相对树；核对主文件及所有 sidecar，Prefab/材质引用到本单元。失败不保证自动回滚。
 - [ ] B 的复制映射、OBJ MTL、E Extract、D 引用、C 材质独立化均检查；B 返回 true 不代替资源完整验收。
 - [ ] C 两分支都跑；glTF 包原图与 Unity 材质用贴图副本并存是已接受布局。
-- [ ] 直接选 FBX 普通入口验证 SafeZone；管线/外来 Prefab 验证空父、源内容 TRS 与动画，不要求它们同样缩入 SafeZone。
+- [ ] 直接选 FBX 与管线/外来 Prefab 一样验证空父、源内容 TRS 与动画；**不**再要求缩入 SafeZone。
 - [ ] 轴向开/关分别测试，binding.CloneWith 不丢配置；重跑不叠加多余外壳和名称。
 - [ ] 碰撞体按 SO 开关验收，默认关闭；关闭不因缺 BoxCollider 判失败。
 - [ ] 动画材质曲线、Controller Motion、LoopTime 与源一致；实际播放，不只查文件存在。
@@ -59,7 +59,7 @@
 - [ ] 使用管线⑥ / RetinarAbApi.Build，核对代码中的双端/LZ4及导出SO的路径、可选UP、拷贝开关。
 - [ ] 检查实际 AB 存在、非零、更新时间与可加载性；不能只靠弹窗或 exit=0。
 - [ ] 输出 AB/UP 只含指定 Prefab 及依赖，不打整棵 Art。UP 开启时在干净工程验证。
-- [ ] 插件 1 不主动做④材质/Importer/Prefab变换；④提前写 AB 标签的迁移须先核对兼容调用者。
+- [ ] 插件 1 不主动做④材质/Importer/Prefab变换；④ **不再**写 AB 标签。核对⑥仍出双端 AB。
 - [ ] 歼15 R1 在目标移动端验证透明、颜色、深度/排序与最终 AB；目前未获此项确认。
 - [ ] 其它材质、法线、双面、动画、Collider 按目标应用实际需求验收，模型能显示不代表交互已验收。
 - [ ] 记录⑤50后⑥仍跑、⑥失败覆盖60、部分出包仍0等当前行为；对应 D26-4/既有契约，不自行改码。

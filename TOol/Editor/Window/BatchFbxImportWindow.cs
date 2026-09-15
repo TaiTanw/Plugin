@@ -25,10 +25,11 @@ public class BatchFbxImportWindow : EditorWindow
     private string lastSummary;
     private bool isRunning;
 
-    [MenuItem("Tools/批量FBX导入")]
+    /// <summary>与管线 [1]「打开批量选择器」同一窗口。</summary>
+    [MenuItem("Tools/批量选择器")]
     public static void ShowWindow()
     {
-        GetWindow<BatchFbxImportWindow>("批量模型导入").minSize = new Vector2(640f, 460f);
+        GetWindow<BatchFbxImportWindow>("批量选择器").minSize = new Vector2(640f, 460f);
     }
 
     private void OnEnable()

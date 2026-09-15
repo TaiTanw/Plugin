@@ -16,4 +16,5 @@ public sealed class RetinarFlattenWork
     public string PrefabPath;
     public Dictionary<string, string> CopiedDependencies;
     public RetinarFlattenOptions Options;
+    public FlattenTextureIdentity TextureIdentity;
 }

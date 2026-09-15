@@ -1,6 +1,8 @@
+using System.Collections.Generic;
+
 // =====================================================================================
 // Generated / Flatten / Config
-// 中文：④ 一行 Run(plan) 的结果。步骤 1 只记成功/失败步/路径；拷贝计数、残留 .fbm 是步骤 9。
+// 中文：④ 一行 Run(plan) 的结果。步骤 9–10：拷贝计数、Extract 次数、残留 .fbm、未绑贴图槽。不改失败闸。
 // =====================================================================================
 
 /// <summary>Run(plan) 停在哪一步。None 表示跑完 Finish。</summary>
@@ -25,6 +27,12 @@ public sealed class FlattenRowResult
     public string Message;
     public string SourcePrefabPath;
     public string ArtPrefabPath;
+    public int CopiedDependencyCount;
+    public int ExtractTexturesCallCount;
+    public readonly List<string> LeftoverExternalFbm = new List<string>();
+    public readonly List<string> UnboundTextureSlots = new List<string>();
+    /// <summary>步骤 11 身份警告；不改变 Ok / FailedStep，批量继续。</summary>
+    public readonly List<string> TextureIdentityWarnings = new List<string>();
 
     public static FlattenRowResult Succeeded(string sourcePrefabPath, string artPrefabPath)
     {

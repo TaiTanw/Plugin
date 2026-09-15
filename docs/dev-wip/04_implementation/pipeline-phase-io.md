@@ -53,7 +53,7 @@
 
 | 入口 | 填单 | 入库性格 |
 |---|---|---|
-| **编排总面板** | 可拖入单/多文件，或点「打开批量选择器」后由批量面板「输出到编排」回填路径+ID2 表 | 运行时仍走 Runner 的 1 入库（覆盖槽），**不**走批量 Conflict |
+| **编排总面板** | 可拖入单/多文件，或在 [1] 点「打开批量选择器」后由批量面板「输出到编排」回填路径+ID2 表 | 运行时仍走 Runner 的 1 入库（覆盖槽），**不**走批量 Conflict |
 | **批量专属面板** | 多文件夹、按文件一条；可筛后缀。两个按钮：「执行导入」= 只入库；「输出到编排」= 不拷贝 | 人单独点「执行导入」时仍 Conflict。给编排当选择器时 **只收集、不执行拷贝** |
 | **CLI** | 仍只一个 `-source`（可加一个 `-materialId`） | 与总面板同一套 1 入库。人工已经指定了那一个文件 |
 | **CLI + Pack** | argv 仍一个压缩包路径 | 解包后 **在进程内** 填 Bindings（多行），再按多文件思路循环 1。不是多个 `-source` |
@@ -195,27 +195,16 @@ List<string> BuildPrefabs(IList<string> sourceModelPaths, string materialId = nu
 
 ### ④ `ToolFlattenApi` 能力组合
 
-管线④不再调 `FlattenPaths`。按行：
+管线④按行：`FromContext` → `Run(plan)`（Begin→B|B′→E?→D→C→Finish）。不再调 `FlattenPaths`。
 
-```text
-request = ForPipeline(options.FlattenPolicy)
-request.ConvertZUpToYUp = binding.ConvertZUpToYUp
-TryBegin(prefab, ctx, request, out work)      // 0 清单元夹 + A 写 Prefab
-ShouldRelocateAtomic(ctx) ? RelocateAtomic(work) : SplitDependencies(work)
-ApplyImportAndExtract(work, ctx)              // E；非 ModelImporter 跳过
-Remap(work)                                   // D
-CopyRendererMaterials(work)                   // C
-TryFinish(work)                               // 自愈 / 空壳 / 动画 / AB 名
-```
-
-`FlattenPaths` 仍给菜单（含 FBX 直平铺那条 `CreateNormalizedPrefab`）。**管线禁止调它。**
+`FlattenPaths` / `CreateNormalizedPrefab` 旧链已在步骤 12 删除；当前管线/人工均走 `Run(plan)`。仍保留的分步兼容接口留待第 13 步核对。
 
 | | 现网 |
 |---|---|
 | **入** | **按行** ③ 的该 Prefab + ctx + request：管线 SO policy 提供分类/清夹/碰撞体；`HasExternalUris` → B′；绑定行 `ConvertZUpToYUp` → Finish 里叠 −90°X |
-| **出** | 各行 `work.PrefabPath` 拼成列表，**覆盖** 局部 `prefabPaths` |
+| **出** | 各行 `FlattenRowResult.ArtPrefabPath` 拼成列表，**覆盖** 局部 `prefabPaths` |
 | **旁路** | 各 Art 单元根 → `PostProcessFolderPaths`（⑤开且该字段仍空） |
-| **失败** | glTF typed `MissingUris` 非空，或 Begin/B/B′/Finish 返回 false / Prefab 路径空 → 40 **整趟停**（⑤⑥不跑；已写出 Art 不回滚）。OBJ 缺件不进 MissingUris。E/D/C 为 void，尚无统一分步结果 |
+| **失败** | glTF typed `MissingUris` 非空，或 Begin/B/B′/Finish 返回 false / Prefab 路径空 → 40 **整趟停**（⑤⑥不跑；已写出 Art 不回滚）。OBJ 缺件不进 MissingUris。E/D/C 为 void，尚无统一分步结果（步骤 9） |
 | **给谁** | ⑥ 用 Art Prefab；⑤ 用单元根 |
 
 gltf 整包：②/1 已入库伴生；④ 禁止按后缀拆相对 URI。不是新相位。

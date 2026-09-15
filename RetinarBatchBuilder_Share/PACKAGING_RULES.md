@@ -15,12 +15,12 @@
 | Importer 分区 | Art 模型只由④ `ApplyArtDelivery`（InPrefab + Local）。Processor 硬跳过 Art。Incoming 安全基线不跟总闸；策略自动仍要总闸+分项 |
 | ⑤ | 用户开了⑤时允许指定 OP 改交付副本。透明修复在插件 2 Material OP，不扩模型 ctx |
 | C 另存 `.mat` | B/B′ 都执行；不以 `MaterialForm` 为闸 |
-| 模型格式 | FBX/OBJ/GLB/glTF。B′ 另有相对 URI 整树。SafeZone 只用于人工直接选 FBX。碰撞体跟平铺 SO，默认关 |
-| 缺伴生 | 旧⑥门禁已删。glTF `MissingUris` 非空 → ④ `FlattenFailed(40)`，**整趟停止**，不承诺其余行继续。OBJ 缺 `.mtl`/贴图**不进**该闸（见待办说明） |
+| 模型格式 | FBX/OBJ/GLB/glTF。B′ 另有相对 URI 整树。人工直接选 FBX 与管线同一套空壳，不 SafeZone。碰撞体跟平铺 SO，默认关 |
+| 缺伴生 | 旧⑥门禁已删。glTF `MissingUris` 非空 → ④ `FlattenFailed(40)`，**整趟停止**，不承诺其余行继续。OBJ 缺 `.mtl`/贴图**不进**该闸。FBX 外置贴图①跟拷（D25-2 A） |
 | `.fbm` | 禁止改缓存文件。④ 自愈；无⑥兜底。B 残留外部 `.fbm` 仍可进 AB（B 质量闸待④拆分后评估） |
 | 贴图体积/报告 | 旧 5MB 报告线、`01_source`、xlsx、runtime 文案已删。压图走插件 2 SO/OP |
 | 顶点色 | D19：重导可冲色，不是 CLI/AB 必须全白 |
-| AB 标签 | 现网④ Finish 仍写；已拍迁⑥清单，先核对外依赖（D24-R4） |
+| AB 标签 | ④ **不再**写 Prefab Importer 标签；⑥ 用 `AssetBundleBuild[]`（D24-R4 / 步骤 8） |
 | InPrefab | 不是旧门禁遗物。External 会在目标工程自动生成 `Materials/` 与 `.fbm` 目录 |
 
 ## 明确不作现行要求

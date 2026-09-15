@@ -3,7 +3,7 @@
 位置：`Assets/Plugin/Pipeline/`
 
 **职责：** 是否跑导入/处理/输出三区、quiet、错误码字符串汇总；主流程依赖插件 1 / 2 对外窄口；Runner 仍有 D19 顶点色诊断/补偿遗留，尚非完全纯编排。\
-**不负责：** 压图/材质操作内部实现；旧⑥业务门禁已经删除。人工④目前另有服务编排，共用七步能力。\
+**不负责：** 压图/材质操作内部实现；旧⑥业务门禁已经删除。人工④调度在 `Editor/Flatten/`，搬文件仍在插件 2 内核。\
 **不主动调用「设置自动」**（靠 Unity 回调；Art 模型硬跳过，贴图/后处理另按排除表；Incoming 模型安全基线不受总闸控制）。\
 **处理区连锁：** ③开才能④，④开才能⑤。⑤ = 代调 L1「执行全部」同一 `RunMasterBatch`，返回 `ToolPostProcessResult`（FailedCount→50）。
 
@@ -17,7 +17,8 @@ Pipeline/
    ├─ PipelineMaterialId.cs                # D9 默认 Id；SuggestBindingsForSelection（A）
    ├─ PipelineSourceAccept.cs              # 批量 → 编排（路径+ID2）
    ├─ PipelineOptions / Result / ErrorCodes
-   ├─ PipelineJobContext.cs                # 每模型事实；GltfUriProbe 转调共享扫描
+   ├─ Flatten/                             # ④ 中间层：Orchestration 调度 / Operations 组 plan
+   ├─ PipelineJobContext.cs                # 每模型事实；仅自动管线 ②.5
    ├─ PipelineRunner.cs                    # (A/B) 编排内核
    ├─ PipelineWindow.cs                    # (A) Tools > 自动化管线总面板
    └─ PipelineCli.cs                       # (B) -executeMethod PipelineCli.Run（D5 已验收）
@@ -34,13 +35,13 @@ Pipeline/
 
 人工平铺使用同一 `FlattenOperationSettings` 数据类，但资产位于 `TOol/ConfigData/Manual/`。两份资产互不覆盖；人工面板拖入管线目录资产时只读，管线面板只编辑管线目录资产。Runner 开跑前把管线资产冻结为 `FlattenOperationPolicy`，深层内核不再读取平铺 EditorPrefs。
 
-**materialId / ID2：** 选源自动填（父目录仅一个内核文件→三层；还有其它或三层 Warning→三层+文件全名）。批量「输出到编排」走 `PipelineSourceAccept.SendToOrchestration` → 总面板 `AcceptBindings`。Runner 读 `SourceBindings`，先逐行入库+②.5，再逐行③（该行 ID2）；④按行使用 ctx。空表则用 `SourcePath`+`MaterialId` 合成一行。
+**materialId / ID2：** 选源自动填（父目录仅一个内核文件→三层；还有其它或三层 Warning→三层+文件全名）。批量「输出到编排」走 `PipelineSourceAccept.SendToOrchestration` → 总面板 `AcceptBindings`。Runner 读 `SourceBindings`，先逐行入库+②.5，再逐行③（该行 ID2）；④把该行 ctx 译成 plan 再 Run。空表则用 `SourcePath`+`MaterialId` 合成一行。
 
 | 步骤 | 窄口 |
 |---|---|
 | ② / 1 入库 | `ToolImportApi.ImportSingleModel`（可选 Incoming 夹名 = ID2） |
 | ③ | `ToolPrefabApi` |
-| ④ | `ToolFlattenApi`（ctx 选 B/B′；`FlattenOperationPolicy` 给分类/清夹/碰撞体） |
+| ④ | `ToolFlattenApi.Run(plan)`（自动 FromContext；人工 Scan 组 plan） |
 | ⑤ | `ToolPostProcessApi`（Converter 默认开；贴图→材质→模型） |
 | ⑥ | `RetinarAbApi.Build` |
 

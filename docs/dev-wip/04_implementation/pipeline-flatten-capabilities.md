@@ -111,7 +111,7 @@ C 在 `image/Texture/` 的副本与 B′ 子树里那份**并存**：前者给 U
 |---|---|---|
 | **窄口变薄** | **已落地（D24-5）** | 七步仍在；管线入口换成 `ToolFlattenApi` |
 | **编排认能力** | **已落地** | `PipelineRunner.FlattenPerPrefab` 组合；B ↔ B′ 互斥 |
-| **整段④迁出插件 1** | **2026-09-03 已落地（D27）** | 文件在 `TOol/Editor/Generated/Flatten/`；管线只调 `ToolFlattenApi`。内核类名未改。菜单 FBX SafeZone 仍同文件，管线不走。 |
+| **整段④迁出插件 1** | **2026-09-03 已落地（D27）** | 文件在 `TOol/Editor/Generated/Flatten/`；管线只调 `ToolFlattenApi`。内核类名未改。人工 FBX 已改走③+`Run(plan)`（步骤 7）。 |
 | **只把 B′ 先搬走** | **不建议作第一刀** | 路径表、布局、随后 D/C 仍在大文件里；横切不如按「菜单 FBX 直平铺 vs 管线 Prefab 平铺」切开 |
 
 D26 是编排语义，不属于目录迁移。2026-09-10：D26-1 已让配置导入根的安全基线脱离总闸；D26-2 已用 typed `MissingUris` 在④ Begin 前 Fail(40) **并停止整趟**（仅 glTF 探针路径）。B′ 也改为全部必需输入生成精确目标才成功。OBJ 缺件不进该闸。

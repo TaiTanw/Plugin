@@ -42,6 +42,6 @@ RetinarDirectPackage、RetinarPackageScheduler、ExportArtPrefabPaths及旧规�
 
 ## 碰撞体 / 缩放 / 门禁
 
-⑥不负责平铺变换。④碰撞体由本入口SO快照决定，默认关闭；直接选FBX的人工普通平铺走SafeZone，管线③Prefab走另一条空壳路径。旧业务门禁已删除，不存在“传skipGates才能禁用”的现行开关。
+⑥不负责平铺变换。④碰撞体由本入口SO快照决定，默认关闭；人工直接选FBX与管线③Prefab同一套空壳路径，不再SafeZone缩放。旧业务门禁已删除，不存在“传skipGates才能禁用”的现行开关。
 
 需要已加工Prefab直接出包时，可由API传入已验收列表并禁用不需要的前置步骤；不要因此宣称完整管线无需④⑤或等同于人工④按钮。

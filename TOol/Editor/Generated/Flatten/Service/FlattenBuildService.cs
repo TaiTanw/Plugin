@@ -1,4 +1,6 @@
 using System.Collections.Generic;
+using UnityEditor;
+using UnityEngine;
 
 // =====================================================================================
 // Generated / Flatten / Service
@@ -10,7 +12,8 @@ using System.Collections.Generic;
 public static class FlattenBuildService
 {
     /// <summary>
-    /// 冻结 plan → 现网七步。不改搬文件算法。管线④已走本口（步骤 2）。
+    /// 冻结 plan → 现网七步。不改搬文件算法。不进菜单 FBX 直平铺入口。
+    /// 管线④已走本口（步骤 2）。
     /// </summary>
     public static FlattenRowResult Run(FlattenPlan plan)
     {
@@ -33,6 +36,7 @@ public static class FlattenBuildService
         }
 
         RetinarFlattenOptions options = CreateOptionsFromPlan(plan);
+        RetinarBatchModelBuilder.ResetExtractTexturesInvokeCount();
         RetinarFlattenWork work;
         if (!RetinarBatchModelBuilder.TryBeginPackagedFlatten(sourcePrefabPath, options, out work))
         {
@@ -43,20 +47,24 @@ public static class FlattenBuildService
         {
             if (!RetinarBatchModelBuilder.FlattenRelocateAtomic(work))
             {
-                return FlattenRowResult.Failed(
-                    FlattenStep.RelocateAtomic,
-                    "B′ 原子搬迁失败: " + sourcePrefabPath,
-                    sourcePrefabPath,
-                    work != null ? work.PrefabPath : null);
+                return WithFacts(
+                    FlattenRowResult.Failed(
+                        FlattenStep.RelocateAtomic,
+                        "B′ 原子搬迁失败: " + sourcePrefabPath,
+                        sourcePrefabPath,
+                        work != null ? work.PrefabPath : null),
+                    work);
             }
         }
         else if (!RetinarBatchModelBuilder.FlattenSplitDependencies(work))
         {
-            return FlattenRowResult.Failed(
-                FlattenStep.SplitDependencies,
-                "B 拆依赖失败: " + sourcePrefabPath,
-                sourcePrefabPath,
-                work != null ? work.PrefabPath : null);
+            return WithFacts(
+                FlattenRowResult.Failed(
+                    FlattenStep.SplitDependencies,
+                    "B 拆依赖失败: " + sourcePrefabPath,
+                    sourcePrefabPath,
+                    work != null ? work.PrefabPath : null),
+                work);
         }
 
         if (plan.ApplyArtModelImporter)
@@ -70,14 +78,18 @@ public static class FlattenBuildService
             work == null ||
             string.IsNullOrEmpty(work.PrefabPath))
         {
-            return FlattenRowResult.Failed(
-                FlattenStep.Finish,
-                "平铺 Finish 失败: " + sourcePrefabPath,
-                sourcePrefabPath,
-                work != null ? work.PrefabPath : null);
+            return WithFacts(
+                FlattenRowResult.Failed(
+                    FlattenStep.Finish,
+                    "平铺 Finish 失败: " + sourcePrefabPath,
+                    sourcePrefabPath,
+                    work != null ? work.PrefabPath : null),
+                work);
         }
 
-        return FlattenRowResult.Succeeded(sourcePrefabPath, work.PrefabPath);
+        return WithFacts(
+            FlattenRowResult.Succeeded(sourcePrefabPath, work.PrefabPath),
+            work);
     }
 
     /// <summary>plan → 内核 Options。不读 ctx。</summary>
@@ -216,5 +228,101 @@ public static class FlattenBuildService
     public static bool TryFinish(RetinarFlattenWork work)
     {
         return RetinarBatchModelBuilder.TryFinishPackagedFlatten(work);
+    }
+
+    static FlattenRowResult WithFacts(FlattenRowResult row, RetinarFlattenWork work)
+    {
+        if (row == null || work == null)
+        {
+            return row;
+        }
+
+        row.CopiedDependencyCount = work.CopiedDependencies != null ? work.CopiedDependencies.Count : 0;
+        row.ExtractTexturesCallCount = RetinarBatchModelBuilder.ExtractTexturesInvokeCount;
+        if (work.TextureIdentity != null)
+            row.TextureIdentityWarnings.AddRange(work.TextureIdentity.Warnings);
+        List<string> leftover = RetinarBatchModelBuilder.ListExternalFbmTextureDependencies(
+            work.AssetFolder, work.PrefabPath);
+        for (int i = 0; leftover != null && i < leftover.Count; i++)
+        {
+            row.LeftoverExternalFbm.Add(leftover[i]);
+        }
+
+        List<string> unbound = CollectUnboundTextureSlots(work.AssetFolder);
+        for (int i = 0; i < unbound.Count; i++)
+        {
+            row.UnboundTextureSlots.Add(unbound[i]);
+        }
+
+        Debug.Log(
+            "[Flatten] facts source=" + (work.SourcePath ?? row.SourcePrefabPath) +
+            " copied=" + row.CopiedDependencyCount +
+            " extractTextures=" + row.ExtractTexturesCallCount +
+            " leftoverFbm=" + row.LeftoverExternalFbm.Count +
+            " unboundSlots=" + row.UnboundTextureSlots.Count +
+            " textureIdentityWarnings=" + row.TextureIdentityWarnings.Count);
+        return row;
+    }
+
+    static List<string> CollectUnboundTextureSlots(string assetFolder)
+    {
+        var result = new List<string>();
+        if (string.IsNullOrEmpty(assetFolder))
+        {
+            return result;
+        }
+
+        string materialFolder = FlattenLayout.MaterialFolder(assetFolder);
+        if (!AssetDatabase.IsValidFolder(materialFolder))
+        {
+            return result;
+        }
+
+        string unitPrefix = assetFolder.Replace("\\", "/") + "/";
+        string[] guids = AssetDatabase.FindAssets("t:Material", new[] { materialFolder });
+        for (int i = 0; guids != null && i < guids.Length; i++)
+        {
+            string path = AssetDatabase.GUIDToAssetPath(guids[i]).Replace("\\", "/");
+            Material material = AssetDatabase.LoadAssetAtPath<Material>(path);
+            if (material == null)
+            {
+                continue;
+            }
+
+            Texture main = material.HasProperty("_MainTex") ? material.GetTexture("_MainTex") : null;
+            if (main == null && material.HasProperty("_BaseMap"))
+            {
+                main = material.GetTexture("_BaseMap");
+            }
+
+            if (main == null)
+            {
+                result.Add(path + "._MainTex empty");
+            }
+
+            string[] props = material.GetTexturePropertyNames();
+            for (int p = 0; props != null && p < props.Length; p++)
+            {
+                Texture tex = material.GetTexture(props[p]);
+                if (tex == null)
+                {
+                    continue;
+                }
+
+                string texPath = AssetDatabase.GetAssetPath(tex).Replace("\\", "/");
+                if (string.IsNullOrEmpty(texPath))
+                {
+                    result.Add(path + "." + props[p] + " embedded");
+                    continue;
+                }
+
+                if (!texPath.StartsWith(unitPrefix, System.StringComparison.OrdinalIgnoreCase))
+                {
+                    result.Add(path + "." + props[p] + " -> " + texPath);
+                }
+            }
+        }
+
+        return result;
     }
 }

@@ -27,6 +27,24 @@ public static class AssetPathUtility
         return projectRoot + "/" + assetPath;
     }
 
+    /// <summary>磁盘绝对路径 → Assets/…。不在工程内则 null。</summary>
+    public static string ToAssetPath(string fullPath)
+    {
+        if (string.IsNullOrEmpty(fullPath))
+        {
+            return null;
+        }
+
+        string full = fullPath.Replace("\\", "/");
+        string projectRoot = Directory.GetParent(Application.dataPath).FullName.Replace("\\", "/");
+        if (full.StartsWith(projectRoot + "/", System.StringComparison.OrdinalIgnoreCase))
+        {
+            return full.Substring(projectRoot.Length + 1);
+        }
+
+        return null;
+    }
+
     /// <summary>
     /// 判断路径是否落在 Unity 的内嵌媒体抽取目录（&lt;FBX名&gt;.fbm）里。
     /// .fbm 是缓存，权威数据仍在 FBX 里；自动改写它是白做且有害。

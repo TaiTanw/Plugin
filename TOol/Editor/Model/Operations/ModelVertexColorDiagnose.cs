@@ -5,55 +5,12 @@ using UnityEngine;
 
 // =====================================================================================
 // 顶点色诊断：证明「工程内 Mesh 是否已全白」，与 UnityGLTF 菜单导出解耦。
+// 人机入口：资源处理总面板「按批量路径仅扫描模型」（Evaluate 顶点色全白）。
+// 本类 API 仍给管线 ⑤/⑥ 打日志；不再挂 Tools/资源处理 子菜单。
 // =====================================================================================
 public static class ModelVertexColorDiagnose
 {
     private const float WhiteEpsilon = 0.002f;
-
-    [MenuItem("Tools/资源处理/诊断选中模型顶点色", false, 520)]
-    private static void DiagnoseSelection()
-    {
-        var paths = new List<string>();
-        foreach (Object obj in Selection.objects)
-        {
-            string path = AssetDatabase.GetAssetPath(obj);
-            if (string.IsNullOrEmpty(path))
-            {
-                continue;
-            }
-
-            if (AssetDatabase.IsValidFolder(path))
-            {
-                string[] guids = AssetDatabase.FindAssets("t:Model", new[] { path });
-                for (int i = 0; i < guids.Length; i++)
-                {
-                    paths.Add(AssetDatabase.GUIDToAssetPath(guids[i]));
-                }
-            }
-            else if (path.EndsWith(".prefab", System.StringComparison.OrdinalIgnoreCase))
-            {
-                foreach (string dep in AssetDatabase.GetDependencies(path, true))
-                {
-                    if (AssetImporter.GetAtPath(dep) as ModelImporter != null)
-                    {
-                        paths.Add(dep);
-                    }
-                }
-            }
-            else if (AssetImporter.GetAtPath(path) as ModelImporter != null)
-            {
-                paths.Add(path);
-            }
-        }
-
-        if (paths.Count == 0)
-        {
-            Debug.LogWarning("[顶点色诊断] 请选中 Model / Prefab / 含模型的文件夹。");
-            return;
-        }
-
-        Debug.Log(DiagnosePaths(paths));
-    }
 
     /// <summary>是否全部 ModelImporter 模型均已全白（无模型视为 true）。</summary>
     public static bool AreAllWhite(IList<string> modelOrFolderPaths)

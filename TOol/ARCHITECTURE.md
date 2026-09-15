@@ -1,10 +1,11 @@
 # TOol（插件 2）结构说明
 
 历史架构版本：1.3.9（并非当前发布号）\
-最近同步：2026-09-14（④临时归属、SO迁移范围、⑤材质与导入基线边界）\
+最近同步：2026-09-15（步骤 12 删除旧平铺链；现用七步、SO 和⑤边界保持）\
 适用：Unity 2020.3 / 2022.3 Editor；与 `RetinarBatchBuilder_Share`（插件 1）配合使用。
 
 本文说明目录层级、类职责、自动化两层语义，以及和打包工具的边界。便于扩展新 Operation / 新资源类型时对照。  
+当前④入口为 `ToolFlattenApi.Run(plan)`；人工不建立 ctx。步骤 12 已删除旧 `FlattenPaths` / SafeZone 创建链及专用助手，未删除七步本体，未移动物理目录。贴图身份警告保留引用并继续；详见 [步骤单页](../docs/dev-wip/03_open-items/d24-flatten-steps.md)。
 扩展名识别与加 Op / 加后缀 / 加大类、以及「总可处理文件 → Evaluate → Execute」数据流：[docs/dev-wip/04_implementation/op-recognition-and-extend.md](../docs/dev-wip/04_implementation/op-recognition-and-extend.md)
 
 ### 配置归属（EditorPrefs 与 SO，必读）
@@ -14,7 +15,7 @@
 | **L1 批量扫描路径** | **EditorPrefs**（本机） | 资源处理总面板 | 总/分项批量扫哪些夹 | 不决定能否进 Art；不拦 FBX 入库 |
 | **贴图 `excludedPathPrefixes`** | `TextureProcessSettings.asset` | **贴图高级设置 → 子处理配置** | 设置自动 / 后处理自动 **跳过**这些前缀（默认 `Assets/Art/`） | 不拦批量 FBX 拷贝目标 |
 | **模型 `excludedPathPrefixes`** | `ModelProcessSettings.asset` | **模型高级设置 → 子处理配置** | 模型策略/后处理自动排除；Art 模型设置另有硬跳过，Incoming 基线例外 | 不控制显式⑤ |
-| **`deliveryAlertPathPrefixes`** | `BatchFbxImportSettings.asset` | **批量 FBX 导入**面板 | 导入根/目标落在前缀上 → **Conflict，禁止执行** | 不参与导入后贴图/模型自动跳过 |
+| **`deliveryAlertPathPrefixes`** | `BatchFbxImportSettings.asset` | **批量选择器** | 导入根/目标落在前缀上 → **Conflict，禁止执行** | 不参与导入后贴图/模型自动跳过 |
 | **人工④平铺细节** | `TOol/ConfigData/Manual/**` 下的 `FlattenOperationSettings` SO | 平铺操作面板，可拖入同目录 SO | 分类、清本次 Art 单元、根碰撞体 | 不控制管线④ |
 | **管线④平铺细节** | `Pipeline/ConfigData/**` 下的同类 SO | 自动化管线总面板 | 同上；运行前冻结为 policy | 不被人工面板改写 |
 
@@ -79,7 +80,7 @@ TOol/
 └─ Editor/
    ├─ Window/
    │  ├─ ResourceProcessWindow.cs       # L1 资源处理总面板（⑤ 子流程编排入口）
-   │  ├─ BatchFbxImportWindow.cs        # 批量 FBX 入库（独立菜单）
+   │  ├─ BatchFbxImportWindow.cs        # 批量选择器（Tools / 管线 [1] 同一窗）
    │  ├─ BatchFbxImportSettings.cs
    │  └─ BatchFbxImportService.cs       # 夹名解析、冲突、单 FBX 拷贝+Import
    ├─ Shared/                           # 横切工具 / 已有对外窄口（见 Shared/README_SHARED.md）
@@ -115,9 +116,9 @@ TOol/
 
 **共享的是 API，不是同一块 UI 状态。** 流程编排勾选⑤时调用 L1 能力；不把步骤开关写进 `ResourceProcessSwitches`。
 
-### 2.1 批量 FBX 导入（入库边界）
+### 2.1 批量选择器（入库边界）
 
-菜单：`Tools > 批量FBX导入`（总面板也可打开）。
+菜单：`Tools > 批量选择器`（与管线 [1]「打开批量选择器」同一窗口）。
 
 | 做 | 不做 |
 |----|------|
@@ -398,9 +399,9 @@ TOol/
  → 插件1⑥：RetinarAbApi.Build（AB / 可选UP）
 ```
 
-人工④有普通平铺/原子迁移两个完整相位按钮；直接选 FBX 的普通入口保留 SafeZone。平铺 SO 已分人工/管线并冻结 Policy；其它资源配置尚未全部分离。
+人工④有普通平铺/原子迁移两个完整相位按钮；直接选模型（含 FBX）先③再 `Run(plan)`，不再 SafeZone。平铺 SO 已分人工/管线并冻结 Policy；其它资源配置尚未全部分离。
 
-插件 1 目标只负责输出格式；旧规范化导出、成品直达、门禁、全套报告已删除。④仍写 AB 标签，2026-09-14 用户同意转由⑥构建清单管理，先核对旧菜单与外部工具依赖再实施。
+插件 1 目标只负责输出格式；旧规范化导出、成品直达、门禁、全套报告已删除。④ **不再**写 AB 标签（步骤 8）；⑥ 用 `AssetBundleBuild[]`。
 
 ⑤ Material：Collector → MaterialProcessSettings → Registry → Runner → NormalizeDeliverableShaderOperation。透明模式由 OP 在换 Shader 前捕获、换后还原，不扩模型 ctx；当前 Standard 映射不等于任意 URP Shader 支持。类级数据流与验证状态见[整体结构](../docs/dev-wip/02_structure/overview.md)。
 

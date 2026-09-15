@@ -18,7 +18,7 @@ public class ResourceProcessWindow : EditorWindow
     [MenuItem("Tools/资源处理总面板")]
     public static void ShowWindow()
     {
-        GetWindow<ResourceProcessWindow>("资源处理").minSize = new Vector2(460f, 520f);
+        GetWindow<ResourceProcessWindow>("资源处理 [⑤]").minSize = new Vector2(460f, 520f);
     }
 
     private void OnEnable()
@@ -38,17 +38,24 @@ public class ResourceProcessWindow : EditorWindow
         {
             scroll = scrollScope.scrollPosition;
 
+            EditorGUILayout.LabelField("资源处理总面板", EditorStyles.boldLabel);
+            EditorGUILayout.HelpBox(
+                "此面板同时留存自动化设置参数（总闸、设置自动、后处理自动、分项勾选）。" +
+                "管线总面板用 [1] 入库、[2] 总闸、[③] Prefab、[④] 平铺、[⑤] 总批量、[⑥] 导出 标注同一步骤。" +
+                "改这里的自动分项，管线 [2] 只读展示会跟着变；管线 [⑤] 跑的是下方「执行全部」同一套内核。",
+                MessageType.Info);
+
             EditorGUILayout.LabelField("自动化开关（本机 EditorPrefs，不进版本库）", EditorStyles.boldLabel);
             EditorGUILayout.HelpBox(
                 "总开关：关掉后用户设置自动/后处理自动都不跑；手动「执行全部」不受影响。" +
-                "与【自动化管线】导入区「总自动化处理」是同一 Prefs。\n" +
+                "与【自动化管线】[2]「总自动化处理」是同一 Prefs。\n" +
                 "设置自动：导入前改 Importer（导入区建议按需开启；Art 被 exclude，不会改交付 Importer）。\n" +
                 "模型基线例外：在 BatchFbxImportSettings 配置的导入根内，剔灯剔相机、OBJ 法线 Calculate " +
-                "不受本机总开关/分项勾选；相机灯光必须早于③生成 Prefab 剔掉，否则会被烤成节点。" +
+                "不受本机总开关/分项勾选；相机灯光必须早于 [③] 生成 Prefab 剔掉，否则会被烤成节点。" +
                 "基线各项在 ModelProcessSettings（SO，进版本库）。\n" +
                 "后处理自动：导入后跑 Operation——默认跳过 Art，不保证交付生效；" +
                 "内嵌贴图/顶点色须平铺后再用下方批量路径（默认 Art）点「执行全部」。" +
-                "自动化管线⑤走的是同一按钮内核，不是这条导入自动流。\n" +
+                "自动化管线 [⑤] 走的是同一按钮内核，不是这条导入自动流。\n" +
                 "日常：配路径（默认可含 Assets/Art）→ 执行全部。分项开关/精准面板/入库等在「高级操作」。",
                 MessageType.Info);
 
@@ -141,9 +148,9 @@ public class ResourceProcessWindow : EditorWindow
         using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
         {
             EditorGUILayout.HelpBox(
-                "批量 FBX 导入只把外部 FBX 送进导入区；交付名仍以人工 Prefab 名为准。",
+                "批量选择器：收集外部模型并「输出到编排」，或只做 [1] 入库。交付名仍以人工 Prefab 名为准。",
                 MessageType.None);
-            if (GUILayout.Button("打开批量FBX导入"))
+            if (GUILayout.Button("打开批量选择器"))
             {
                 BatchFbxImportWindow.ShowWindow();
             }

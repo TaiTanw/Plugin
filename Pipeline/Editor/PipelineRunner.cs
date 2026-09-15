@@ -468,7 +468,7 @@ public static class PipelineRunner
         return false;
     }
 
-    /// <summary>④ 按该份 Prefab 对应的 ctx 译成 plan 再 Run。失败返回 null。</summary>
+    /// <summary>④ 按下标把 ctx 译成 plan 再 Run。禁止走菜单直平铺入口。</summary>
     private static List<string> FlattenPerPrefab(
         PipelineOptions options,
         List<string> prefabPaths,

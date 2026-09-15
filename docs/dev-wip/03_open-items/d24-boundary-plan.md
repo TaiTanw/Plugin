@@ -89,7 +89,7 @@ PipelineRunner
 ```
 
 管线适配层：ctx + binding + 管线 SO → plan；现网仍整趟停。  
-窗口适配层：人已判定 B/B′，不要用 ctx 再推断或否决分支。sidecar 是 B′ 操作输入，走 plan 或操作层包扫描，不走 `PipelineJobContext`。FBX SafeZone 仍只挂窗口。  
+窗口适配层：人已判定 B/B′，不要用 ctx 再推断或否决分支。sidecar 是 B′ 操作输入，走 plan 或操作层包扫描，不走 `PipelineJobContext`。人工 FBX 与 OBJ 同口（先③再 Run）。  
 内核：不引用 `PipelineJobContext` / `PipelineResult` / `PipelineRunner`；不写 AB 标签。
 
 `FlattenPlan` 最小字段（与 §2 表一致，本刀要落地类型，不再「以后再说」）：
@@ -99,14 +99,14 @@ PipelineRunner
 - `ApplyModelImportAndExtract`
 - `ClearDestinationArtFolder` / `ConvertZUpToYUp` / `FlattenOperationPolicy`
 
-现网按钮**不是**内核口。目标：**产品两个按钮，内核一个 `Run(plan)`，`plan.Branch` 在手动侧等于人所选，在自动侧由 ctx 填写。** 不要在手动路径再 Build ctx 来「纠正」按钮。点错 B 导致拆坏相对 URI，是人责或可选的包扫描提示，不是接回 `PipelineJobContext` 的理由。FBX SafeZone 仍只挂窗口适配层。
+产品两个按钮，内核一个 `Run(plan)`：`plan.Branch` 在手动侧等于人所选，在自动侧由 ctx 填写。不要在手动路径再 Build ctx 来「纠正」按钮。当前人工选择 B 且扫描发现相对 URI 时，弹出“仍要平铺 / 取消”确认；取消或关闭不执行，明确继续才按 B 执行，不自动切换 B′。该确认不接回 `PipelineJobContext`。人工 FBX 不另开 SafeZone 口。
 
 #### 现网还会绊住④换血的耦合（清空前必须有替代）
 
 | 耦合 | 谁 | 若直接删旧④ |
 |---|---|---|
 | 管线组合七步 + 缺件闸 | `PipelineRunner.FlattenPerPrefab` → `ToolFlattenApi` | ④整段停 |
-| 人工两按钮 | `FlattenWindow` / 菜单 → `ManualFlattenService` → 同七步；FBX 另走 `FlattenPaths` / SafeZone | 人工④停 |
+| 人工两按钮 | `FlattenWindow` / 菜单 → `ManualFlattenOrchestration` → `Run(plan)`；模型先③ | 人工④停 |
 | Art 交付 Importer | `ModelImporterProfiles.ApplyArtDelivery`，入口是④ E | Art 模型设置回退 |
 | Art 根字面量 | `FlattenBuildSettings.ArtRoot` 与 `RetinarPaths.ArtRoot` 必须同文；⑤扫单元、⑥ UP 按 `Art/<名>/` 切前缀 | ⑤⑥找错夹 |
 | 运行时依赖白名单 | ④分类拷贝与⑥ UP 各有一份相同前缀表 | 漏拷或 UP 漏收 |
@@ -119,9 +119,9 @@ PipelineRunner
 
 1. **R1b 基本核对（2026-09-15 已做）。** 缺件 30/40 实跑；同名跨单元代码记清会串。未逐套 Art 树/hash 不挡换口，改 Extract/绑图前补记。细则：[步骤单页](./d24-flatten-steps.md)。
 2. 按步骤 **从前向后**：当前步完全顺利才进入下一步；卡点停下。落地 `FlattenPlan` + `FlattenRowResult`；`ToolFlattenApi` 改为只收 plan（编排继续译 ctx）。
-3. 新实现可按能力分文件（下表仍是模块名，不是「从旧类剪切」）。旧 `RetinarBatchModelBuilder` 三份 partial **先留作对照**，调用方切走后再删。
-4. Finish 不再写 AB 标签（步骤第 8 步 / D24-R4）。仓内已无读标签。
-5. ⑥、① ctx、跳行策略、OBJ 升闸、B 质量闸、D25-4：**停放**到对应步骤；第 11 步需要第 9 步结果对象后再评估。
+3. 新实现可按能力分文件（下表仍是模块名，不是「从旧类剪切」）。旧 `RetinarBatchModelBuilder` 按调用边界对照清理；第 12 步已删停用创建链，七步主体和共用 partial 保留。
+4. Finish 不再写 AB 标签（步骤第 8 步 / D24-R4，**已落地**）。⑥ 用 `AssetBundleBuild[]`。
+5. ⑥、① ctx、跳行策略、OBJ 升闸、B 质量闸：**停放**到对应步骤；第 11 步用户最新决定为 Warning 继续、保留原引用，不按同名补拷。原有 glTF 缺伴生失败规则不改，详见步骤页。
 
 能力模块（新实现内部，产品仍两个完整按钮）：
 
@@ -134,16 +134,16 @@ PipelineRunner
 | D | 引用重映射 | 只绑本单元路径（现网 D25-4：Extract 后再导入按短名挂兄弟单元；不是 FindAssets 全工程搜） |
 | C | Renderer `.mat` | 是否双份贴图写进 plan/文档，不顺手改 |
 | Finish | 自愈、动画、空壳、轴向、碰撞盒 | **不写** AB 名 |
-| FbxSafeZoneAdapter | 仅窗口直接选 FBX | 管线禁止进入 |
+| （已删产品口） | 原窗口 FBX SafeZone | 步骤 7 停用产品口，步骤 12 已删除创建链 |
 
 ### R3b 两个人工相位入口（P1，已实现）
 
 | 按钮 | 选择的分支 | 输入与保护 |
 |---|---|---|
-| 普通平铺（B） | 按 SO 分类规则拆依赖 | 接受 Prefab 或 `.fbx/.obj/.glb/.gltf`；点错打到外 URI 时 **提示后仍平铺**（步骤第 4 步；人责） |
+| 普通平铺（B） | 按 SO 分类规则拆依赖 | 接受 Prefab 或 `.fbx/.obj/.glb/.gltf`；点错打到外 URI 时 **确认后才平铺**（取消/叉号中止） |
 | 原子迁移（B′） | 主 `.gltf` + sidecar 保持相对树 | 接受 `.gltf`，或恰好依赖一个 `.gltf` 包的 Prefab；无外 URI、缺伴生、多模型包均拒绝 |
 
-直接选择非 FBX 模型时，人工服务先调用③生成 Prefab，再执行完整④。FBX 普通平铺保留既有 SafeZone 入口。两个按钮都执行 Begin→B/B′→E?→D→C→Finish；没有开放 Begin/B/D 等任意乱序按钮，因此不需要跨域保存 work/checkpoint。
+直接选择模型时先③再 `Run(plan)`（含 FBX）。按钮不再 `JobContext.Build`。
 
 ### R4 最后收插件 1 输出格式（P1）
 
@@ -151,26 +151,26 @@ PipelineRunner
 
 - 允许：Android/iOS 平台选择、LZ4 等压缩、bundle 名和 variant、输出文件名、输出目录。
 - **2026-09-14用户同意：** 取消④提前写AB标签，由⑥显式构建清单管理名称；旧菜单避免再读 Importer 标签。⑥已有 `AssetBundleBuild[]`。
-- **仓内核对（同日）：** `Assets/Plugin` 下没有任何业务读取 `assetBundleName`。④ 只写/清标签；⑥ 构建时自己填 `AssetBundleBuild`。`ClearDuplicateBundleNames` 是写侧善后。仓外/APP/旧工程是否还按标签打 AB **本仓证不了**，删写入前仍须产品确认仓外。
+- **仓内核对（同日）：** `Assets/Plugin` 下没有任何业务读取 `assetBundleName`。④ **已停写/清**标签（步骤 8）；⑥ 构建时自己填 `AssetBundleBuild`。仓外/APP/旧工程若曾按标签打 AB **本仓证不了**。
 - 禁止：插件 1 再写 Art Importer、Extract、Remap、Prefab Transform、材质、贴图、sidecar。
 
 ### kernel-contents
 
-3518 行里「看起来不像平铺」的东西分三类。不能整段清空的原因：有的其实就是把模型变成可交付 Art Prefab。
+原 3518 行是历史基线；步骤 12 已做定点删除，当前以源码/步骤页为准。「看起来不像平铺」的东西分三类。不能整段清空的原因：有的其实就是把模型变成可交付 Art Prefab。
 
 | 类 | 做什么 | 能否移出/删除 |
 |---|---|---|
 | **平铺本体** | Begin 清单元+写 Art Prefab；B 按类拷依赖、OBJ 跟 `.mtl`；B′ 整树；E 写 Art Importer + Extract 内嵌图；D 引用重映射；C 独立 `.mat`；Finish 里的空壳/轴向、动画曲线改绑、按 SO 的碰撞盒、`.fbm` 自愈 | **留下。** 空壳、Extract、自愈、轴向不是⑥，是交付 Prefab 能站住的结构。删了 Art 会缺图、相对 URI 裂、或模型躺着 |
-| **窗口专用，不是管线④** | FBX SafeZone：缩进 0.8 立方体、移到 `(0,0.15,0)`、旁路搜父目录贴图、另建 Controller | **移出**到窗口适配，不要进 `Run(plan)`。管线 Prefab 不走这条。产品若还要「直接选 FBX」就保留适配，不是内核 |
-| **⑥ 格式副作用** | 写/清 `assetBundleName`/`variant`；`GeneratedAsset.BundleFileName` | **移出或删除。** ⑥ 不依赖这些标签 |
-| **死/兼容壳** | `OpenDeliverablesFolder`（菜单已走 `RetinarEditorUtil`）；`RemapCopiedAssets` 零调用；未读的 Emission 常量；菜单对话框/`FlattenSourcePaths` 旧批处理（现网按钮走 `ManualFlattenService`） | **可删**，先确认仓外无反射调用 |
-| **重复承载** | 运行时依赖白名单与⑥ UP 各一份；ArtRoot 双常量；E 与 Finish 都会 Extract | 不能先各删一份；须定单一所有者再收 |
+| **窗口专用（已停产品）** | 原 FBX SafeZone：缩进 0.8 立方体、移到 `(0,0.15,0)` | **步骤 12 已删创建链及其专用辅助方法。** 不再作为窗口适配挂回去 |
+| **⑥ 格式副作用** | 曾写/清 `assetBundleName`/`variant`；`GeneratedAsset.BundleFileName` 内存字段 | **Importer 写入已删（步骤 8）；BundleFileName 等未读字段已删（步骤 12）。** |
+| **死/兼容壳** | `OpenDeliverablesFolder`（菜单已走 `RetinarEditorUtil`）；`RemapCopiedAssets` 零调用；未读的 Emission 常量；菜单对话框/`FlattenSourcePaths` 旧批处理（现网按钮走 `ManualFlattenService`） | **步骤 12 已删。** 仓外无必要依赖已确认，现用菜单转发到 RetinarEditorUtil 保留 |
+| **重复承载** | 运行时依赖白名单与⑥ UP 各一份；ArtRoot 双常量；E/Finish 双 Extract 已在步骤 10 收口 | 不能先各删一份；须定单一所有者再收 |
 
-E 与 Finish 双 Extract、Extract 后再按短名借图（D25-4）、残留 `.fbm` 只 Warning：是平铺质量债，不是「非平铺功能」。移出⑥时不要把 Extract/自愈一起扔掉。同名覆盖（目标路径已有则复用）与借图是两条链。
+E/Finish 双 Extract 已在步骤 10 收口；步骤 11 收窄按短名借图、保留原引用并 Warning；残留 `.fbm` 质量闸未拍：这些是平铺质量问题，不是「非平铺功能」。移出⑥时不要把 Extract/自愈一起扔掉。同名覆盖（目标路径已有则复用）与借图是两条链。
 
 ### r1b-skip
 
-D24-R1b **基本核对已完成**（2026-09-15），不再用「完全没跑」挡换口。仍**不能**凭感觉删空壳/Extract/自愈/SafeZone，也不能宣称 D25-4 / `.fbm` / 去标签已验证。没有逐套样例树和源 hash 时，改这些算法只能事后从损坏 Art 反查；源保护护栏也未做故障注入。10–14 等前一步落地后再评估（11 需要 9）。
+D24-R1b **基本核对已完成**（2026-09-15），不再用「完全没跑」挡换口。仍**不能**凭感觉删空壳/Extract/自愈，也不能宣称 D25-4 / `.fbm` 已验证。没有逐套样例树和源 hash 时，改这些算法只能事后从损坏 Art 反查；源保护护栏也未做故障注入。10–14 等前一步落地后再评估（11 需要 9）。SafeZone 产品口与 AB 标签写入已按步骤 7/8 去掉。
 
 ## 4. 本轮增减清单
 
@@ -184,18 +184,18 @@ D24-R1b **基本核对已完成**（2026-09-15），不再用「完全没跑」�
 ### 仍需要增加
 
 - “声明数/找到数”的完整可核验信息。
-- `FlattenPlan` + `FlattenRowResult`（本刀要落地；编排译 ctx，内核不再收 `PipelineJobContext`）。结果含失败步骤、原因、产物 Prefab。
-- ctx / binding / prefab 的稳定行 ID，禁止列表不足时回退第一项。
+- `FlattenPlan` + `FlattenRowResult` 已落地（步骤 1）；第 9–11 步已填拷贝计数、残留 `.fbm`、未绑贴图槽和身份警告。
+- ctx / binding / prefab 的稳定行 ID，禁止列表不足时回退第一项（**本目标不做**；步骤 3 已用下标配对）。
 - 最小真实回归集的执行结果；黑盒方法归类表已完成，不重复列为待增加。
 - 插件 1 输出格式白名单。
 
 ### 需要删除或收窄
 
 - 缺件已改 typed MissingUris（glTF），只核查字符串判断残留，不重复列 D26-2 为未开发。OBJ 是否升闸与 B 质量闸一并在 R3 后评估，本轮不加码。
-- 管线调用 `FlattenPaths` 的可能性；它只留菜单兼容，后续迁入独立 adapter。
-- 菜单 FBX SafeZone 与管线 Prefab 平铺在同一巨型类中的混居。
+- 管线/人工调用 `FlattenPaths`：步骤 12 已连同无人调用的兼容壳删除。
+- 菜单 FBX SafeZone 产品分流：步骤 7 停产品口；步骤 12 已删创建链。
+- ④ Finish 的 AB 格式副作用：步骤 8 已停写/清 Importer 标签。
 - `FlattenBuildSettings.ArtRoot` / `RetinarPaths.ArtRoot` 双常量。
-- ④ Finish 中不属于平铺的 AB 格式副作用。
 - `Retinar*` 类型名和注释；仅在行为测试覆盖后机械改名。
 
 ### 本轮明确不增加
@@ -206,15 +206,15 @@ D24-R1b **基本核对已完成**（2026-09-15），不再用「完全没跑」�
 - Begin/B/B′/E/D/C/Finish 的菜单或 CLI 独立按钮。
 - 每个分步自行扫描并重建 ctx。
 - 为缺 ctx 再造一套后缀猜测分支。
-- 在拆分同时顺手改变材质、Extract、自愈或 SafeZone 业务规则。
+- 在拆分同时顺手改变材质、Extract、自愈；不要把已停用的 SafeZone 加回产品口。
 
 ## 5. 完成定义
 
 D24 结构收口只有同时满足以下条件才算完成：
 
-1. 自动每模型②.5一次 ctx；人工点击时建立自身 ctx，此后分步不重扫。编排译成 plan；**内核不再接收 `PipelineJobContext`。**
-2. 管线④只有一个完整入口，B/B′ 内部互斥；菜单 SafeZone 是独立适配入口。
+1. 自动每模型②.5一次 ctx；人工**不**建 ctx（按钮写 Branch + Scan）。编排译成 plan；**内核 `Run(plan)` 不接收 `PipelineJobContext`。** 分步窄口仍可读 ctx。
+2. 管线与人工④都进同一个 `Run(plan)`，B/B′ 由 plan.Branch 互斥；人工 FBX 不再另开 SafeZone。
 3. 缺必需 sidecar 不再静默成功。内核按行返回失败；整趟停仍是当前 Runner 行为，是否改跳行另拍，不挡④换口。
 4. 旧 3,518 行在新实现切开并经 R1b 对照前不得删除。
-5. 插件 1 只剩白名单内的⑥输出格式/AB 能力（④不再写 AB 标签）。
+5. 插件 1 只剩白名单内的⑥输出格式/AB 能力（④不再写 AB 标签，步骤 8 已做）。
 6. 回归集通过，且两入口的差异有明确文档，不依赖“当前刚好能跑”。

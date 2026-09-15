@@ -2,21 +2,18 @@
 
 对齐 ③ [`../Prefab/`](../Prefab/)：`Config` / `Layout` / `Service`；对外窄口 [`../../Shared/Api/ToolFlattenApi.cs`](../../Shared/Api/ToolFlattenApi.cs)。
 
-> **接管期归属（2026-09-14）：** 文件在插件 2，编排暂归中间层。目标是内核只收 `FlattenPlan`，不再读 ctx。旧三份 partial 对照删除，禁止先清空。⑥ 不随④重写。见 [`d24-boundary-plan.md` R3](../../../../docs/dev-wip/03_open-items/d24-boundary-plan.md#r3-flatten-split)。
+> **接管期归属（2026-09-15）：** 文件在插件 2，编排暂归中间层。现用内核入口已是 `Run(FlattenPlan)`；兼容服务仍有 ctx 转换口，人工不建 ctx。第 12 步仅删除旧链，保留现用 partial；⑥ 不随④重写。见 [`d24-boundary-plan.md` R3](../../../../docs/dev-wip/03_open-items/d24-boundary-plan.md#r3-flatten-split)。
 
 > **配置与人工入口（2026-09-10）：** 分类、清夹和碰撞体统一来自 `FlattenOperationSettings` SO，并在开跑前冻结为 `FlattenOperationPolicy`。人工默认资产位于 `Assets/Plugin/TOol/ConfigData/Manual/`，管线固定资产位于 `Assets/Plugin/Pipeline/ConfigData/`；同一数据类、不同实例。人工面板按资产所在目录判定归属：人工目录可编辑，管线目录和未归类目录只读。面板提供“普通平铺（B）”和“原子迁移（B′）”两个**完整相位**入口，不开放七步乱序。
 
-**步骤 1–3 已落地：** 管线④ `FromContext` → `Run(plan)`；多行只按下标配对。人工仍走下面分步（步骤 4 再切）：
+**步骤 1–4、7、8 已落地：** 管线与人工④都进 `ToolFlattenApi.Run(plan)`。人工不建 ctx；直接选 FBX 也先③再 Run，不再走 SafeZone。Finish 不写 Importer AB 标签。调度/操作在中间层 `Pipeline/Editor/Flatten/`。内核仍在本目录 Service（未整包搬迁）。
 
 ```text
-Run(plan)  // 管线已走；人工步骤 4
-TryBegin(prefab, ctx, request, out work)
-ShouldRelocateAtomic(ctx) ? RelocateAtomic(work) : SplitDependencies(work)
-ApplyImportAndExtract(work, ctx)     // 内部看 ImporterKind
-Remap(work)
-CopyRendererMaterials(work)
-TryFinish(work)
+Run(plan)
+  Begin → B|B′ → E? → D → C → Finish
 ```
+
+分步窄口（TryBegin(ctx)…）仍保留给未切调用方；菜单人工已不再走。
 
 | 分支 | 读什么 | 不读什么 |
 |---|---|---|
@@ -32,13 +29,13 @@ TryFinish(work)
 2. **`MaterialForm` 未进分支。** 旧草案的「开④ × 内嵌材质」不是当前契约；C 对 B/B′ 都跑。以后若要省略 C，须另做引用与贴图回归，不在透明修复中顺手改变。
 3. **工作单类型名。** `RetinarFlattenWork` / `RetinarFlattenOptions` 仍是旧名，与插件 2 目录不一致。改名会碰菜单与内核，下一刀再做。
 4. **Art 根双份常量。** `FlattenBuildSettings.ArtRoot` 与 `RetinarPaths.ArtRoot` 必须同字面量。⑥ 仍读后者。
-5. **直接选 FBX 的人工普通平铺。** `CreateNormalizedPrefab`（SafeZone）与管线 Prefab 平铺仍同内核类。管线禁止调 `FlattenPaths`。要不要独立菜单类，未拍。
+5. **SafeZone 创建链已删除（步骤 12）。** `FlattenPaths` / `FlattenSourcePaths` / `CreateNormalizedPrefab` 及旧链专用助手不再保留。人工 FBX 与 OBJ 一样先③再 `Run(plan)`。共用 Bounds、碰撞盒、轴向、动画整理仍在。
 6. **物理目录与临时归属不一致。** ③ `ToolPrefabApi` 不读 ctx；④现网接 `PipelineJobContext`。2026-09-14 确认：**目录暂时保留**，待 R3 拆文件后再搬家/下沉。不要把 ctx 下沉到更底层 partial，也不要让各分步重复 Build。
 7. **E 对 ScriptedImporter 改为直接跳过。** 以前仍进 Extract 再 Warning/continue。行为应等价，若 gltf 单元里混有 FBX 依赖则不再对那份 FBX 跑 Extract——现网 B′ 原子树通常没有 ModelImporter。若发现混包，再改成「扫 Art 单元里实际有的 Importer」而不是只看主文件 ctx。
 8. **人工 Prefab 多 glTF 包暂拒绝。** 原子迁移只接受恰好一个 `.gltf` 主依赖，避免沿用“取第一个模型”的不确定行为。要支持多包 Prefab，需先定义一个 Prefab 对多份 plan 的输出和命名契约。
 
-人工两按钮都跑完整④，不追加⑤⑥；这是已确认产品行为，不再列作风险。PipelineRunner 与 ManualFlattenService 目前分别组合顺序，尚无唯一共享相位 Runner。直接选 FBX 的 SafeZone 与管线 Prefab 路径仍须区分。B′“原子”保证相对包结构，失败不提供事务回滚。
+人工两按钮都跑完整④，不追加⑤⑥；这是已确认产品行为，不再列作风险。PipelineRunner 与人工调度都进 `Run(plan)`。B′“原子”保证相对包结构，失败不提供事务回滚。
 
-④ Finish 仍写 AB 名/variant。2026-09-14 用户同意迁到⑥构建清单管理；仓内已无读标签，步骤第 8 步可做。
+④ Finish **不再**写 AB 名/variant（步骤 8）。⑥ 用 `AssetBundleBuild[]`。`FlattenRowResult` 步骤 9 已带拷贝数 / 残留 `.fbm` / 未绑槽。
 
-**2026-09-15：** R1b 基本核对完成；按 [d24-flatten-steps](../../../../docs/dev-wip/03_open-items/d24-flatten-steps.md) 从第 1 步按序换口。D25-4 不是全工程搜图，是 Extract 后再导入按短名挂兄弟单元；修法等第 9 步结果对象后再评估第 11 步。
+**2026-09-15：** 第 10 步已落地且 CLI 核对。第 11 步按最新决定 **Warning 继续，保留原引用，不清空槽**：`FlattenTextureIdentity` 保存迁移前来源、副本 GUID 和 Extract 产物证据；`RetinarBatchModelBuilder.TextureBinding` 负责已知贴图绑定。普通平铺的 E/D/C/Finish 不再按同名猜图补拷；B′ 相对 URI 树不改。警告进入 `FlattenRowResult.TextureIdentityWarnings`，原有缺 sidecar 失败规则不动。自动测试及真实样例验收状态见 [步骤页](../../../../docs/dev-wip/03_open-items/d24-flatten-steps.md)。

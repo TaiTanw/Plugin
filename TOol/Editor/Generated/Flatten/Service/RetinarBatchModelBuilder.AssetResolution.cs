@@ -5,43 +5,9 @@ using System.Linq;
 using UnityEditor;
 using UnityEngine;
 
-// =====================================================================================
-// 本文件是 RetinarBatchModelBuilder 的 partial 分文件，专门负责两件事：
-//   1) “源资产发现”——给定一个 FBX/OBJ，去哪里找它的贴图、材质（CollectSourceAssets 等）。
-//   2) “平铺结束自愈”——补拷外部依赖、Extract 内嵌贴图、材质 remap。
-//
-// 为什么单独拆出来：
-//   用户反馈“有时只是移动文件位置，就会导致打包终止”。追下来是这两块代码共同造成的：
-//
-//   a) 原 CollectSourceAssets 只在模型【当前所在目录】及其【上一级目录】下，
-//      按固定的几个文件夹名字（Materials / Texture / Textures / <模型名>.fbm）做
-//      非递归查找。只要用户把 FBX 或者贴图文件夹挪了地方（哪怕只是挪到子文件夹，
-//      或者改了个文件夹名字），贴图/材质就“悄悄”找不到了，不会报错，只是没被复制。
-//
-//   b) 因为 a) 没找到，材质仍然引用着工程里原来那个外部贴图路径
-//      （RemapMaterialTexturesToArtFolder 原来只有“已经复制过”才重定向）。
-//
-//   c) 原 ValidateExternalDependencies 一旦发现预制体的任何依赖不在
-//      Assets/Art/<模型名>/ 或者 4 个写死的运行时白名单目录下，就直接判定
-//      “不支持的外部依赖”，整批 AssetBundle/交付物打包全部终止——而且报错信息
-//      只有一行资产路径，看不出这个文件“应该”在哪、现在实际在哪，非常难排查。
-//
-//   d) MoveAssetToExactPath 在 AssetDatabase.MoveAsset 失败时只是 LogWarning
-//      然后静默返回原路径，导致文件仍留在 Model 目录下，被后面更严格的
-//      ValidateModelFoldersAreClean 判定为“Model 目录里有非模型文件”而失败。
-//
-// 上面 c) d) 提到的两道门禁（ValidateExternalDependencies / ValidateModelFoldersAreClean）
-// 已于 2026-09-03 随遗产导出链一起删除（backlog D24-7）。保留这段叙述是因为它解释了
-// 本文件为什么长成现在这样；**别据此以为还有出包前的兜底检查**。
-//
-// 这个文件的修复思路：
-//   - 贴图/材质查找改成递归、支持更多命名，且会把“搜索了哪些目录、找到了什么”
-//     打印出来，方便一眼看出是不是因为挪了文件夹。
-//   - 完整自愈（补拷 + Extract + 材质 remap）在平铺结束时调用，④ 是最后一道。
-//   - 报错信息里带上磁盘绝对路径、最后修改时间，能直接定位是哪个文件、什么时候
-//     被动过。
-// =====================================================================================
-
+// ④ 引用整理与 E 抽取。步骤 12 已删除旧 SafeZone 专用的源资产搜集链。
+// E 是 Extract 唯一产品入口；Finish 不再 Extract。普通 B 的贴图来源受步骤 11 约束，
+// 无合法副本只警告并保留引用；B′ 相对树沿用原有处理。这里不是交付质量闸。
 public static partial class RetinarBatchModelBuilder
 {
     // ---------------------------------------------------------------------------
@@ -73,116 +39,6 @@ public static partial class RetinarBatchModelBuilder
         string extension = Path.GetExtension(assetPath).ToLowerInvariant();
         return extension == ".txt" || extension == ".bytes" || extension == ".json" ||
                extension == ".xml" || extension == ".csv";
-    }
-
-    // 伴生文件夹的常见命名——比原来多覆盖几种常见叫法（大小写、复数、中文习惯）。
-    // 如果你们团队还有别的命名习惯，直接往这个数组里加就行，不用改查找逻辑。
-    private static readonly string[] CompanionMaterialFolderNames =
-    {
-        "Materials", "Material", "Mats"
-    };
-
-    private static readonly string[] CompanionTextureFolderNames =
-    {
-        "Texture", "Textures", "Maps", "Tex"
-    };
-
-    // ---------------------------------------------------------------------------
-    // 源资产发现：给定 FBX/OBJ，找它的贴图和材质
-    // ---------------------------------------------------------------------------
-
-    private static void CollectSourceAssets(string sourcePath, HashSet<string> modelPaths, HashSet<string> materialPaths, HashSet<string> texturePaths)
-    {
-        AddTypedAssetPath(sourcePath, modelPaths, materialPaths, texturePaths);
-
-        // 1) FBX/OBJ 自身在 AssetDatabase 里登记过的依赖（如果材质是外部 .mat 且已经
-        //    被这个模型引用，Unity 通常能识别到）。
-        foreach (string dependency in AssetDatabase.GetDependencies(sourcePath, true))
-        {
-            AddTypedAssetPath(dependency, modelPaths, materialPaths, texturePaths);
-        }
-
-        // 2) 按命名习惯，在模型所在目录、其父目录、以及“模型名.fbm”目录里递归查找。
-        //    —— 这里改成递归（SearchOption.AllDirectories），并且同时检查
-        //    模型当前目录与父目录，这样即使贴图文件夹被挪到了子文件夹里，或者
-        //    模型本身被挪了一层目录，多数情况下还是能找到。
-        string sourceDirectory = Path.GetDirectoryName(sourcePath)?.Replace("\\", "/") ?? string.Empty;
-        string sourceName = Path.GetFileNameWithoutExtension(sourcePath);
-        string parentDirectory = Path.GetDirectoryName(sourceDirectory)?.Replace("\\", "/") ?? string.Empty;
-
-        var searchedFolders = new List<string>();
-        var candidateFolders = new List<string> { sourceDirectory, parentDirectory };
-
-        foreach (string materialFolderName in CompanionMaterialFolderNames)
-        {
-            foreach (string baseFolder in candidateFolders)
-            {
-                searchedFolders.Add(AddAssetsFromFolder(baseFolder + "/" + materialFolderName, materialPaths, IsMaterialAsset));
-            }
-        }
-
-        foreach (string textureFolderName in CompanionTextureFolderNames)
-        {
-            foreach (string baseFolder in candidateFolders)
-            {
-                searchedFolders.Add(AddAssetsFromFolder(baseFolder + "/" + textureFolderName, texturePaths, IsTextureAsset));
-            }
-        }
-
-        // FBX 内嵌贴图导出后 Unity 默认使用的 "<模型名>.fbm" 目录。
-        foreach (string baseFolder in candidateFolders)
-        {
-            searchedFolders.Add(AddAssetsFromFolder(baseFolder + "/" + sourceName + ".fbm", texturePaths, IsTextureAsset));
-        }
-
-        if (materialPaths.Count == 0 && texturePaths.Count == 0)
-        {
-            // 没找到任何贴图/材质，不代表一定有问题（模型可能确实没有外部贴图），
-            // 但如果预期应该有，这行日志能第一时间告诉你“去这些地方找过了，都没有”，
-            // 而不是等到后面打包失败才去猜。
-            Debug.Log("[Retinar] 未在以下目录中找到贴图/材质，如果模型本应带贴图，请确认文件是否被移动：\n" +
-                string.Join("\n", searchedFolders.Where(path => !string.IsNullOrEmpty(path)).Distinct().ToArray()));
-        }
-    }
-
-    private static void AddTypedAssetPath(string assetPath, HashSet<string> modelPaths, HashSet<string> materialPaths, HashSet<string> texturePaths)
-    {
-        if (IsModelAsset(assetPath))
-        {
-            modelPaths.Add(assetPath);
-        }
-        else if (IsMaterialAsset(assetPath))
-        {
-            materialPaths.Add(assetPath);
-        }
-        else if (IsTextureAsset(assetPath))
-        {
-            texturePaths.Add(assetPath);
-        }
-    }
-
-    /// <summary>
-    /// 在指定文件夹（递归）下查找符合条件的资产并加入 target。
-    /// 返回实际搜索的文件夹路径（供调用方汇总打印诊断信息），文件夹不存在时返回 null。
-    /// </summary>
-    private static string AddAssetsFromFolder(string folderPath, HashSet<string> target, Func<string, bool> predicate)
-    {
-        if (string.IsNullOrEmpty(folderPath) || !AssetDatabase.IsValidFolder(folderPath))
-        {
-            return null;
-        }
-
-        string fullFolderPath = AssetPathToFullPath(folderPath);
-        foreach (string filePath in Directory.GetFiles(fullFolderPath, "*.*", SearchOption.AllDirectories))
-        {
-            string assetPath = FullPathToAssetPath(filePath);
-            if (!string.IsNullOrEmpty(assetPath) && predicate(assetPath))
-            {
-                target.Add(assetPath);
-            }
-        }
-
-        return folderPath;
     }
 
     // ---------------------------------------------------------------------------
@@ -325,15 +181,22 @@ public static partial class RetinarBatchModelBuilder
     }
 
     /// <summary>打包流程用：按预制体路径收集仍落在外部 .fbm 的贴图依赖。</summary>
+    public static List<string> ListExternalFbmTextureDependencies(string assetFolder, string prefabPath)
+    {
+        if (string.IsNullOrEmpty(assetFolder) || string.IsNullOrEmpty(prefabPath))
+        {
+            return new List<string>();
+        }
+
+        return CollectExternalFbmTextureDependencies(assetFolder, prefabPath);
+    }
+
     private static List<string> CollectExternalFbmTextureDependencies(string assetFolder, string prefabPath)
     {
         var asset = new GeneratedAsset(
             Path.GetFileName(assetFolder),
             assetFolder,
-            string.Empty,
-            string.Empty,
-            prefabPath,
-            string.Empty);
+            prefabPath);
         return CollectExternalFbmPathsFromDependencies(asset, AssetDatabase.GetDependencies(prefabPath, true));
     }
 
@@ -362,7 +225,8 @@ public static partial class RetinarBatchModelBuilder
     private static bool TryHealExternalDependencies(
         GeneratedAsset asset,
         FlattenOperationPolicy operationPolicy,
-        out List<string> healedPaths)
+        out List<string> healedPaths,
+        FlattenTextureIdentity identity = null)
     {
         healedPaths = new List<string>();
         string materialFolder = FlattenLayout.MaterialFolder(asset.AssetFolder);
@@ -425,7 +289,7 @@ public static partial class RetinarBatchModelBuilder
                         healedPaths.Add(materialPath + "  ->  " + copiedMaterialPath);
                     }
 
-                    if (RemapMaterialTexturesToArtFolder(workingMaterial, textureFolder))
+                    if (RemapMaterialTexturesToArtFolder(workingMaterial, textureFolder, identity))
                     {
                         EditorUtility.SetDirty(workingMaterial);
                         changed = true;
@@ -451,7 +315,7 @@ public static partial class RetinarBatchModelBuilder
             PrefabUtility.UnloadPrefabContents(instance);
         }
 
-        if (CopyRemainingExternalDependencies(asset, operationPolicy, healedPaths))
+        if (CopyRemainingExternalDependencies(asset, operationPolicy, healedPaths, identity))
         {
             changed = true;
         }
@@ -467,7 +331,7 @@ public static partial class RetinarBatchModelBuilder
                 continue;
             }
 
-            if (RemapMaterialTexturesToArtFolder(material, textureFolder))
+            if (RemapMaterialTexturesToArtFolder(material, textureFolder, identity))
             {
                 EditorUtility.SetDirty(material);
                 changed = true;
@@ -475,16 +339,11 @@ public static partial class RetinarBatchModelBuilder
             }
         }
 
-        // 切断 Model FBX 对导入区 .fbm 的依赖：
-        // materialSearch=Local 不够——内嵌贴图提取仍会复用工程里已有的同名 .fbm。
-        // 必须 ExtractTextures 到本模型 Texture/，再按文件名把外部依赖 remap 回来。
-        if (ExtractAndBindPackagedModelTextures(asset.AssetFolder, operationPolicy))
-        {
-            changed = true;
-            healedPaths.Add("ExtractTextures + remap -> " + FlattenLayout.TextureFolder(asset.AssetFolder));
-        }
+        // 切断 Model FBX 对导入区 .fbm 的依赖曾在自愈里再 Extract 一次。
+        // 步骤 10：Extract 只归 E（FlattenApplyImportAndExtract）。自愈只补拷 + remap。
+        Debug.Log("[Retinar] " + asset.AssetName + "：自愈不 Extract（所有者是 E）");
 
-        if (RemapAllArtMaterialsToLocalTextures(asset.AssetFolder))
+        if (RemapAllArtMaterialsToLocalTextures(asset.AssetFolder, identity))
         {
             changed = true;
             healedPaths.Add("Art/Material 贴图全部收到本模型 " + FlattenLayout.TextureFolder(asset.AssetFolder));
@@ -511,7 +370,8 @@ public static partial class RetinarBatchModelBuilder
     private static bool CopyRemainingExternalDependencies(
         GeneratedAsset asset,
         FlattenOperationPolicy operationPolicy,
-        List<string> healedPaths)
+        List<string> healedPaths,
+        FlattenTextureIdentity identity = null)
     {
         var copied = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         string[] dependencies = AssetDatabase.GetDependencies(asset.PrefabPath, true);
@@ -528,6 +388,13 @@ public static partial class RetinarBatchModelBuilder
                 continue;
             }
 
+            // 步骤 11：收尾不再发现/补拷贴图。身份来自 Begin+B / E，不能用重导后的依赖扩充。
+            if (identity != null && FlattenTextureIdentity.IsTextureFile(path))
+            {
+                if (identity.ResolveExact(path) == null)
+                    identity.Warn("收尾不补拷未知来源贴图", asset.PrefabPath, path);
+                continue;
+            }
             string targetFolder = FlattenCopyRunner.ResolveRelativeFolder(path, operationPolicy);
             if (string.IsNullOrEmpty(targetFolder))
             {
@@ -555,7 +422,7 @@ public static partial class RetinarBatchModelBuilder
             return false;
         }
 
-        RemapCopiedAssetReferences(copied, asset.AssetFolder);
+        RemapCopiedAssetReferences(copied, asset.AssetFolder, identity);
         return true;
     }
 
@@ -569,7 +436,8 @@ public static partial class RetinarBatchModelBuilder
     /// </summary>
     private static bool ExtractAndBindPackagedModelTextures(
         string assetFolder,
-        FlattenOperationPolicy operationPolicy)
+        FlattenOperationPolicy operationPolicy,
+        FlattenTextureIdentity identity = null)
     {
         string modelFolder = FlattenLayout.ModelFolder(assetFolder);
         string textureFolder = FlattenLayout.TextureFolder(assetFolder);
@@ -612,7 +480,7 @@ public static partial class RetinarBatchModelBuilder
                     importer.materialLocation != ModelImporterMaterialLocation.InPrefab ||
                     importer.materialSearch != ModelImporterMaterialSearch.Local ||
                     importer.materialName != ModelImporterMaterialName.BasedOnMaterialName;
-                int remapCount = RemapModelImporterTexturesToArtFolder(importer, assetFolder, textureFolder);
+                int remapCount = RemapModelImporterTexturesToArtFolder(importer, assetFolder, textureFolder, identity);
                 if (settingsDirty || remapCount > 0)
                 {
                     importer.materialLocation = ModelImporterMaterialLocation.InPrefab;
@@ -634,12 +502,16 @@ public static partial class RetinarBatchModelBuilder
             // ExtractTextures 会把 FBX 内嵌原始大图写进 Texture/，覆盖两遍流程里已压缩的同名文件。
             // 先快照再抽取，抽取后把“被放大”的文件恢复成压缩版；缺失的仍用抽取结果补齐。
             Dictionary<string, byte[]> preservedTextures = SnapshotTextureFolderFiles(textureFolder);
+            var extractBefore = identity?.SnapshotExtractFolder(textureFolder);
+            bool extracted = false;
 
             try
             {
-                importer.ExtractTextures(textureFolder);
+                extracted = importer.ExtractTextures(textureFolder);
+                ExtractTexturesInvokeCount++;
                 changed = true;
-                Debug.Log("[Retinar] ExtractTextures 已调用: " + modelPath + " -> " + textureFolder);
+                Debug.Log("[Retinar] ExtractTextures 已调用: " + modelPath + " -> " + textureFolder +
+                          "（本趟第 " + ExtractTexturesInvokeCount + " 次）");
             }
             catch (System.Exception exception)
             {
@@ -654,13 +526,16 @@ public static partial class RetinarBatchModelBuilder
                 Debug.Log("[Retinar] ExtractTextures 后已恢复 " + restored +
                     " 张更小的 Art 贴图（避免盖掉已压缩结果）");
             }
+            // 必须在旧压缩图恢复后核对；不能把已被恢复的旧像素冒认成本轮 Extract 产物。
+            if (extracted && identity != null)
+                identity.RegisterExtracted(modelPath, textureFolder, extractBefore);
 
             importer.materialLocation = ModelImporterMaterialLocation.InPrefab;
             importer.materialSearch = ModelImporterMaterialSearch.Local;
             importer.materialName = ModelImporterMaterialName.BasedOnMaterialName;
 
             // 先按当前依赖表 remap 一次，再导入；导入后若仍挂外部 .fbm，再 remap + 导入一次。
-            int remapPass1 = RemapModelImporterTexturesToArtFolder(importer, assetFolder, textureFolder);
+            int remapPass1 = RemapModelImporterTexturesToArtFolder(importer, assetFolder, textureFolder, identity);
             if (remapPass1 > 0)
             {
                 changed = true;
@@ -674,7 +549,7 @@ public static partial class RetinarBatchModelBuilder
             importer = AssetImporter.GetAtPath(modelPath) as ModelImporter;
             if (importer != null)
             {
-                int remapPass2 = RemapModelImporterTexturesToArtFolder(importer, assetFolder, textureFolder);
+                int remapPass2 = RemapModelImporterTexturesToArtFolder(importer, assetFolder, textureFolder, identity);
                 if (remapPass2 > 0)
                 {
                     importer.materialLocation = ModelImporterMaterialLocation.InPrefab;
@@ -782,8 +657,10 @@ public static partial class RetinarBatchModelBuilder
     private static int RemapModelImporterTexturesToArtFolder(
         ModelImporter importer,
         string assetFolder,
-        string textureFolder)
+        string textureFolder,
+        FlattenTextureIdentity identity = null)
     {
+        if (identity != null) return RemapKnownModelTextures(importer, identity);
         int remapCount = 0;
         string modelPath = importer.assetPath;
         string[] dependencies = AssetDatabase.GetDependencies(modelPath, true);
@@ -849,7 +726,7 @@ public static partial class RetinarBatchModelBuilder
         return result;
     }
 
-    private static bool RemapAllArtMaterialsToLocalTextures(string assetFolder)
+    private static bool RemapAllArtMaterialsToLocalTextures(string assetFolder, FlattenTextureIdentity identity = null)
     {
         string materialFolder = FlattenLayout.MaterialFolder(assetFolder);
         string textureFolder = FlattenLayout.TextureFolder(assetFolder);
@@ -870,7 +747,7 @@ public static partial class RetinarBatchModelBuilder
                 continue;
             }
 
-            if (RemapMaterialTexturesToArtFolder(material, textureFolder))
+            if (RemapMaterialTexturesToArtFolder(material, textureFolder, identity))
             {
                 EditorUtility.SetDirty(material);
                 changed = true;
