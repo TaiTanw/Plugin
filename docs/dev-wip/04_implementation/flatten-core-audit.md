@@ -2,7 +2,7 @@
 
 返回 [D24 边界计划](../03_open-items/d24-boundary-plan.md) · [④能力查封](./pipeline-flatten-capabilities.md) · [ctx](./pipeline-job-context.md)
 
-> 审计快照：2026-09-09。按当日工作树逐个核对 C# 定义与 `Assets/**/*.cs` 的实际引用；不是对旧文档的转述。当日三份 `RetinarBatchModelBuilder` partial 合计 **3,483 行**（2253 + 1006 + 224，含安全护栏）。2026-09-10 增补 SO 快照与人工入口后的当前合计为 **3,518 行**（2280 + 1014 + 224）。本文件不授权据此批量删除或一次性重写。
+> 审计快照：2026-09-09。按当日工作树逐个核对 C# 定义与 `Assets/**/*.cs` 的实际引用；不是对旧文档的转述。当日三份 `RetinarBatchModelBuilder` partial 合计 **3,483 行**（2253 + 1006 + 224，含安全护栏）。2026-09-10 增补 SO 快照与人工入口后的当前合计为 **3,518 行**（2280 + 1014 + 224）。本文件不授权据此批量删除或一次性重写。2026-09-14 换实现评估见 [d24 R3](../03_open-items/d24-boundary-plan.md#r3-flatten-split)：先冻结 plan 口，旧代码对照切开后再删。
 
 ## 1. 先给结论
 
@@ -297,12 +297,14 @@ Pipeline 中间层
 
 ## 7. 安全拆分顺序
 
+> 以下是审计建议，不是新增需求授权。具体结果字段、plan与冲突策略须在对应开工前核对；当前人工两按钮跑完整④已获确认，不开放裸步骤。2026-09-14用户同意AB标签迁到⑥，但须先核对外部依赖。
+
 1. **验证已加保护，不搬代码：** 故障注入确认 Begin 失败不回退源路径、自愈失败不写源材质、Art 内原地重跑仍合法；冻结最小回归快照。
 2. **补结构化结果：** 让 B/B′/E/D/C/Finish 都能上报失败与计数；保留现有顺序和行为。
-3. **继续完成一次性 plan：** 平铺 SO 已冻结为 `FlattenOperationPolicy`；下一刀把 ctx、binding 也解释为 plan，Runner 后续不重复解释，步骤不自行 Build ctx。
+3. **按需评估plan：** SO已冻结为FlattenOperationPolicy；是否新增完整ctx/binding执行plan，按D24计划§2在边界明确后核对，不作为每次拆文件的无条件前置。
 4. **先抽两个入口壳：** `MenuFbxSafeZoneAdapter` 与 `PrefabFlattenPhase`；保持私有帮助方法原位，先切调用图而非复制实现。
 5. **按数据依赖抽步骤：** Begin → B/B′ → D → C → E/自愈合并 → Finish。E 与自愈应作为同一刀审计，避免双 Extract。
-6. **移出⑥副作用：** 同时删除两条平铺路径的 AB 标签写入，⑥继续使用显式 `AssetBundleBuild`；回归第三方读标签场景。
+6. **移出⑥副作用（方向已确认）：** 先核对旧菜单/外部工具读标签依赖，再迁移两条平铺路径的写入；⑥继续用显式AssetBundleBuild，兼容方案未确认前不删。
 7. **最后处理死码和命名：** 先确认仓外 API，再删 `RemapCopiedAssets`、旧 wrapper、死常量，最后改 `Retinar*` 名称。
 
 每刀只改一种风险，并跑对应样例；禁止再对约 3,500 行做文本范围式批量切割。
@@ -369,7 +371,7 @@ New/Load Plan → Begin → (B | B′) → E? → D → C → Finish
 
 尚未完成、不能由静态审计替代：
 
-- Unity 实跑基线（FBX 外图/内嵌、OBJ+MTL、GLB、完整及缺伴生 glTF、同名跨单元、轴向开关）；
+- 完整且留证据的实跑矩阵（FBX外图/内嵌、OBJ+MTL、GLB、完整/缺件glTF、同名跨单元、轴向），用户四格式实测不等于全部故障分支覆盖；
 - 仓外程序集/反射对公开兼容 API 的调用确认；
 - AB 标签是否被第三方工具读取；
 - 每个 void 步骤应升级为 Warning 还是 Fail 的产品准则。

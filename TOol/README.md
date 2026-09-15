@@ -1,11 +1,12 @@
 # TOol（资源处理插件）
 
-Unity Editor 插件：导入期 **设置自动** + 导入后 **后处理自动**（贴图压缩、模型顶点色等）；另提供 **批量 FBX 入库**。
+当前包括②导入与设置、③ Prefab、⑤贴图/材质/模型操作，并物理承载④平铺遗产。消费 ctx 的④ API/服务/编排暂按职责归中间层，不等于黑盒拆分已经完成。
 
-- **当前版本：** v1.3.7（面板三层 L1/L2/L3；Evaluate / 仅扫描见 v1.3.6）
-- **菜单：** `Tools > 资源处理总面板`（共用批量路径 + 总/分项批量；精准进子面板，高级进 L3）；`Tools > 批量FBX导入`
-- **结构说明（目录 / 类 / 扩展方式）：** [ARCHITECTURE.md](./ARCHITECTURE.md)（含 **配置归属**、**Generated 中间资产**、面板分层）
-- **Op 扩展名识别与扩展步骤：** [docs/dev-wip/04_implementation/op-recognition-and-extend.md](../docs/dev-wip/04_implementation/op-recognition-and-extend.md)
-- **中间资产（③ Prefab）：** [`Editor/Generated/Prefab/`](./Editor/Generated/Prefab/)；菜单 `Tools > 自动化预设体（选中模型）`
-- **配置资产：** `ConfigData/TextureProcessSettings.asset`、`ConfigData/ModelProcessSettings.asset`、`ConfigData/BatchFbxImportSettings.asset`（后三者里「Art 相关前缀」默认相同但不共享；高级操作见各 L3「子处理配置」说明）
-- **与打包插件关系：** **导入期自动流**默认不碰 `Assets/Art/`（`excludedPathPrefixes`）。**L1「执行全部」** 默认路径正是 Art；**中间层⑤**代调同一总批量，不是导入钩子。交付打包见 `../RetinarBatchBuilder_Share/`。细节见 [ARCHITECTURE.md](./ARCHITECTURE.md)「配置归属」。
+- 资源总入口：`Tools > 资源处理总面板`；精确操作进 L2，高级 SO 配置进 L3。
+- 人工④：[平铺操作面板](./Editor/Generated/Flatten/README.md)，普通/原子两按钮都跑完整④；SO 同数据类、人工/管线不同实例。
+- 配置：Texture/Material/Model/BatchFbxImport Settings；人工 FlattenOperationSettings 在 ConfigData/Manual，管线实例在 Pipeline/ConfigData。
+- ⑤材质透明修复位于 NormalizeDeliverableShaderOperation，读取单个材质状态，不扩模型 ctx；Material SO 目前仍共用。
+- Art 模型设置 Processor 硬跳过，贴图/后处理另按排除表；Incoming 模型安全基线不受总闸控制。显式⑤可以处理 Art，不能混称为导入自动。
+- [当前整体结构与数据流](../docs/dev-wip/02_structure/overview.md) · [详细结构](./ARCHITECTURE.md) · [Op扩展](../docs/dev-wip/04_implementation/op-recognition-and-extend.md)
+
+版本以插件根发布标签为准，不再把历史 v1.3.7 面板版本当当前代码版本。

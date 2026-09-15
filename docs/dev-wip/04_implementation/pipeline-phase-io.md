@@ -18,14 +18,14 @@
 
 ## 1. 怎么传（已拍板）
 
-插件 1 / 2 **不互相调**，也不靠改 L1 Prefs 传本次任务数据。
+自动化管线通过窄口与返回值接力，不靠改 L1 Prefs 传本次任务。插件 1 的人工平铺菜单仍会薄转发插件 2，不是全仓无互调。
 
 ```text
-总面板 / 批量选择回填 / CLI / Pack 解包
+总面板 / 批量选择回填 / CLI（Pack 解包尚未实现）
     → 填一份 PipelineOptions（单行 SourcePath 或 Bindings 列表）
-    → PipelineRunner.Run(options)     ← 唯一编排
+    → PipelineRunner.Run(options)     ← 自动化面板/CLI 共用编排
          本地变量接力
-         每步只调一个窄口
+         各相位经窄口；④按多个能力方法组合
     → PipelineResult（ExitCode + Messages + PrefabOutputs / AbOutputs）
 ```
 
@@ -112,13 +112,14 @@ Conflict 只约束批量「执行导入」，不拦「输出到编排」。
 Bindings = SourceBindings
   （空且仅有 SourcePath → 合成 1 行；空 ID2 → SuggestDefault 扫父目录）
 
-foreach (source, id2):
+foreach (source, id2, axis):
         ↓ 1 入库：夹名 = id2（D18 只清 Incoming/<id2>/）
-        ModelPaths.Add
+        ModelPaths.Add；binding.CloneWith 保留轴向等行配置
         JobContexts.Add(Build(该份工程内路径))  // 2.5；无文件夹 ctx
-        ↓ ③  BuildPrefabs([该份], 该行 id2)
+再 foreach (已入库模型与绑定行):
+        ↓ ③ BuildPrefabs([该份], 该行 id2)
 局部 prefabPaths（N 个）
-        ↓ ④  按行 Begin → B|B′ → E → D → C → Finish  （Bridge(该行 ctx)）
+        ↓ ④  按行 Begin → B|B′ → E → D → C → Finish  （ToolFlattenApi 接该行 ctx）
             覆盖 prefabPaths = Art Prefab 列表
             D17 → PostProcessFolderPaths（各 Art/<ID2>/）
         ↓ ⑤⑥ 现网已能吃列表
@@ -172,8 +173,8 @@ PipelineJobContext.Build(工程内主路径)
 |---|---|
 | **入** | **每一份** 入库成功的模型 |
 | **出** | `JobContexts` 与 `ModelPaths` 对齐；`JobContext` = 第一份 |
-| **失败** | Build 本身不改退出码；普通 Warning 仅展示。`MissingUris` 由④在 Begin 前映射为 40 |
-| **给谁** | 仅④经 `ToolFlattenApi` → `RetinarFlattenOptions`（B′ / 清 Art 夹）。③ 仍不读 |
+| **失败** | Build 本身不改退出码；普通 Warning 仅展示。glTF `MissingUris` 由④在 Begin 前映射为 40 并停止整趟。OBJ 缺件不进此项 |
+| **给谁** | 仅④经 `ToolFlattenApi` → `RetinarFlattenOptions`（B′/E）；清 Art 来自 request/policy，不来自 ctx。③⑤⑥不读 |
 
 无文件夹 ctx：父目录几个内核文件只用于建议 ID2，不进本类型。
 
@@ -214,7 +215,7 @@ TryFinish(work)                               // 自愈 / 空壳 / 动画 / AB �
 | **入** | **按行** ③ 的该 Prefab + ctx + request：管线 SO policy 提供分类/清夹/碰撞体；`HasExternalUris` → B′；绑定行 `ConvertZUpToYUp` → Finish 里叠 −90°X |
 | **出** | 各行 `work.PrefabPath` 拼成列表，**覆盖** 局部 `prefabPaths` |
 | **旁路** | 各 Art 单元根 → `PostProcessFolderPaths`（⑤开且该字段仍空） |
-| **失败** | typed `MissingUris` 非空，或任一步 false / Prefab 路径空 → 40 |
+| **失败** | glTF typed `MissingUris` 非空，或 Begin/B/B′/Finish 返回 false / Prefab 路径空 → 40 **整趟停**（⑤⑥不跑；已写出 Art 不回滚）。OBJ 缺件不进 MissingUris。E/D/C 为 void，尚无统一分步结果 |
 | **给谁** | ⑥ 用 Art Prefab；⑤ 用单元根 |
 
 gltf 整包：②/1 已入库伴生；④ 禁止按后缀拆相对 URI。不是新相位。
@@ -236,7 +237,7 @@ gltf 整包：②/1 已入库伴生；④ 禁止按后缀拆相对 URI。不是�
 | 字段 | 现网 |
 |---|---|
 | `SourcePath` | Bindings 空时的单行来源；有表时同步为第一行（兼容日志/CLI） |
-| `SourceBindings` | **Runner 主输入**（source + ID2） |
+| `SourceBindings` | **Runner 主输入**（source + ID2 + ConvertZUpToYUp） |
 | `MaterialId` | 单行 ID2；多行以 Bindings 各行为准（同步为第一行） |
 | `RunImport/…` | 开不开步 |
 | `FlattenPolicy` | `PipelineStepSettings.ApplyTo` 从固定管线平铺 SO 生成；运行中的分类、清夹、碰撞体快照 |
@@ -279,6 +280,8 @@ gltf 整包：②/1 已入库伴生；④ 禁止按后缀拆相对 URI。不是�
 | 顺序 | 做 | 不做（本刀） |
 |---|---|---|
 | **D10-1** | **已做**：1 入库夹名跟 ID2；缺省名扫父目录磁盘（仅一个内核文件→三层，还有其它或 Warning→三层+全名） | 改批量 Conflict；改⑤扩展表 |
-| **D10-2** | **已做**：Runner 读 Bindings 循环 1→2.5→③(该行 ID2)；④ 按行 ctx | CLI 多个 `-source` |
+| **D10-2** | **已做**：Runner 先完成各行1/2.5，再逐行③；④按行ctx | CLI 多个 `-source` |
 | 面板展示 | 内核白名单展示为「当前可支持格式」 | 勾选筛掉的格式从 CLI 消失 |
 | **D10-3** | Pack 解包填 Bindings | 新开一条 ②③⑥ |
+
+2026-09-14 补充：⑤类型纳入仍有 EditorPrefs 默认，MaterialProcessSettings 仍为人工/管线共用 SO，尚未完成配置隔离。ToolPostProcessResult 当前只有 FailedCount、Canceled、Report；空配置/无目标等有文字提示，但缺少统一 typed 跳过原因。用户倾向合法跳过并明确提示，前提是窄口结果边界足够；不足时先评估中间层排错层，不让 Runner 直接探查 Op，不解析 Report 控制流程。见 D26-6。

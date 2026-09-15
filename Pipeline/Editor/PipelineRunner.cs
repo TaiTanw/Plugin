@@ -437,7 +437,38 @@ public static class PipelineRunner
         return prefabPaths;
     }
 
-    /// <summary>④ 按该份 Prefab 对应的 ctx 分支（gltf B′ / 普通拆夹）。失败返回 null。</summary>
+    /// <summary>
+    /// ④ 可配对行数。只按下标；禁止用 ctx[0] 或 JobContext 填缺。
+    /// 返回 true 表示数量一致。pairedCount 始终是两者较小值。
+    /// </summary>
+    public static bool TryAlignFlattenRows(
+        int prefabCount,
+        int contextCount,
+        out int pairedCount,
+        out string mismatchMessage)
+    {
+        if (prefabCount < 0)
+        {
+            prefabCount = 0;
+        }
+
+        if (contextCount < 0)
+        {
+            contextCount = 0;
+        }
+
+        pairedCount = prefabCount < contextCount ? prefabCount : contextCount;
+        if (prefabCount == contextCount)
+        {
+            mismatchMessage = null;
+            return true;
+        }
+
+        mismatchMessage = "④ Prefab 与 ctx 数量不一致: prefab=" + prefabCount + " ctx=" + contextCount;
+        return false;
+    }
+
+    /// <summary>④ 按该份 Prefab 对应的 ctx 译成 plan 再 Run。失败返回 null。</summary>
     private static List<string> FlattenPerPrefab(
         PipelineOptions options,
         List<string> prefabPaths,
@@ -446,6 +477,7 @@ public static class PipelineRunner
     {
         var allArt = new List<string>();
         IList<PipelineJobContext> contexts = options.JobContexts;
+        int contextCount = contexts == null ? 0 : contexts.Count;
         bool loggedClear = false;
 
         result.Info("[Pipeline] ④ 平铺 SO 快照：" +
@@ -453,17 +485,12 @@ public static class PipelineRunner
                         ? "<null，使用管线默认>"
                         : options.FlattenPolicy.ToLogString()));
 
-        for (int i = 0; i < prefabPaths.Count; i++)
+        bool countsMatch = TryAlignFlattenRows(
+            prefabPaths.Count, contextCount, out int pairedCount, out string mismatchMessage);
+
+        for (int i = 0; i < pairedCount; i++)
         {
-            PipelineJobContext ctx = null;
-            if (contexts != null && contexts.Count > 0)
-            {
-                ctx = i < contexts.Count ? contexts[i] : contexts[0];
-            }
-            else
-            {
-                ctx = options.JobContext;
-            }
+            PipelineJobContext ctx = contexts[i];
 
             PipelineSourceBinding binding = null;
             if (options.SourceBindings != null && i < options.SourceBindings.Count)
@@ -473,6 +500,8 @@ public static class PipelineRunner
 
             ToolFlattenRequest request = ToolFlattenRequest.ForPipeline(options.FlattenPolicy);
             request.ConvertZUpToYUp = binding != null && binding.ConvertZUpToYUp;
+
+            FlattenPlan plan = ToolFlattenApi.FromContext(ctx, request, prefabPaths[i]);
 
             if (request.ConvertZUpToYUp)
             {
@@ -489,56 +518,40 @@ public static class PipelineRunner
                 loggedClear = true;
             }
 
-            if (ToolFlattenApi.ShouldRelocateAtomic(ctx))
+            if (plan.Branch == FlattenBranch.RelocateAtomic)
             {
                 result.Info("[Pipeline] ④ [" + (i + 1) + "] SkipDependencySplit + B′ 原子搬迁");
             }
 
-            if (ToolFlattenApi.HasMissingSidecars(ctx))
+            if (plan.MissingUris != null && plan.MissingUris.Count > 0)
             {
                 result.Info("[Pipeline] ④ [" + (i + 1) + "] glTF 缺必需伴生 × " +
-                            ctx.MissingUris.Count + "，停止本行平铺");
-                for (int missingIndex = 0; missingIndex < ctx.MissingUris.Count; missingIndex++)
+                            plan.MissingUris.Count + "，停止本行平铺");
+                for (int missingIndex = 0; missingIndex < plan.MissingUris.Count; missingIndex++)
                 {
-                    result.Info("  missing URI: " + ctx.MissingUris[missingIndex]);
+                    result.Info("  missing URI: " + plan.MissingUris[missingIndex]);
                 }
+            }
 
+            FlattenRowResult row = ToolFlattenApi.Run(plan);
+            if (!row.Ok)
+            {
                 result.Fail(
                     PipelineErrorCodes.FlattenFailed,
-                    "④ glTF 缺必需伴生，无法执行 B′: " + ctx.PrimaryAssetPath +
-                    "（缺 " + ctx.MissingUris.Count + "）");
-                return null;
-            }
-
-            RetinarFlattenWork work;
-            if (!ToolFlattenApi.TryBegin(prefabPaths[i], ctx, request, out work))
-            {
-                result.Fail(PipelineErrorCodes.FlattenFailed, "平铺 Begin 失败: " + prefabPaths[i]);
-                return null;
-            }
-
-            bool copied = ToolFlattenApi.ShouldRelocateAtomic(ctx)
-                ? ToolFlattenApi.RelocateAtomic(work)
-                : ToolFlattenApi.SplitDependencies(work);
-            if (!copied)
-            {
-                result.Fail(PipelineErrorCodes.FlattenFailed,
-                    (ToolFlattenApi.ShouldRelocateAtomic(ctx) ? "B′ 原子搬迁失败: " : "B 拆依赖失败: ") +
-                    prefabPaths[i]);
-                return null;
-            }
-
-            ToolFlattenApi.ApplyImportAndExtract(work, ctx);
-            ToolFlattenApi.Remap(work);
-            ToolFlattenApi.CopyRendererMaterials(work);
-            if (!ToolFlattenApi.TryFinish(work) || string.IsNullOrEmpty(work.PrefabPath))
-            {
-                result.Fail(PipelineErrorCodes.FlattenFailed, "平铺 Finish 失败: " + prefabPaths[i]);
+                    string.IsNullOrEmpty(row.Message)
+                        ? ("平铺失败: " + prefabPaths[i])
+                        : row.Message);
                 return null;
             }
 
             result.Info("[Pipeline] ④ [" + (i + 1) + "] Flatten 1 ← " + prefabPaths[i]);
-            allArt.Add(work.PrefabPath);
+            allArt.Add(row.ArtPrefabPath);
+        }
+
+        if (!countsMatch)
+        {
+            result.Fail(PipelineErrorCodes.FlattenFailed, mismatchMessage);
+            return null;
         }
 
         return allArt;

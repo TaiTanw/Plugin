@@ -3,7 +3,7 @@ using System.Collections.Generic;
 // =====================================================================================
 // Shared / Api — ④ 平铺窄口（对齐 ToolPrefabApi）
 //
-// 中间层只调本类。分步与现网一致；逻辑分支读 ctx（事实），人给的输入走 ToolFlattenRequest。
+// 中间层只调本类。步骤 1：Run(plan) 不读 ctx。分步窄口仍可读 ctx，换口是步骤 2。
 // =====================================================================================
 
 /// <summary>插件 2 · 平铺到 Art 对外接口。</summary>
@@ -12,6 +12,24 @@ public static class ToolFlattenApi
     public static string ArtRoot
     {
         get { return FlattenArtPaths.ArtRoot; }
+    }
+
+    /// <summary>
+    /// 一行完整④：Begin→B|B′→E?→D→C→Finish。不读 ctx。
+    /// 管线/人工仍走下面分步窄口，换口是步骤 2 / 4。
+    /// </summary>
+    public static FlattenRowResult Run(FlattenPlan plan)
+    {
+        return FlattenBuildService.Run(plan);
+    }
+
+    /// <summary>编排把 ctx + 请求译成 plan。内核只收 plan。</summary>
+    public static FlattenPlan FromContext(
+        PipelineJobContext ctx,
+        ToolFlattenRequest request,
+        string sourcePrefabPath)
+    {
+        return FlattenBuildService.FromContext(ctx, request, sourcePrefabPath);
     }
 
     /// <summary>B′（原子搬迁）还是 B（按后缀拆）。只看 <see cref="PipelineJobContext.HasExternalUris"/>。</summary>

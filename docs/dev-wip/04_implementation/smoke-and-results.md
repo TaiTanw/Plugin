@@ -1,127 +1,45 @@
-# 核对：冒烟 · 单文件输入 · 结果/错误码
+# 核对：输入 · 结果 · 验证边界
 
 返回 [总目录](../README.md) · [待办](../03_open-items/backlog.md) · [各相位入参/返回值](./pipeline-phase-io.md)
 
-> 结论已按 2026-08-26 回复更新。
+> 2026-09-14更新。2026-08“面板未建、暂不做冒烟、⑤暂放”的建议只适用于当时切片，不能继续作为当前免测依据。
 
----
+## 1. 当前输入与验证
 
-## 1. 接线冒烟：现在有没有必要？
+- 自动总面板与CLI共用PipelineRunner；面板可用bindings多行，CLI仍单-source。
+- ②可导入工程外模型；Pack解包填表未实现，不另开一套管线。
+- 当前SO默认②③④⑤⑥开启；总面板强制RunImport=true、CLI跟SO，差异见D26-5。
+- 文档改动检查链接/一致性即可；代码改动按风险运行针对测试，④大范围拆分需真实模型回归，不以“能编译”或单个样例成功代替。
+- 2026-09-10相关EditMode测试35/35通过、2026-09-11Art玻璃验收是历史证据，本轮未重跑；2026-09-14用户确认移动端AB已验收。
 
-**结论：没有必要单独先做「代码冒烟」；跟面板一起验即可。**
+## 2. 配置与导入自动
 
-| 做法 | 说明 |
-|---|---|
-| 现在 | Unity Refresh **能编译**即可；不必手写 `PipelineRunner.Run` 自测 |
-| 面板后 | 用 D3「拖单文件 → 运行」做真正的接线+产品验证 |
+编排不写L1批量路径；④成功且未指定覆盖范围时传本次Art单元到⑤。接口范围为null仍可回落L1路径，类型纳入默认还读EditorPrefs。
 
-窄口已在，面板会自然调用它们；提前冒烟收益小，还容易和「单文件+导入」半成品纠缠。
+设置自动靠Unity导入回调，不由Runner再次手动调用。Incoming受支持ModelImporter安全基线已与总闸解耦；策略自动保留原闸。Art模型硬跳过、贴图/后处理自动排除是不同机制，不能写成全部“总闸+Import”。
 
----
+总步骤与平铺已走SO，平铺同类不同来源实例、运行Policy快照；⑤材质等细节仍共用SO，尚未完成所有单项配置来源隔离。
 
-## 2. 编排输入（已确认）
+## 3. 已有结果契约
 
-| 项 | 结论 |
-|---|---|
-| 编排主入口 | **单模型文件**（拖入） |
-| 工程外路径 | **需要**：拷入工程（真②）再进后续 |
-| 批量 FBX 面板 | **保留独立**，不当编排主入口 |
-
-### 导入之后：不改 L1 批量路径
-
-编排**不写**资源总面板 L1 批量路径（那是本机 Prefs，给人点「执行全部」用）。⑤ 开④时由 Runner 把本次 Art 单元写入 `PostProcessFolderPaths`（D17），不经过 L1 Prefs。设置自动仍只靠 Prefs 开关 + Unity 导入回调。
-
-### 「自动化设置」要不要编排再调一次？
-
-**确定：设置自动（Importer）无需编排额外调用 Op。**
-
-```text
-开关打开（Master + Texture/Model SettingsAuto）
-  + Unity 对资产 Import / Reimport
-  → AssetPostprocessor.OnPreprocess* 改 Importer
-```
-
-编排只要保证：**开关处于有效状态** + **触发了一次正常导入**。不要在 Pipeline 里再调一遍「设置自动」内核。
-
-注意区分：
-
-| 能力 | 触发方式 | 编排要不要主动调 |
+| 层 | 当前结果 | 编排用途 |
 |---|---|---|
-| **设置自动**（改 Importer） | Unity 导入管线 | **否**（开开关 + Import 即可；默认不碰 Art） |
-| **后处理自动**（压图/刷白，导入后 delayCall） | 同上，开关控制 | **否**；仅导入区；与⑤不同通道 |
-| **⑤ / L1「按批量路径执行全部」** | 显式 API（人点按钮，或中间层代调） | **要调**；Converter 默认开⑤。这是手动内核，不是导入自动流 |
+| ③ | Prefab路径列表 | 空则30 |
+| ④ | Begin/B/B′/Finish的bool及work；E/D/C为void | glTF MissingUris预检 → 40 并停止整趟；OBJ缺件不进该闸；尚无统一FlattenPhaseResult |
+| ⑤ | ToolPostProcessResult：FailedCount、Canceled、Report | Execute硬失败累计>0映射50；Report给人读，不解析作控制流 |
+| ⑥ | RetinarAbBuildResult | 全失败60，PartialOk仍0（既有契约） |
+| 整趟 | PipelineResult：ExitCode、Messages、PrefabOutputs、AbOutputs | CLI退出/面板显示；后错覆盖首错仍是D26-4 |
 
----
+⑤50后⑥仍跑；⑥全失败会把50覆盖成60。统一StepResult/首错保留尚未实现，不能把下文建议当当前保证。
 
-## 3. 第⑤步：暂放，但接口要拆好
+## 4. D26-6：空操作与排错边界
 
-| 项 | 结论 |
-|---|---|
-| 流程默认 | Converter **跑⑤**（SO `runPostProcess`，须开④） |
-| 接口 | 中间层代调；对应现按钮「按批量路径执行全部」 |
-| 现状 | `RunMasterBatch` 返回 `ToolPostProcessResult`；FailedCount&gt;0 → 退出码 50（D16） |
+2026-09-14用户意见：倾向合法跳过并明确提示，前提是架构已安排好；编排不宜直接获取执行层内部。若边界不足，再考虑归中间层的专门排错层，具体方案需核对。
 
----
+当前ResourcePostProcessService已有“未纳入”“空批量路径”“未选Op”“无目标”文字报告；窄口没有统一typed跳过原因。MaterialProcessSettings.EnsureMasterBatchDefaults还会补空列表，所以不可笼统说“所有空列表都Skip”。
 
-## 4. StepResult
+下一步先核对窄口信息是否足够，分清配置未选、目标为空、Evaluate不适用、实际失败。若要增强，只通过明确的返回契约向中间层提供诊断，不让Runner窥探Registry/Op、不解析Report、不为零改动直接新增失败码。
 
-**要不要加 `StepResult`？（具体情况）**
+## 5. StepResult：候选而非已定实现
 
-### 先说结论
-
-| 阶段 | 建议 |
-|---|---|
-| **现在（仅编译、未做面板）** | **不必先加** |
-| **做 D3 面板 / 强化 D2 错误展示时** | **再加**（或等价结构） |
-| **子流程内部** | 继续用 Evaluation / RunSummary，**不要**改成 StepResult |
-
-### 什么情况下「够用、可不加」
-
-中间层已经能从现有返回值拼出对错时，例如：
-
-- ③：`List<string>` 空 = 失败，非空 = 成功 + 产出  
-- ⑥：`RetinarAbBuildResult.Ok / FailLines`  
-- 日志字符串凑合给开发看  
-
-此时只映射 `ExitCode` + `Messages` 也能跑通面板第一版。
-
-### 什么情况下「应该加」
-
-出现任一需求就加统一 `StepResult`（或增强 `PipelineResult.Steps`）：
-
-1. **面板要按步显示**成功/失败（不只一个大红 exit）  
-2. **CLI / 退出码**要稳定对应「败在哪一步」，且日志要带来源  
-3. 各窄口返回形态不统一（有的 List、有的 string report、有的 AbResult），中间层 if-else 变脏  
-4. ⑤ 将来接入：只有 Summary 计数，没有「整步 Ok」布尔时，编排不好决策是否继续⑥  
-
-### 推荐形态（实现时）
-
-```text
-子流程窄口 → StepResult { Ok, StepId, Message, Outputs }
-中间层     → PipelineResult { ExitCode, Steps[] }  // ExitCode 由首个 !Ok 映射
-```
-
-- **bool 是编排主信号**；ExitCode **只由中间层**写，插件 1/2 **不引用** `PipelineErrorCodes`。  
-- `AssetOperationEvaluation` 仍只管「某个 Op 对某个资源要不要做」——和 StepResult **不同层**。
-
-### 和⑤接口的关系
-
-⑤ 接口先保证「能被中间层调用」（已有 RunMasterBatch）。  
-等流程真要开⑤或面板要展示⑤成败时，再把返回值收成 `StepResult`，不必为⑤单独发明第三套。
-
----
-
-## 5. 已锁定摘要
-
-1. 不单独做代码冒烟；跟面板一起验。  
-2. 单文件 + 工程外需导入；批量面板独立。  
-3. 编排**不写** L1 批量路径；⑤ 靠 D17 传本次 Art 单元。**设置自动走 Unity 管线，编排不另调**。  
-4. ⑤ 流程默认关；口子已有。  
-5. `StepResult` 延后；结果用字符串。  
-6. **总步骤开关 → Pipeline SO；资源自动细节 → 资源总面板 Prefs**（混合问题稍后细拆）。
-
-### 使用
-
-`Tools > 自动化管线总面板` → 拖单文件 → 确认②区 SO → 运行。
-
-GLB 已跑通样例（宿主）：`Assets/Art/ggdddd`。
+结构化步骤结果有助按步展示与保留首错；具体字段/是否另建排错层待上述核对。操作层继续保留Evaluation/RunSummary，不强行替换为整趟StepResult。退出码映射仍归中间层，⑤透明材质事实仍归Material OP，不扩模型ctx。

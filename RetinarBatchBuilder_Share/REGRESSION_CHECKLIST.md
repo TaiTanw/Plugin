@@ -1,107 +1,73 @@
-# Retinar Batch Builder 回归检查表
+# 当前回归检查表
 
-版本：1.1  
-生效日期：2026-07-24  
-最近同步：2026-08-21（v1.4.4：动画循环沿用源 Clip Loop Time）
+核对日期：2026-09-14。对应当前 main；[结构与入口](../docs/dev-wip/02_structure/overview.md) · [当前待办](../docs/dev-wip/03_open-items/backlog.md) · [黑盒审计样例](../docs/dev-wip/04_implementation/flatten-core-audit.md)。
 
-本文是每次修改工具、更换 Unity 版本、发布分享包或正式批量打包前必须执行的回归基线。不得因为某个模型打包成功就跳过其他类型。
+这是人工/测试回归清单，不表示每项已有自动阻断。按本次修改范围选相应检查，发布或大范围拆分时覆盖完整样例；未经实测不得勾选。旧版门禁、全套交付报告要求已不适用。
 
-## 一、发布前必测样本
+## 1. 输入与源保护
 
-- [ ] 纯静态模型：验证 Mesh、材质、贴图、Collider、SafeZone。
-- [ ] 带动画模型：验证 Animator、Controller、Clip、循环/一次播放。
-- [ ] 带交互模型：验证 Runtime、XLua、DOTween、RichWidget、触发事件。
-- [ ] 存在 `fbx.fbm/Materials` 的模型：验证外部材质和贴图收敛。
-- [ ] 根节点存在偏移补偿的模型：验证 AR 端居中和尺寸。
-- [ ] Photoshop 修改过实体贴图的模型：验证工作副本、AB 和 `01_source` 版本一致。
-- [ ] 同一模型连续打包两次：验证重复打包与首次结果一致。
-- [ ] 含内嵌大贴图的模型（如曾超标的 `Plane_Jian31` / `Plane_WuZhi10w`）：验证「平铺 → 压 Art 贴图 → 导出」两遍流程。
-- [ ] 导入区仍残留同名 `.fbm` 的模型：验证第二遍打包后 Prefab 依赖不再指向导入区 `.fbm`。
+- [ ] FBX 外置贴图、FBX 内嵌贴图分别验收；不能以一类成功代替另一类。
+- [ ] OBJ + MTL、GLB、完整外 URI glTF、缺件 glTF、自包含 glTF 分别覆盖。
+- [ ] 原始外部模型与源 Prefab/材质不被改写；故障注入时核对源 hash、路径、GUID。
+- [ ] Begin 失败不得回退源 Prefab；外部材质复制失败不得继续写源材质。
+- [ ] ②重入库只清本次 Incoming 单元；源已在 Assets 时不走工程外清夹逻辑。
+- [ ] ④清夹只清选定 Art 单元；人工默认不清、管线默认清。受控重建可改变副本 GUID，不承诺保留人工调整。
+- [ ] 同名跨单元贴图不串图；D25-4 尚未全收口，记录实际失败，不把现状当合格。
 
+## 2. ④完整相位与两个人工按钮
 
+- [ ] 管线只走 ToolFlattenApi 七步；不借 FlattenPaths 进入 FBX SafeZone 调度器。
+- [ ] 普通平铺选择 B，遇外 URI glTF 拒绝；原子迁移选择 B′，缺件/无外 URI/多个 glTF 主包拒绝。
+- [ ] 人工按钮输入已导入的 Assets 模型/Prefab；非 FBX 原模型先经③生成 Prefab。
+- [ ] 两个人工按钮均完成 Begin→B/B′→E?→D→C→Finish，而不是只搬文件；不会自动追加⑤⑥。
+- [ ] 自动每模型②.5一次 ctx；人工每次操作建立自身 ctx，相位内不重扫。普通兼容 Prefab 的 ctx=null 路径单独验收。
+- [ ] 缺 sidecar（glTF）：typed MissingUris 在 Begin 前失败，管线 exit=40，整趟④停；执行时文件消失也使 B′失败。OBJ 缺 `.mtl`/贴图当前不要求 40，记录白膜/`exit=0` 事实。
+- [ ] B′在 Art/名称/名称/ 保持相对树；核对主文件及所有 sidecar，Prefab/材质引用到本单元。失败不保证自动回滚。
+- [ ] B 的复制映射、OBJ MTL、E Extract、D 引用、C 材质独立化均检查；B 返回 true 不代替资源完整验收。
+- [ ] C 两分支都跑；glTF 包原图与 Unity 材质用贴图副本并存是已接受布局。
+- [ ] 直接选 FBX 普通入口验证 SafeZone；管线/外来 Prefab 验证空父、源内容 TRS 与动画，不要求它们同样缩入 SafeZone。
+- [ ] 轴向开/关分别测试，binding.CloneWith 不丢配置；重跑不叠加多余外壳和名称。
+- [ ] 碰撞体按 SO 开关验收，默认关闭；关闭不因缺 BoxCollider 判失败。
+- [ ] 动画材质曲线、Controller Motion、LoopTime 与源一致；实际播放，不只查文件存在。
 
-## 二、自动阻断项
+## 3. 配置与导入自动
 
-- [ ] Unity 正在编译或存在红色编译错误时不得打包。
-- [ ] Play Mode 中不得生成正式交付物。
-- [ ] `Model` 只允许 FBX/OBJ 及 `.meta`，禁止子文件夹、材质、贴图和文本。
-- [ ] Prefab 必须有 Renderer，禁止只有 Collider 的空包。
-- [ ] Prefab 的所有私有资源依赖必须收敛到 `Assets/Art/<模型>`。
-- [ ] FBX `externalObjects` 不得继续引用原 `fbx.fbm` 或 `Materials`。
-- [ ] 单元目录 `Material` 的全部 Texture Property 必须引用本包贴图（`image/Texture` 或 `image/UI`；旧顶层 `Texture/` 仅兼容已有 Art）。
-- [ ] 首次和重复打包都必须扫描全部既有材质，不得依赖“本轮新复制列表”。
-- [ ] 根 Transform 必须为 Position Zero / Rotation Identity / Scale One。
-- [ ] **FBX 自动预制体**：Renderer Bounds 必须居中 SafeZone，尺寸不得过小或越界。
-- [ ] **外来 Prefab**：不得因未缩进 0.8m 而被空间门禁排除；内容节点 local / 动画应与源一致。
-- [ ] 根 BoxCollider：仅当平铺面板「添加根 BoxCollider」开启时必须存在且中心与 Renderer Bounds 对齐；关闭时不得因缺碰撞体阻断导出。
-- [ ] 未知外部依赖必须停止，不得强行生成缺依赖包。
-- [ ] 阻断必须是单资产粒度：一批中混入一个不合规资产时，其余资产仍要正常出包，不合规的那个不得产出 AB/UnityPackage。
-- [ ] 被排除的资产必须出现在 `Deliverables/_diagnostics/validation_failures.txt`，且完成弹窗显示实际出包数量。
-- [ ] 连续对同一个生成预制体重跑两次，不得出现 `Assets/Art/<名字>_prefab/` 这类多余目录，AssetBundle 名与交付目录名必须保持一致。
-- [ ] 导入插件（`TOol`）的总开关处于开启状态时**平铺/导出**，`Assets/Art/<模型>/Model` 下仍不得出现 `Materials/` 或 `<FBX名>.fbm`。
-- [ ] 交付区 Model 的 `materialSearch` 为 Local；`GetDependencies(Prefab)` 不得再出现 `Assets/` 下 Art 以外的 `*.fbm/*` 贴图路径。
+- [ ] 人工/管线平铺 SO 同类不同实例；面板只编辑自身来源目录，跨来源/未知目录只读；能按只读 SO 快照执行。
+- [ ] Policy 在开跑前冻结，内核不再读平铺 EditorPrefs；只读规则不误称为全局 Inspector 权限。
+- [ ] Incoming 的受支持 ModelImporter 安全基线在总闸关/排除命中时仍生效；策略自动仍按原闸。
+- [ ] Art 模型设置 Processor 硬跳过；贴图/后处理自动按各自排除表验证。不能泛称“所有自动不碰 Art”。
+- [ ] Art ModelImporter 使用 InPrefab + Local，避免全工程自动搜图；④自愈不改用户原始 Importer。
+- [ ] 显式⑤仍可处理 Art；未提供范围/类型覆盖时，记录实际 SO 与 EditorPrefs 来源。
+- [ ] 总面板强制入库而 CLI 跟 SO 的差异按 D26-5 记录，尚不能勾为“两入口完全等价”。
 
+## 4. ⑤贴图、材质、模型
 
+- [ ] 总批量顺序为贴图→材质→模型；范围为指定 Art 单元，未传范围才回落人工路径。
+- [ ] 贴图体积检查按磁盘源文件字节与当前 SO 阈值；Importer 尺寸/压缩不是原文件体积。
+- [ ] 不压 .fbm 缓存；压平铺副本。复用既有 Art 时，Extract/SyncNewer 不把已压副本盖回大图。
+- [ ] 区分“只重跑⑤⑥”和“清单元后重建④⑤⑥”；后者会有意再生成资产，不应套用无条件保留旧图/GUID 的约定。
+- [ ] NormalizeDeliverableShaderOperation 覆盖 Opaque/Cutout/Blend、cutoff、模式往返、低 alpha Opaque 不误判。
+- [ ] 换 Shader 前捕获源表面状态；glTF BLEND→Standard Fade，检查混合/ZWrite/queue/keywords，不只看 _Mode。
+- [ ] 歼15 glTF 的 41 个材质为 37 Opaque、4 Fade（ID03/05/20/25），ID20 玻璃透明。Art 已于 2026-09-11 用户验收；本项用于后续回归。
+- [ ] 材质目标已是 Standard 时会 Skip；旧坏副本需从原始输入重建④⑤，不能靠再跑⑤猜回源透明性。
+- [ ] 目标 Shader 改名不等于任意 URP 兼容，换目标需独立属性映射与端上测试。
+- [ ] ⑤无操作/无目标/不适用须分别记录；当前汇总边界是否足以明确提示仍待 D26-6 核对，不新增硬失败约定。
+- [ ] FBX 顶点色被重导冲掉的 D19 仍记录，但不作为 CLI 必须全白门禁；需要白顶点 GLB 时按专门人工流程验证。
 
-## 三、贴图回归
+## 5. ⑥输出与端上验收
 
-- [ ] Unity TextureImporter `Max Size/Compression` 与原 PNG/JPG 文件体积分开报告。
-- [ ] 原始贴图文件体积超过 5MB 才触发当前体积告警（严格按磁盘字节，`>` 5×1024×1024）。
-- [ ] 报告 WARN 时先打开 `01_source/texture_size_report.txt` 核对具体路径；不得仅凭“Art 文件夹里看起来都不大”判定误报（常见漏网：单张 5.x MB）。
-- [ ] Photoshop 修改原贴图后，源文件更新时必须刷新交付工作副本的图像内容。
-- [ ] 刷新工作副本时必须保留目标 `.meta` 和 GUID。
-- [ ] 交付工作副本更新时，不得被较旧源图反向覆盖。
-- [ ] **已压缩的更小 Art 贴图，不得被更新的更大导入区源图通过 SyncNewer 覆盖。**
-- [ ] `01_source/Textures` 只归档最终 Prefab 实际引用的贴图版本。
-- [ ] `texture_size_report.txt` 必须显示 Unity Imported Size 和 Source File Size；问题行路径应落在 `Assets/Art/<模型>/` 下按后缀递归到的贴图（常见 `image/Texture/`）。
-- [ ] 被导入插件压缩过的二的幂贴图，压缩后仍必须是二的幂；`texture_size_report.txt` 中不得因压缩而新增非二的幂问题项。
-- [ ] 导入插件的 `maxSourceMegabytes` 必须 ≤ 5，与本工具的告警线一致。
-- [ ] **两遍流程（内嵌贴图）**：
-  1. 第一遍平铺后 `image/Texture` 可暂时超标；
-  2. 在 `Assets/Art` 下按后缀递归只压超标文件（确认结果区路径，且不得选 `.fbm`；不要按 `Texture` 夹名写死）；
-  3. 不删 Art，第二遍导出后磁盘体积与报告均保持 < 5MB OK。
-- [ ] 第二遍打包 Console 允许出现「恢复 N 张更小的 Art 贴图」或「SyncNewer 跳过（保留更小的 Art 贴图）」；**不得**在无恢复日志的情况下体积又回到超标。
-- [ ] 开着导入插件拖入含内嵌贴图的 FBX：`<FBX名>.fbm` 里的贴图必须保持原始尺寸不被改写，且模型材质不得丢失；手动压 `.fbm` 应被 Skip 并提示改压 Art。
-- [ ] 导入插件生成的外部 `.mat` 数量必须等于 FBX 里的材质数量；模型在 Scene/Inspector 中不得出现紫色材质槽。
-- [ ] 搬移 `.fbm` 抽取出来的贴图时，Console 不得出现 `Assertion failed on expression: 'm_hasValue'` 或 `Asset to move is not in asset database`；`Model/` 里不得残留 `.fbm` 目录。
-- [ ] Extract/remap 自愈开启时，压缩后再打包仍不得把 Art 贴图盖回大图（与外部 `.fbm` 切断可同时成立）。
-- [ ] **顶点色**：对 `Art/Model` FBX 手动「顶点色设为全白」后，不删 Art、选 Prefab 再**导出**；Model 子 Mesh 顶点色须仍为白。Console 可出现「SaveAndReimport 后已恢复 Mesh 顶点色」，或因无外部 `.fbm` 而跳过 Extract。
-- [ ] **菜单拆分（现网）**：`Tools/Retinar` 见「批量汇总」（普通平铺 / 原子迁移 / 平铺操作与配置面板）与「打开交付文件夹」；无旧规范化导出、成品直达与 Batch Build。普通/原子都跑完整④，外部 URI glTF 不得走普通分支，缺伴生不得通过原子分支。
-- [ ] **自愈位置**：平铺结束 Console 可出现「平铺结束自愈」；导出校验不得再打「开始自愈外部依赖」，仅在仍有外部 `.fbm` 时强制 Extract。
-- [ ] **管线⑥直出**：关闭④⑤、给定已验收 Prefab → ⑥仅按导出 SO 生成目标产物；Art/Prefab 内容未变。旧“成品直达”菜单不得重新出现。
-- [ ] **动画换材质曲线**：含 `m_PPtrCurves` 换槽的 Prefab 平铺后，`.anim` 的 classID 23 曲线 GUID 必须落在本包 `Material/`；不得残留源导入区 GUID，不得出现同 path 的 classID 2 重复曲线。导入其它工程播放不得因 Missing 材质变紫。
-- [ ] **业务 SO 未接线**：即使创建了 `RetinarBusinessProfile` 资产，规范化导出仍跑硬编码门禁并写全套 00–06，直通仍只写 02+03。
-- [ ] **外来 Prefab 套壳**：含动画/UI 的源 Prefab（如点扩散镜片）须**删除** `Assets/Art/<名>/` 后从源再平铺。外壳 Identity、无 Animator；内容节点源名与源 local；播放朝向与源工程一致。再平铺不得套第三层。已被旧逻辑 Bake 过的 Art 副本重跑不会自愈。
-- [ ] **动画循环**：点扩散镜片一类源 Clip `m_LoopTime=0` 的，平铺后 Art Clip 仍为 0，文件名后缀 `_once`，播放停在结尾；不得因名字不含 `once` 被改成循环。
+- [ ] 使用管线⑥ / RetinarAbApi.Build，核对代码中的双端/LZ4及导出SO的路径、可选UP、拷贝开关。
+- [ ] 检查实际 AB 存在、非零、更新时间与可加载性；不能只靠弹窗或 exit=0。
+- [ ] 输出 AB/UP 只含指定 Prefab 及依赖，不打整棵 Art。UP 开启时在干净工程验证。
+- [ ] 插件 1 不主动做④材质/Importer/Prefab变换；④提前写 AB 标签的迁移须先核对兼容调用者。
+- [ ] 歼15 R1 在目标移动端验证透明、颜色、深度/排序与最终 AB；目前未获此项确认。
+- [ ] 其它材质、法线、双面、动画、Collider 按目标应用实际需求验收，模型能显示不代表交互已验收。
+- [ ] 记录⑤50后⑥仍跑、⑥失败覆盖60、部分出包仍0等当前行为；对应 D26-4/既有契约，不自行改码。
 
+## 6. 旧清单不再适用的要求
 
-
-## 四、动画与交互回归
-
-- [ ] 打包后 Controller 的 Motion 不得无故改指其他 Clip。
-- [ ] 默认状态、循环、一次性动画和切换条件与原 Prefab 一致。
-- [ ] Lua/TextAsset 必须收敛到 `Text`，序列化引用不得断开。
-- [ ] Lua `OnClick` 等函数必须有平台事件或 C# 显式调用，不得只因函数存在就宣称可触发。
-- [ ] 带 XLua/DOTween/RichWidget 的包必须生成 `runtime_requirements.txt`。
-- [ ] AB 显示模型不代表交互已验收，必须在匹配 Runtime 中实际触发。
-
-
-
-## 五、输出与回归验收
-
-- [ ] 完成弹窗不得作为成功依据；必须检查实际文件存在、大小非零、修改时间已更新。
-- [ ] UnityPackage 必须在干净工程删除旧同名 `Assets/Art/<模型>` 后重新导入验证。
-- [ ] UnityPackage 导入后 `Model` 仍只有 FBX/OBJ，不得自动生成 `Materials` 或 `<FBX>.fbm`。
-- [ ] Android 和 iOS AB 都必须更新并能加载最终 Prefab。
-- [ ] 手机/AR 端必须确认模型位于线框中心，尺寸可见，不得只看 Unity Scene 窗口。
-- [ ] 材质、透明、法线、双面、动画、Collider 和交互必须人工验收。
-- [ ] 发布分享包前必须更新 `CHANGELOG.md`、`PACKAGING_RULES.md` 和本检查表。
-- [ ] `RetinarBatchBuilder_Share.zip` 必须在最后一次代码/文档修改后重新生成。
-
-
-
-## 六、GLB 边界
-
-- [ ] GLB 不得直接并入当前核心打包工具。
-- [ ] GLB 必须在独立转换工程中，从已验收 UnityPackage 的最终 Prefab 导出。
-- [ ] GLB 只是派生交换文件，不得替代原 FBX、UnityPackage 或 AB。
+- 旧规范化导出/成品直达菜单、30_Business、门禁诊断文件、runtime_requirements、01_source、texture_size_report 和全套 00–06 已删除。
+- “未知依赖必须在⑥停包”“⑥校验时强制 Extract 自愈”不是当前能力；④缺必需 sidecar 的失败闸仍有效，两者不能互相替代。
+- GLB/glTF 现可直接入库；“GLB 必须先由 UnityPackage 派生”已过时。
+- Model 仅 FBX/OBJ、全资产都要求 SafeZone/Collider、所有生成副本 GUID 永不改变等旧一刀切要求不适用。
+- 发布分享包或更换宿主才做相应分发兼容测试；日常文档同步不要求重打 zip，也不假称已完成 Unity/端上回归。

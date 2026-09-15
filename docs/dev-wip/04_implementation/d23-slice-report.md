@@ -1,6 +1,8 @@
-# D23 本刀报告（现状）
+# D23 切片历史报告（2026-09-02）
 
 返回 [总目录](../README.md) · [ctx](./pipeline-job-context.md) · [④ 查封](./pipeline-flatten-capabilities.md) · [相位入参](./pipeline-phase-io.md) · [待办](../03_open-items/backlog.md)
+
+**2026-09-14适用性勘误：** 下文“现状/本刀”均指D23当时，不是当前结构。④已物理迁TOol且ctx编排暂归中间层；Bridge已删，Runner用七步；D26-2缺件失败闸、平铺SO、人工两完整相位及⑤透明修复均为后续变化。旧⑥门禁/全套导出已删除。当前请先读[整体结构](../02_structure/overview.md)，本报告保留实验记录。
 
 本文：[0](#0-doc-map) · [1](#1-status) · [2](#2-code-structure) · [3](#3-test-run) · [4](#4-notes) · [4-1](#4-1) · [5](#5-remaining)
 

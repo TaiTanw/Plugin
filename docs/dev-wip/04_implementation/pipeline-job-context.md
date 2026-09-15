@@ -2,7 +2,7 @@
 
 返回 [总目录](../README.md) · [流程](./pipeline-flow.md) · [相位入参/返回值](./pipeline-phase-io.md) · [待办](../03_open-items/backlog.md)
 
-> **状态：D23a/b + B′ 已落；D26-2 已把缺伴生收成 typed `MissingUris` 与④失败闸。** 现状与谁读 ctx → [d23-slice-report](./d23-slice-report.md)。探测扩展见 [§7](#7-probe-extend)。  
+> **状态：D23a/b + B′ 已落；D26-2 已把 glTF 缺伴生收成 typed `MissingUris` 与④失败闸。OBJ 缺件不进该闸。** 当前入口与谁读 ctx → [结构总览](../02_structure/overview.md)；[D23报告](./d23-slice-report.md)为历史切片。探测扩展见 [§7](#7-probe-extend)。\
 > ④ 查封 → [pipeline-flatten-capabilities](./pipeline-flatten-capabilities.md)。
 
 ---
@@ -16,7 +16,7 @@
 | Options / SO 是什么 | **目的**：本趟要不要跑 ③④⑤⑥。不写进 ctx |
 | ④ 拆文件唯一闸 | **`HasExternalUris`**。执行层不 `if (.gltf)` |
 | D22 | **不开发**。`.gltf` 可直接入库；转 GLB 可选 |
-| 2–3 之间 | **不加**用户可见相位。`Build` 不是步骤；**仅④**读 ctx（`ToolFlattenApi`，不再经 Bridge） |
+| 2–3 之间 | **不加**用户可见相位。`Build` 不是步骤；**仅编排**读 ctx 并译成 FlattenPlan。① 不承担 `Build`，不为无头排错扩字段（见 [D24 R3](../03_open-items/d24-boundary-plan.md#r3-flatten-split)） |
 
 **刻意不等 delayCall 再③：** 后处理自动可关、开着会再导入抢资产、CLI 常在 `delayCall` 前 `Exit`。交付处理走⑤。
 
@@ -59,12 +59,12 @@ PipelineOptions / SO   ← 目的（本趟开哪些步）
 | 禁止 | 存 `RunFlatten`、存「走哪条产品线」、存 `FlattenFileMode` 当命令 | 靠后缀或「像 gltf」去改开关语义 |
 | ④ 拆文件 | 只提供 `HasExternalUris` | 只提供「要不要平铺」 |
 
-组合（以后④真正改行为时）：
+当前组合（2026-09-14）：
 
 ```text
 要平铺？     = options.RunFlatten          ← 目的
 禁止拆文件？ = ctx.HasExternalUris         ← 事实
-另存 .mat？ = 目的（开了④）× 事实（MaterialForm 仍是内嵌）
+另存 .mat？ = 开了④，两分支都跑 C；MaterialForm 仅观测，不开闸
 FBX Extract = 目的（开了④）× 事实（ImporterKind == ModelImporter）
 ```
 
@@ -76,25 +76,23 @@ FBX Extract = 目的（开了④）× 事实（ImporterKind == ModelImporter）
 
 ## 4. 平铺薄分支：按能力组合，不按格式分叉
 
-现网④是一条厚流程（`CreatePackagedAdjustedPrefab`），内部已经叠了几件独立的事：
+管线④现由 `PipelineRunner.FlattenPerPrefab` 通过 `ToolFlattenApi` 组合七步；`CreatePackagedAdjustedPrefab` 是遗产整相位路径，不再是管线入口。底层仍叠有：
 
-| 能力（薄） | 现网在干什么 | 以后谁闸 |
+| 能力（薄） | 当前实现 | 当前谁闸 |
 |---|---|---|
 | **A. 写 Art Prefab** | 拷/另存 Prefab、Unpack 嵌套 | `RunFlatten` |
 | **B. 按后缀拆依赖** | `GetDependencies` → `ResolveRelativeFolder` → `Model/` `Texture/` … | **仅** `!HasExternalUris` |
-| **B′. 原子搬迁** | （未做）主文件 + `SidecarPaths` 保持相对布局 | **仅** `HasExternalUris` |
+| **B′. 原子搬迁** | 已实现：主文件 + `SidecarPaths` 保持相对布局 | **仅** `HasExternalUris` |
 | **C. 另存 Renderer `.mat`** | `CopyPrefabRendererMaterials` | 开④即可；与拆不拆文件正交 |
 | **D. 重映射引用** | 拷完改 Prefab/材质指向 | 有拷就做 |
-| **E. ModelImporter Extract/Bind** | FBX 才有效；GLB `as ModelImporter` 空转 | `ImporterKind == ModelImporter` |
+| **E. ModelImporter Extract/Bind** | 对 ModelImporter（含 FBX/OBJ）执行；ScriptedImporter 跳过 | `ImporterKind == ModelImporter` |
 
 **薄分支可行**：不要 `if gltf / if fbx / if glb` 三套平铺。  
 B 与 B′ **互斥**，唯一开关是 `HasExternalUris`。A/C/D 两条路都跑。E 只认 Importer 事实。
 
-gltf 外 URI 包 = A + B′ + C + D（不跑 B，避免拆坏 URI）。  
-全内嵌 gltf / GLB = A + B + C + D（B 实际只搬走容器文件，效果等于整文件进 `Model/`）。  
-FBX = A + B + C + D + E。
+实际顺序是 **Begin → B/B′ → E? → D → C → Finish**。外 URI 包不跑 B，ScriptedImporter 跳过 E；全内嵌包走 B。A/C/D 是能力分类，不代表执行顺序。
 
-**D23a 不做 B′，也不改 B。** 只把事实记进 ctx。
+**历史切片：D23a 当时只记 ctx；后续 D23b/B′ 已落地。** 不能再把“不做 B′”当当前约定。
 
 「拷贝循环」= `CopyAdjustedPrefabDependencies` 里按后缀把每个依赖拷到不同 Art 子夹的 `for`。D23a 不碰它；D23b 只在循环外用 `HasExternalUris` 决定跑 B 还是 B′，**不重写循环内部**。查封表 → [pipeline-flatten-capabilities](./pipeline-flatten-capabilities.md)。
 
@@ -102,15 +100,15 @@ FBX = A + B + C + D + E。
 
 ## 5. ctx 会不会让 ③④⑤ 立刻改成「精确文件地址」？
 
-**不会。第一刀不做。** 归类有了，处理区改解析要一步步来。
+**当前不会。** ctx 只为④提供事实，不替换③模型路径或⑤ Art 单元 Collector。
 
 | 步 | 现网地址从哪来 | ctx 以后能提供什么 | 本刀 |
 |---|---|---|---|
 | ③ | `ModelPaths`（已是文件列表，不扫夹） | `MainAssetOk` 断言 | 最多日志 |
-| ④ | `prefabPaths`；内部 `GetDependencies` 再按后缀分夹 | `SidecarPaths` 作原子白名单；拆文件认 `HasExternalUris` | 不改拷贝循环 |
-| ⑤ | `PostProcessFolderPaths` **按夹 Collector 扫**（贴图/模型/材质各一套） | 将来可改为「只动 ctx 归类出的 `.mat` / 模型 / 伴生图」 | **仍扫 Art 单元** |
+| ④ | `prefabPaths`；B 用 GetDependencies、B′用主文件+sidecar | SidecarPaths/HasExternalUris 已使用 | B/B′已落地 |
+| ⑤ | `PostProcessFolderPaths` **按夹 Collector 扫**（贴图/模型/材质各一套） | 曾提议只动 ctx 地址，但未确认；本次透明修复不走此方案 | **仍扫 Art 单元** |
 
-⑤ 现在「按配置扫区域所有文件」是 L1 总批量语义，中间层只是代调。把⑤收成「只处理本趟 ctx 列出的地址」是后续切片（可与 D15 单单元范围一起想），**不绑在 D23a**。
+⑤ 现在「按配置扫区域所有文件」是 L1 总批量语义，中间层只是代调。把⑤收成「只处理 ctx 地址」只是未采纳的旧提议，不是必做切片；入库 ctx 地址也不等于重映射后的 Art 地址。透明判断由 Material OP 读取每个材质自身状态，不扩 PipelineJobContext。
 
 ---
 
@@ -121,11 +119,11 @@ FBX = A + B + C + D + E。
 | 字段 | 类型（示意） | 含义（事实） |
 |---|---|---|
 | `PrimaryAssetPath` | `string` | ② 成功后的主文件 |
-| `SourceExtension` | `string` | 只供日志 / 填启发式；**执行不 if 后缀** |
+| `SourceExtension` | `string` | 供探测分派/日志；人工入口还会验证 .gltf。B/B′的选择本身仍只认 HasExternalUris |
 | `ImporterKind` | `ModelImporter` / `ScriptedImporter` / `Unknown` | `AssetImporter.GetAtPath` |
 | `HasExternalUris` | `bool` | ④ 拆文件**唯一闸**。见 §2 |
 | `SidecarPaths` | `List<string>` | 相对主文件解析到的 `.bin` / 外图等（可空） |
-| `MissingUris` | `List<string>` | JSON 已声明但磁盘不存在的 URI；结构化控制事实，④直接据此失败 |
+| `MissingUris` | `List<string>` | **当前仅 glTF 探针写入**：JSON 已声明但磁盘不存在的 URI；④直接据此失败。OBJ/FBX/GLB 的 `Build` 不填此项 |
 | `MainAssetOk` | `bool` | 主资产能加载为 GameObject |
 | `MaterialForm` | `SubAssetOnly` / `HasStandaloneMat` / `Unknown` | 依赖里有没有独立 `.mat` 文件 |
 | `Warnings` | `List<string>` | 展示诊断，不参与控制流；缺伴生虽也留 Warning，但实际闸只读 `MissingUris` |
@@ -140,18 +138,21 @@ FBX = A + B + C + D + E。
 
 ### 6.2 结构化失败与 Warnings
 
-Build 时把缺伴生同时写入 `MissingUris` 与 Warning。Runner 不因普通 Warning 自动 Fail，但会在④ Begin 前读取 `MissingUris` 并返回 40；不得解析 Warning 文案。
+Build 时：**仅** `.gltf` 把缺伴生同时写入 `MissingUris` 与 Warning。Runner 不因普通 Warning 自动 Fail，但会在④ Begin 前读取 `MissingUris` 并返回 40、停止整趟④；不得解析 Warning 文案。
+
+`.obj` / `.fbx` 在 `Build` 里把 `HasExternalUris=false` 后返回，**不调用** `ObjPackageFiles.Scan`。OBJ 缺 `.mtl`/贴图只在① `CopyObjSidecarsBeside` 打 Warning，ctx 的 `MissingUris` 仍为空，④ 40 闸不会咬。详见 [backlog · obj-vs-gltf](../03_open-items/backlog.md#obj-vs-gltf)。
 
 | 建议码/文案方向 | 何时 |
 |---|---|
-| 缺伴生 | JSON 相对 URI 指向的 `.bin`/图磁盘上没有；同时进入 `MissingUris`，④失败 |
+| 缺伴生（已接闸） | glTF JSON 相对 URI 指向的 `.bin`/图磁盘上没有；进入 `MissingUris`，④ 失败 40 |
+| OBJ 缺 `.mtl`/贴图 | ① Warning；**当前不进** `MissingUris`，可能白膜且 `exit=0` |
 | JSON 不可用 | `.gltf` 读失败 / 非对象 |
 | 主资产空 | Import 声称成功但 `LoadMainAssetAtPath` 不是 GO（应与 `MainAssetOk=false` 同时出现） |
 | 启发式被推翻 | 后缀像单文件，但扫到外 URI 或伴生 |
 | 零字节 / 未注册 Importer | 文件在但无法作为模型导入 |
-| 声明了外 URI 但 Sidecar 列表空 | 闸为 true 却搬不了白名单，下一刀 B′ 会缺输入 |
+| 声明了外 URI 但 Sidecar 列表空 | 需区分确实没有 sidecar 与缺失 URI；当前缺件检查和 B′完整性检查已实现 |
 
-损坏是**事实**；要不要停管线是**目的**（以后才接到 Options / ExitCode）。第一刀只让 Console 看得见。
+损坏是事实，失败映射归中间层。glTF MissingUris 已接④40，不是将来才开发；OBJ 缺件与其它 Warnings 不能一概视为已接失败闸。
 
 ### 6.3 不要放进 ctx
 
@@ -163,7 +164,7 @@ Build 时把缺伴生同时写入 `MissingUris` 与 Warning。Runner 不因普�
 | `ShouldBakeShader` | ⑤ 看 Shader 名 |
 | 可配置「识别分支 ID」 | 硬编码填标志即可 |
 
-`EmbeddedTexturesRemainInContainer` 可第二刀再加（提醒⑤压图 0 命中）；不是拆文件闸。
+`EmbeddedTexturesRemainInContainer` 是历史备选字段，未实现也未确认为本轮需求；不能据此扩 ctx。
 
 ---
 
@@ -176,7 +177,7 @@ Build 时把缺伴生同时写入 `MissingUris` 与 Warning。Runner 不因普�
 | **D23a** | **已做** `PipelineJobContext.Build` + 日志 |
 | **D23b** | **已做** 跳过拷贝循环 |
 | **B′** | **已做** `RelocateAtomicPackage` → `Art/<名>/<名>/`；② 入库顺带拷伴生 |
-| **④ 退出码** | `MainAssetOk=false` 维持 ③→30 |
+| **④ 退出码** | glTF MissingUris 在 Begin 前触发 40 并停止整趟；主资产不可用通常在③产物为空时先 30，Build 本身不设置退出码 |
 
 ### glTF 探测如何扩展（② 后 / ③ 前）
 
@@ -195,3 +196,7 @@ PipelineJobContext.Build
 | ② 伴生拷 | 已用同一 `Scan`（`ToolImportApi.CopyGltfSidecarsBeside`） |
 
 不要在 Flatten 里扫 JSON。④ 只消费 FlattenOptions 里已经填好的路径。
+
+OBJ 若将来要进同一闸：在 `Build` 的 `.obj` 分支调用 `ObjPackageFiles.Scan` 并写入 `MissingUris`，不要让④自己扫 `.mtl`。是否升闸与 B 质量闸一并在 R3 后评估。
+
+人工操作不经过②.5：ManualFlattenService 点击时对 Assets 模型或 Prefab 模型依赖建立自身 ctx，再完整复用到 Finish；这不是每分步重新解析。自动与人工当前有两处相位组合，详见[整体结构](../02_structure/overview.md)。

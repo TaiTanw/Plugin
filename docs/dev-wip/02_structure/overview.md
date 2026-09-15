@@ -1,122 +1,179 @@
-# 当前整体结构（文件夹 · 类 · 中文职能）
+# 当前整体结构（入口 · 数据流 · 类）
 
-返回 [总目录](../README.md)
+返回 [总目录](../README.md) · [已确认要求](../01_requirements/strategy.md) · [待办](../03_open-items/backlog.md)
 
-根仓：`Assets/Plugin/`（插件 Git 根）
+> 核对日期：2026-09-14；代码基线：`e51469a`。这是当前结构入口，取代旧图中“插件 1 仍拥有④/门禁/全套导出”的描述。目标、已实现和剩余差距分别标明。
 
-```text
-Assets/Plugin/
-├─ docs/                         文档
-│  ├─ CLI_AUTOMATION_DEV.md      历史长文（入口改指向 dev-wip）
-│  └─ dev-wip/                   ★ 本开发备忘目录
-├─ Pipeline/                     ★ 流程编排（SO / Runner / 总面板）
-├─ TOol/                         插件 2
-└─ RetinarBatchBuilder_Share/    插件 1
-```
-
-### Pipeline（编排 · 对外两块）
-
-| 相对路径 | 职能 |
-|---|---|
-| `Pipeline/ConfigData/` | `PipelineStepSettings` 总步骤 SO |
-| `Pipeline/Editor/PipelineWindow.cs` | **(A)** 人机：`Tools > 自动化管线总面板`；可收 Bindings 表 |
-| `Pipeline/Editor/PipelineSourceAccept.cs` | 批量「输出到编排」→ `AcceptBindings` |
-| `Pipeline/Editor/PipelineMaterialId.cs` | 建议 ID2（三层 / 三层+文件全名） |
-| `Pipeline/Editor/PipelineRunner.cs` | **(A/B 共用)** 1 入库→③→④→⑤→⑥；1 后 `AttachJobContext`（不调③） |
-| `Pipeline/Editor/PipelineJobContext.cs` | D23 事实：外 URI / 伴生 / `MainAssetOk`；④ `ToolFlattenApi` 直接读 |
-| `Pipeline/Editor/PipelineOptions.cs` | 步骤开关；字段 `JobContext`（③⑤⑥ 不读） |
-| `Pipeline/Editor/PipelineGltfUriProbe.cs` | ② 后探测；转调 `GltfPackageFiles.Scan` |
-| `Pipeline/Editor/PipelineCli.cs` | **(B)** CLI `-executeMethod PipelineCli.Run` · **D5 已验收**（`-source` / `-materialId`） |
-| 文档 | [d23 报告](../04_implementation/d23-slice-report.md) · [pipeline-flow](../04_implementation/pipeline-flow.md) · [cli-getting-started](../04_implementation/cli-getting-started.md) |
-
----
-
-## 插件 2 · `TOol/`
-
-路径：`Assets/Plugin/TOol/`
-
-| 相对路径 | 职能简述 |
-|---|---|
-| `Editor/Window/` | L1 资源处理总面板、批量导入（⑤/② 人机入口，≠ Plugin 流程编排） |
-| `Editor/Window/BatchFbxImportService.cs` | ①②：收集、**向上三层命名**、拷贝 Import |
-| `Editor/Window/BatchFbxImportWindow.cs` | 批量 FBX 导入窗口 |
-| `Editor/Window/ResourceProcessWindow.cs` | L1 资源处理总面板（路径×Op；⑤ 子流程对外口） |
-| `Editor/Shared/` | 横切：开关、批量路径、排除、导入后调度 |
-| `Editor/Shared/GltfPackageFiles.cs` | gltf URI `Scan`（② 伴生拷 + ctx 探测共用；换解析器只改这里） |
-| `Editor/Shared/Api/` | **对外窄口**：Import / Prefab / PostProcess；管线②夹级清空 = **D18** |
-| `Editor/Shared/AssetUnitFolder.cs` | 只删 `parent/单段`（② Incoming、④ Art） |
-| `Editor/Generated/` | 中间资产能力（非 Art、非⑤原地改） |
-| `Editor/Generated/Prefab/` | **③ 自动 Prefab**（Config / Layout / Service / 菜单） |
-| `Editor/Generated/Prefab/.../PrefabBuildService.cs` | 写盘 `SaveAsPrefabAsset` |
-| `Editor/Generated/Prefab/.../PrefabIncomingPaths.cs` | Prefab 目标路径 / 三层命名 |
-| `Editor/Generated/Prefab/PrefabBuildMenu.cs` | `Tools > 自动化预设体（选中模型）` |
-| `Editor/Texture/` | 贴图设置钩子 + Op（压图等）⑤ |
-| `Editor/Model/` | 模型设置钩子 + Op（顶点白等）⑤ |
-| `ConfigData/` | 进库的 Settings SO 实例 |
-| `ARCHITECTURE.md` / `README.md` | 插件 2 结构说明 |
-
-**层级习惯：** L-UI → L-配置(SO/Prefs) → L-内核(Service/Op) → L-导入钩子。
-
----
-
-## 插件 1 · `RetinarBatchBuilder_Share/`
-
-路径：`Assets/Plugin/RetinarBatchBuilder_Share/`
-
-| 相对路径 | 职能简述 |
-|---|---|
-| `Assets/Retinar/Editor/40_Api/` | **对外窄口**：Flatten / BuildAbOnly |
-| `Assets/Retinar/Editor/01_RetinarMenu.cs` | 菜单唯一挂载：平铺 / 导出 / 直通 |
-| `Assets/Retinar/Editor/10_Flatten/` | ④ 平铺调度、分类、布局 |
-| `.../10_Flatten/RetinarFlattenScheduler.cs` | 平铺调度（转发内核） |
-| `.../10_Flatten/Category/*` | 后缀→Model/image/… 分类器 |
-| `Assets/Retinar/Editor/20_Package/` | 导出调度、成品直通 |
-| `.../20_Package/RetinarPackageScheduler.cs` | 规范化导出调度 |
-| `.../20_Package/RetinarDirectPackage.cs` | ⑥ 直通：仅 AB+UP，不改 Art |
-| `Assets/Retinar/Editor/30_Business/` | 门禁/输出**接口种子**（未接线） |
-| `Assets/Retinar/Editor/RetinarBatchModelBuilder*.cs` | Legacy 巨型内核：④ 平铺 + ⑥ 规范化导出 |
-| `.../RetinarBatchModelBuilder.AtomicRelocate.cs` | ④ B′：`RelocateAtomicPackage` → `Art/<名>/<名>/` |
-| `PACKAGING_RULES.md` | 交付硬规则 |
-| `Assets/Retinar/Editor/README_EDITOR.md` | Editor 阅读地图 |
-
-### ④ / Remap 关键类（中文）
-
-| 类/方法 | 职能 |
-|---|---|
-| `CreatePackagedAdjustedPrefab` | 外来 Prefab 平铺主路径 |
-| `CopyAdjustedPrefabDependencies` | 依赖拷贝分类 |
-| `RemapMaterialTexturesToArtFolder` | **贴图引用收到 Art**（已加 IsTextureAsset） |
-| `IsModelAsset` | 认 fbx/obj/glb/gltf |
-| `AddOrUpdateBoxColliderInPrefab` | 平铺末可选碰撞体 |
-
-### ⑥ 相关类（中文）
-
-| 类/方法 | 职能 |
-|---|---|
-| `ExportArtPrefabPaths` | 规范化：校验→预检→双端 AB→Deliverables→UP→docs→弹窗 |
-| `BuildAssetBundles` | 调 BuildPipeline |
-| `RetinarDirectPackage` | 最净打包 |
-| `IRetinarAcceptanceGate` | 业务门禁接口（未用） |
-
----
-
-## 宿主工程（非本仓，但相关）
-
-| 位置 | 说明 |
-|---|---|
-| `Plugin2022/` | Unity 2022 宿主根（无整仓 Git） |
-| `Plugin2022/Packages/` | 含 UnityGLTF 等 |
-| `Plugin2022/Assets/Art/` | ④ 交付产物区。插件 2：**导入期自动流跳过**；**L1 手动总批量 / 中间层⑤**默认打这里（⑤=代跑 L1，不是导入钩子） |
-| `Plugin2022/Assets/IncomingPrefab/` | ③ 默认输出根 |
-| `Plugin2022/Deliverables/` | ⑥ 规范化/直通输出 |
-
----
-
-## 两插件对照（一览）
+## 1. 宏观分工
 
 ```text
-插件 2 TOol                         插件 1 Retinar
-① 收集 / ② 导入设置 / ③ Prefab      ④ 平铺+remap / ⑥ 出包
-⑤ 后处理 Op                         30_Business 门禁预留
-管线总面板（已有）+ CLI 壳（D5 已验收）   菜单人工交付线保留
+Assets/Plugin/                     Git 根
+├─ Pipeline/                      自动化入口、总步骤 SO、Runner、ctx
+├─ TOol/                          插件 2：导入、③生成、⑤资源操作
+│  └─ Editor/Generated/Flatten/    ④物理存放处；ctx 编排部分暂归中间层
+└─ RetinarBatchBuilder_Share/      插件 1：⑥ AB/可选 UnityPackage、菜单适配
 ```
+
+宿主 `Plugin2022` 为 Unity 2022.3。Incoming 是入库副本，IncomingPrefab 是③产物，Art 是④交付副本区；不是原始外部模型目录。②/④的清夹只针对本次受控单元，不能扩展成清整个根目录。
+
+## 2. 自动化入口到输出
+
+```text
+PipelineWindow（总面板） ─┐
+PipelineCli.Run（无头） ─┴→ PipelineOptions.FromSettings
+                           → PipelineRunner.Run
+② ToolImportApi → 导入路径与 binding.CloneWith 保留行配置
+②.5 每模型 PipelineJobContext.Build → 本趟事实列表
+③ ToolPrefabApi → IncomingPrefab 路径列表
+④ FlattenPerPrefab → ctx + binding + ToolFlattenRequest → ToolFlattenApi 七步
+⑤ ToolPostProcessApi.RunMasterBatch → ResourcePostProcessService → 各类 Op
+⑥ RetinarAbApi.Build → 平台 AB / 可选 UP / 输出拷贝
+```
+
+Runner 先完成入库与 ctx 收集，再按行生成 Prefab，并非每导入一个就立即跑完全部相位。绑定承载 SourcePath、MaterialId、ConvertZUpToYUp；ctx 承载观测事实，不承载人工轴向决定。
+
+当前差距：
+
+- 总面板强制 `RunImport=true`；CLI 使用 SO。两者共用 Runner，但入口配置还不完全等价（D26-5）。
+- Prefab/ctx 数量不足时管线④已 Fail（步骤 3）；人工仍可能用 `contexts[0]`（步骤 4）。尚无稳定行 ID。
+- ⑤失败记 50 但仍可继续⑥；后错覆盖首错尚未修（D26-4）。不能把“共享入口”写成“成功准则已经完整”。
+- Runner 仍有 D19 顶点色诊断/补偿分支，不是只剩业务无关的窄口转发。
+
+## 3. ④平铺：三层（目标）与现网差在哪
+
+目标（2026-09-14，与「解析 ctx → 操作数据 → 操作层」一致）：
+
+```text
+译 plan                                          操作层（不认管线 / 窗口 / ctx）
+────────────────────────────────────             ────────────────────────
+自动：②.5 已有 ctx → FromContext(ctx, request)
+手动：人已用按钮选定 Branch；适配层组 plan
+      禁止再 Build PipelineJobContext
+                                                 → Run(plan)
+                                                 → Begin → B|B′ → E? → D → C → Finish
+                                                 → FlattenRowResult
+```
+
+手动不是「不需要 sidecar 事实」，而是 **Branch 已由人判定，禁止再用管线 ctx 复核或代填。** sidecar 列表是 B′ 的操作输入：由 plan 携带，或操作层对主文件做与 ctx 无关的包扫描（`GltfPackageFiles`），类型上不得出现 `PipelineJobContext`。
+
+自动与手动在操作层上只差 plan 内容。适配层还会差：哪份 SO、要不要先③、FBX SafeZone、失败粒度。这些不要写进操作层。
+
+现网还没有 Frozen plan：`FlattenBuildService.CreateOptions(ctx, request)` 把翻译和执行闸混在一起；`PipelineRunner` 与 `ManualFlattenService` 各写一遍七步；内核三份 partial 不读 ctx，但 `ToolFlattenApi` 仍收 ctx。
+
+| 位置/类 | 现网职责 |
+|---|---|
+| `ToolFlattenApi` | 七步对外口；仍直接收 `PipelineJobContext` |
+| `FlattenBuildService` | ctx + request → `RetinarFlattenOptions`；选 B/B′、是否 E |
+| `ToolFlattenRequest` | 轴向、清夹、SO 快照（目的，不是事实） |
+| `RetinarFlattenWork` | 本行源/目标路径、Options、拷贝表 |
+| `RetinarBatchModelBuilder*.cs` | 遗产操作内核，3518 行三份 partial |
+| `ManualFlattenService` / `FlattenWindow` | 按钮 → mode；点击时 `Build` ctx；组七步 |
+| `PipelineRunner.FlattenPerPrefab` | 用已有 ctx 自动选分支；再组同一套七步 |
+
+### 相位顺序与数据
+
+```text
+ctx（主模型、Importer、外 URI、sidecar、MissingUris）
++ request（轴向、SO 快照等）
+  → 缺件预检 → Begin → B 或 B′ → E? → D → C → Finish
+                         └── Work.CopiedDependencies ──┘
+```
+
+| 步 | 输入与作用 | 当前成功语义/边界 |
+|---|---|---|
+| Begin | 依 SO 清本次 Art 单元、创建 Art Prefab、建立 work | 失败不能回退源 Prefab 继续写 |
+| B | 按 SO 分类复制依赖，OBJ 补 MTL | 仍以返回表非 null 为主要成功条件；残留外部 `.fbm` 只 Warning，仍可进⑥（质量闸待 R3） |
+| B′ | 主模型+sidecar 保持相对树于 Art/名称/名称/ | typed MissingUris 在 Begin 前失败；复制后核验全部必需目标。“原子”指包结构整体迁移，不代表事务回滚 |
+| E | 对 Art ModelImporter 设置并 Extract | ScriptedImporter 跳过；ctx 为 null 的兼容路径走旧 E |
+| D | 按源→副本表重映射 | 与 B/B′共享路径表 |
+| C | Renderer 材质独立化及贴图引用 | 两分支都执行；不是按 ctx.MaterialForm 开关 |
+| Finish | 引用自愈、动画、空壳、轴向、碰撞体、Renderer 检查 | 仍写 assetBundleName/variant；输出格式归属债务未清 |
+
+E/D/C 当前为 void，并没有统一的逐步结果对象。普通分支的伴生、自愈、跨单元同名图等风险仍见 D24/D25；B′缺件修复不代表全部平铺问题已解决。
+
+### 人工入口
+
+`FlattenWindow` 可拖入平铺 SO；Retinar 菜单薄转发至 `RetinarFlattenScheduler → ManualFlattenService.RunSelection`。
+
+- 普通平铺按钮固定 B；目标是外 URI 只**提示不拦截**（步骤第 4 步）。现网仍可能拒绝，属待拆。原子迁移固定 B′，只接受完整且唯一的外 URI glTF 包。
+- 输入为已在 Assets 导入的模型/Prefab，不是任意外部磁盘路径。直接选择非 FBX 模型时先借③生成 Prefab。
+- 人工没有②.5；目标是按钮给出 Branch 后直接组 plan，**不再** `PipelineJobContext.Build`。现网仍在点击时 Build ctx 并用它做分支校验，这是待拆耦合。
+- 直接选择 FBX 的普通平铺仍走 `RetinarFlattenApi.FlattenPaths → CreateNormalizedPrefab` SafeZone；管线 Prefab 不进这条分流。
+- 两按钮是完整④，不是只拷文件的裸 B/B′，也不自动追加⑤⑥。这已由用户确认。
+- 自动与人工目前共享七步能力，但分别编排顺序；尚未合并为一个统一相位 Runner。
+
+### 当前核心问题是否在④
+
+拆④、冻结 plan、3518 行内核、B/B′、Finish 写 AB 标签、跨单元按名借图（D25-4）、B 残留 `.fbm`：**在④。** 施工顺序见 [步骤单页](../03_open-items/d24-flatten-steps.md)。
+
+不在④、拆④时不要顺手开：① FBX 外置贴图跟拷（D25-2 外置侧）、⑤ 跳过口径、面板强制入库、退出码后错覆盖、⑥ 构建本身、D19 冲色。行对齐 `contexts[0]`：管线④循环已收口（步骤 3）；人工仍待步骤 4。属编排不是操作层。
+
+## 4. SO 与运行状态
+
+| 用途 | 当前来源 | 编辑/运行方式 |
+|---|---|---|
+| 管线步骤 | Pipeline/ConfigData/PipelineStepSettings.asset | 正常 SO 路径下②③④⑤⑥均开；依赖步骤由 ApplyTo 约束 |
+| 管线平铺 | Pipeline/ConfigData/FlattenOperationSettings.asset | 固定实例；运行前冻结 Policy；默认清当前 Art 单元 |
+| 人工平铺 | TOol/ConfigData/Manual/FlattenOperationSettings.asset | 可拖同数据类 SO；默认不清单元 |
+| 两种平铺 | 同一个 FlattenOperationSettings 类 | 面板只编辑自身来源目录，跨来源/未知目录只读；只读不妨碍按快照执行。不是全局 Inspector 锁 |
+| 材质操作 | TOol/ConfigData/MaterialProcessSettings.asset | 当前仍人工/管线共用，未拆来源实例、未做完整运行快照 |
+| ⑤类型纳入/人工路径等 | ResourceProcessSwitches / ResourceBatchFolderStore 的 EditorPrefs | 仍有机器状态依赖，不能宣称全部 SO 化 |
+| ⑥ | RetinarExportSettings → RetinarAbBuildOptions | 路径、UP和拷贝开关；平台双端与LZ4当前仍固定在代码中 |
+
+分类、清夹、碰撞体已脱离平铺内核 EditorPrefs；两份平铺 SO 的碰撞体均默认关闭。其它单项配置 SO 化是已确认方向，不是已经全部完成。
+
+## 5. ⑤从总批量到单个材质
+
+```text
+PipelineRunner（显式 Art 单元） / ResourceProcessWindow（人工范围）
+ → ToolPostProcessApi / ResourcePostProcessService.RunMasterBatch
+ → 贴图 → 材质 → 模型
+材质：
+ MaterialTargetCollector（独立 .mat）
+ + MaterialProcessSettings
+ → MaterialOperationRegistry.GetMasterBatchOperations
+ → MaterialOperationRunner（Evaluate → Execute → 汇总）
+ → NormalizeDeliverableShaderOperation
+ → 保存材质资产 → ToolPostProcessResult
+```
+
+Pipeline 传范围时不改人工路径；传 null 才回落 L1 路径。类型纳入参数未显式提供时仍读 EditorPrefs，管线通常未覆盖这些参数。
+
+材质 L2 `MaterialToolWindow` 提供范围与精确操作选择；L3 `MaterialAdvancedSettingsWindow` 编辑共用 SO。Collector 收集 .mat/文件夹下独立材质，不是任意选 Prefab 都自动递归处理其材质。Registry 反射发现同程序集、可无参构造的 `IMaterialAssetOperation`，按配置组装操作。
+
+`MaterialOperationContext` 只带该材质 AssetPath、Settings、进度等执行信息；不是 PipelineJobContext。当前 `EnsureMasterBatchDefaults` 会为空的材质总批量列表补入规范化操作，不能把“材质列表清空”直接等同于“材质禁用”。
+
+### 透明修复（插件 2 的单一 OP）
+
+文件：`TOol/Editor/Material/Operations/NormalizeDeliverableShaderOperation.cs`。
+
+1. 换 Shader 前读取 `MaterialSurfaceSnapshot`：Opaque / Cutout / Blend 与 cutoff，并保存贴图、颜色等映射所需数据。
+2. 切目标 Shader并迁移属性。
+3. 写回渲染模式、混合、ZWrite、队列、关键字；glTF BLEND → Standard Fade（Mode 2）。
+
+不只凭颜色 alpha 猜透明，不新增模型级 ctx 字段。目标 Shader 名可配，但当前属性迁移以 Standard 为主，不能承诺换名就能正确支持任意 URP Shader。已是目标 Shader 的材质会 Evaluate Skip，因此旧 Opaque 坏副本需重建④⑤，单独重跑⑤不能恢复已丢失的源透明语义。
+
+2026-09-10：7 个专项测试、连同此前相关测试共 35/35 通过（历史记录，非本轮重跑）。2026-09-11：用户确认 Art 玻璃正确，41 个材质为 37 Opaque + 4 Fade。2026-09-14：用户确认目标移动端 AB 验收完成，D13-R1 退出顶部队列。
+
+## 6. ⑥插件 1 现存代码
+
+| 位置/类 | 作用 |
+|---|---|
+| 40_Api/RetinarAbApi.cs | Build；显式 AssetBundleBuild[] 指定 Prefab，按平台构建 |
+| 40_Api/RetinarAbBuildOptions.cs、RetinarExportSettings.cs | 构建选项、配置、结果相关类型 |
+| 20_Package/RetinarDeliverableIo.cs | 输出目录与文件拷贝 |
+| 00_RetinarPaths.cs、00_RetinarEditorUtil.cs | 路径/辅助 |
+| 01_RetinarMenu.cs | 人工平铺菜单转发与打开交付目录；没有旧独立出包菜单 |
+
+默认 Android/iOS AB，可选 UnityPackage；交付拷贝使用 02_unity / 03_assetbundles。RetinarDirectPackage、RetinarPackageScheduler、30_Business、ExportArtPrefabPaths 及旧门禁/全套报告代码已删除，不应再按旧结构图定位或要求恢复。
+
+平台/压缩当前固定为Android+iOS/LZ4；导出SO还没有对应选择字段，不能把目标格式白名单当成已全部可配。
+
+目标是仅负责输出格式；④仍写 AB 标签；2026-09-14用户已同意转由⑥显式构建清单管理，R4须先核对旧菜单/外部工具依赖再迁移。不得用“旧⑥业务门禁已删”推导“④缺文件也应成功”。
+
+## 7. 文档与验收范围
+
+- 当前约定：[strategy](../01_requirements/strategy.md)；优先级：[backlog](../03_open-items/backlog.md)；④接管：[D24 计划](../03_open-items/d24-boundary-plan.md)。
+- 原始源保护仍有效；受控 Incoming/Art 单元的明确重建不承诺旧副本 GUID 保持不变。
+- 历史规则/报告保留追溯，不能覆盖当前明确确认，也不能把“曾建议”自动视作“已实现”。
+- 本次只更新文档，没有修改代码、配置或 Art 资产，没有重新执行 Unity 测试，也未提交。

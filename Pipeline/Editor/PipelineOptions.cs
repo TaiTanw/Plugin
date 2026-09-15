@@ -61,7 +61,7 @@ public sealed class PipelineOptions
     public List<string> PostProcessFolderPaths;
 
     /// <summary>
-    /// 第一份 2.5 ctx（兼容旧读取）。完整列表见 <see cref="JobContexts"/>。
+    /// 第一份 2.5 ctx（兼容旧读取）。④ 平铺只按下标读 <see cref="JobContexts"/>，不再回退本字段。
     /// </summary>
     public PipelineJobContext JobContext;
 

@@ -1,6 +1,6 @@
 # Retinar Editor 阅读地图（插件 1）
 
-面向未通读旧代码的同事：先看菜单，再看调度，最后才进 Legacy。
+先读[当前整体结构](../../../../docs/dev-wip/02_structure/overview.md)，再看菜单/API；④大文件已不在本目录。
 
 日常出包走管线 ①→⑥（`PipelineRunner`），不经过本目录的菜单。
 
@@ -38,11 +38,11 @@ Assets/Retinar/Editor/
 ## 3. 数据流
 
 ```text
-管线 / 菜单平铺：外部 Prefab/FBX/glTF
+管线平铺：③Prefab；人工平铺：Assets中已导入模型/Prefab
   → PipelineRunner 或 ManualFlattenService
   → Begin → (B 分类拆分 | B′ 原子迁移) → E? → D → C → Finish
      Prefab：拷依赖 + 套空父外壳（不缩放）+ 可选碰撞体 + 可选 OBJ 轴向修正
-     FBX：空根 + 子模型 SafeZone 缩放（暂保持）
+     直接选FBX的人工普通入口：另走CreateNormalizedPrefab/SafeZone（非管线Prefab七步入口）
   → Assets/Art/<名>/{Model,image/Texture,Material,Prefab,…}
   → 平铺结束 TryHeal（补拷+Extract+remap）——④ 是最后一道，之后没有兜底校验
 
@@ -57,4 +57,4 @@ Assets/Retinar/Editor/
 
 ## 5. 常量同步
 
-新代码用 `RetinarPaths`。Legacy 内仍有同名 `private const`（如 `ArtRoot`、`AssetBundleVariant`），修改路径时必须两边一起改。
+④的ArtRoot代理FlattenBuildSettings.ArtRoot，⑥另有RetinarPaths.ArtRoot，两处须一致。AssetBundleVariant也仍有重复定义；④提前写标签的迁移须先核对旧菜单/外部工具依赖，2026-09-14用户已同意方向。

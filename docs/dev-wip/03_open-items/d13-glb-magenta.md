@@ -1,7 +1,7 @@
-# D13 · GLB 安卓洋红 / 交付 Shader（主体归档；R1 验证中）
+# D13 · GLB 安卓洋红 / 交付 Shader（已归档）
 
-> 从 backlog **H** 抽出；**D13 已归类完成**（工程结构 + ggdddd 安卓验通）。  
-> 2026-09-10 重开 **D13-R1**：歼15 glTF 暴露“Shader 已换对、透明模式却被⑤写死 Opaque”的残余正确性问题。
+> 从 backlog **H** 抽出；**D13 主体与 D13-R1 均已验收归档**（工程结构 + ggdddd 安卓验通 + 歼15 透明 + 2026-09-14 移动端 AB）。  
+> 2026-09-10 曾重开 **D13-R1**：歼15 glTF「Shader 已换对、透明模式却被⑤写死 Opaque」。下文「原 H」只作 2026-08 调查证据，不是开放任务。
 
 返回 [backlog](./backlog.md) · [总目录](../README.md)
 
@@ -14,10 +14,15 @@
 | 归属 | **插件 2 / ⑤ Material OP**。这是单个材质的渲染契约，不属于模型级 `PipelineJobContext`，也不改④或 B/B′ |
 | 修复 | 换 Shader 前捕获 Opaque/Cutout/Blend 与 cutoff；换后写回 Standard 完整状态。glTF `BLEND` 映射 Standard Fade（Mode 2），并清理 UnityGLTF 遗留透明关键字 |
 | 防误判 | 不用 `_Color.a` 单独猜透明；只认 Surface 属性、RenderType、渲染队列与透明/裁切关键字 |
-| 自动测试 | 7 个 EditMode 测试通过：Opaque、Cutout、Blend、cutoff、三模式往返、低 alpha 的 Opaque 不误判 |
-| 当前闸 | 代码完成；**尚未覆盖现有 Art**。须从原始 glTF 重跑④⑤，验收 4 Fade / 37 Opaque、ID20 窗户，再打移动端 AB 后归档 R1 |
+| 自动测试 | 2026-09-10：7专项、相关合计35/35通过；覆盖Opaque/Cutout/Blend、cutoff、模式往返、低alpha Opaque不误判。本轮未重跑 |
+| Art验收 | 2026-09-11用户确认玻璃正确；37 Mode0/queue2000、4 Mode2/queue3000（ID03/05/20/25，SrcBlend5/DstBlend10/ZWrite0）。代码/Art子切片归档 |
+| 剩余验收 | **2026-09-14 用户确认目标移动端 AB 已完成；整项关闭。** |
+| 重跑限制 | 已是目标Shader会Evaluate Skip；旧坏副本需重建④⑤，单独⑤不能猜回已丢失透明语义 |
+| 映射范围 | 当前以Standard为主；目标名可配不等于任意URP正确迁移 |
 
 ## 原 H 全文
+
+> 以下为2026-08历史调查，不覆盖上方现状。旧“仅换Shader名即可支持URP”已收窄：需要属性/渲染状态映射及目标Player验证。
 
 > 2026-08-26：编辑器内总流程已用 `Assets/Art/ggdddd` 验收。交付 AB 约 19.1MB，**不是空包**。
 
@@ -217,7 +222,7 @@ UnityGLTF 自带的 `ShaderConverters` 主要是 **往 glTF 导**，不是交付
 | ④后 L1/`PostProcessFolderPaths` 是否改成本次 Art 单元 | **已做（D17）**：Runner 写本次 Art 单元；编排不改 L1 Prefs |
 | 属性槽对照表完整度 | **第一刀**：baseColor→`_MainTex`/`_Color` + metallic/gloss(+normal/occlusion/emission 有则搬)；完整表后补 |
 | GLB 内嵌贴图⑤压图 0 命中 | **已知、正交**；不挡 Shader 烤定性 |
-| ShaderGraph→Standard 在纯 URP APP 仍洋红 | **遇到再说**（改目标 Shader 名即可） |
+| ShaderGraph→Standard 在纯 URP APP 仍洋红 | 历史估计已修正：不能只改名，需属性/渲染状态映射与端上验证 |
 
 ### 第一刀进度（工程结构）
 

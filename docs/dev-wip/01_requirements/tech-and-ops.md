@@ -50,14 +50,14 @@
 
 | 通道 | 谁触发 | 是否碰 Art | 机制 |
 |---|---|---|---|
-| **1. 导入期自动流** | Unity `AssetPostprocessor`（设置自动 / 后处理自动） | **否**（正确） | `excludedPathPrefixes` 含 `Assets/Art/`。不改交付区 Importer（规则 33），钩子里也不跑 Art 的 Op |
+| **1. 导入期自动流** | Unity AssetPostprocessor | 模型设置硬跳过Art；其它依实际排除配置 | 不能统称全靠excludedPathPrefixes；Incoming模型安全基线已与总闸解耦，策略自动保留原闸 |
 | **2. L1 手动总批量** | 资源处理总面板「执行全部」 | **是** | `RunMasterBatch`；**不读** exclude；`triggeredByImport: false` |
 | **3. 中间层⑤** | `PipelineRunner` 勾选⑤ | **是** | **代调通道 2 同一口**（`ToolPostProcessApi.RunMasterBatch`）。看起来像自动，但是编排在调面板手动内核，不是通道 1 |
 
 隐患：把通道 1 的「自动跳过」误读成「管线⑤ / 总批量也碰不到 Art」→ 错误地把 Shader 烤/压图塞回插件 1，或以为开⑤会空跑。  
-另一隐患：为了让管线「自动」生效，把刷白塞进 `OnPostprocessModel` 打 Art → **把通道 3 的事做成了通道 1**，违反规则 33。交付区刷白只走 2/3。
+另一隐患：为了让管线「自动」生效，把刷白塞进 `OnPostprocessModel` 打 Art → **把通道 3 的事做成了通道 1**。交付区刷白只走 2/3，导入钩子不得改 Art Importer（现行 PACKAGING_RULES「Importer 分区」）。
 
-细则见 `TOol/ARCHITECTURE.md`、规则 33。
+当前细则见[整体结构](../02_structure/overview.md)与 TOol/ARCHITECTURE.md。旧「规则 33」编号正文已从 PACKAGING_RULES 删除，勿再按旧编号引用。
 
 **顶点刷白（对照）：** Art 上要白，靠通道 2/3，不是靠导入钩子。  
 - FBX（`ModelImporter`）：⑤/手动可开 Read/Write 再写全白。  
@@ -71,14 +71,14 @@
 |---|---|
 | **⑤ 默认直指 Art** | L1 `ResourceBatchFolderStore` 种子 / 常用路径 = `Assets/Art`（大根）。平铺产物在此，Shader 烤/压图/模型 Op 都扫这里 |
 | **④ 成功后交给⑤** | Pipeline：`runFlatten && runPostProcess` 时④后调 `ToolPostProcessApi.RunMasterBatch`；⑤**不**再走导入期 exclude |
-| **两插件对齐点** | 插件 1 写 Art 单元目录结构；插件 2 ⑤ 按 L1 批量路径 `FindAssets`。当前产品约定：**路径语义就是 Art**，不要把导入夹当成⑤交付口 |
+| **两插件对齐点** | ④写Art单元（实现位于TOol，ctx编排暂归中间层）；⑤按显式单元范围FindAssets，null才回落L1路径。当前产品约定：**路径语义就是 Art**，不要把导入夹当成⑤交付口 |
 | **单任务 Art 单元** | 编排不改 L1 Prefs。开④后 Runner 把本次 Art 单元写入 `PostProcessFolderPaths`（D17） |
-| **不要混的词** | 插件 1 Remap = 引用收敛；插件 2 材质层 = **交付 Shader 规范化**（换 Shader + 槽映射），不是同一类 Remap |
+| **不要混的词** | ④ Remap = 引用收敛；插件 2 材质层 = **交付 Shader 规范化**（换 Shader + 槽映射），不是同一类 Remap |
 
-### Remap（插件 1）
+### Remap（④）
 
 平铺时把材质/Prefab **引用改到 Art 副本路径**。  
-**不是**插件 2 的职责；插件 2 的 ③ 只生成独立 Prefab。
+这是④执行能力，已物理迁TOol，ctx编排暂归中间层；不是⑤改Shader。③仍只生成独立Prefab。
 
 ### ⑤ 材质处理 / 交付 Shader（为何算资源处理、不归④）
 

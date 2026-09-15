@@ -1,65 +1,71 @@
 # 已确认战略汇总
 
-> 与产品 / 仓库形态相关的结论。变更需显式改本文并记一笔。
+> 2026-09-14 按当前代码与用户确认更新。本文写已确认方向；实现差距看 [结构现状](../02_structure/overview.md)，待确认项看 [backlog](../03_open-items/backlog.md)。历史方案不自动成为新要求。
 
 ## 目标
 
-用 Unity **`-batchmode` / `-executeMethod`**，从 **FBX、GLB** 到 **Android / iOS AssetBundle**，尽量无人点菜单。  
-现阶段编辑器内核与无头 CLI（**D5 已验收**）已可静默跑通；Docker / 队列仍是 V1.2 外壳。
+用 Unity `-batchmode / -executeMethod`，从 FBX、OBJ、GLB、glTF 到 Android / iOS AssetBundle。编辑器与 CLI 共用自动化 Runner；Docker / 队列仍是 V1.2 外壳，不属于当前拆分。
 
 ## 工程与 Git
 
 | 项 | 结论 |
 |---|---|
-| 主开发 Unity | **2022.3**；宿主文件夹 **Plugin2022** |
-| 2020 宿主 | **ModleEvent** 对照，**不原地升 2022** |
-| 插件 Git | 一套源码；分支如 `feature/cli-pipeline-2022` |
-| 宿主 | **不单独建仓、不改 Gitea 名**；日常 = 开宿主 + 改 `Assets/Plugin` |
-| 远程 | `team` = Gitea `asset-bundle`（协作）；`origin` = GitHub（备份） |
-| 基线标签 | 从 **`v1.4.4`** 开本功能分支 |
-| Plugin 落点 | `Plugin2022/Assets/Plugin` 为 **clone**（主开发）；ModleEvent 下可另有一份对照 |
+| 主开发宿主 | Unity 2022.3，`Plugin2022`；2020 的 `ModleEvent` 只作对照，不原地升级 |
+| 插件仓 | `Assets/Plugin`；宿主不另建整仓、不改 Gitea 仓名 |
+| 远程 | `team` 为 Gitea 协作源，`origin` 为 GitHub 备份 |
+| 版本 | v1.5.3 是已有发布标签，不代表当前 main；2026-09-14 本地代码基线为 `e51469a` |
 
 ## 管线产品拆分
 
-| 项 | 结论 |
+| 项 | 已确认要求与当前口径 |
 |---|---|
-| 基线步骤 | **② → ③ → ⑥**（Converter / 素材库最小线） |
-| 可选步骤 | **④ 平铺、⑤ 后处理**（默认关，flag/面板勾选） |
-| ⑥ 基线产物 | **仅双端 AB** + quiet 日志/退出码 |
-| ⑥ 可选 | 门禁/弹窗提示；UnityPackage；全套 Deliverables |
-| 平铺归属 | **暂留插件 1**；③ Prefab 在插件 2；不整包迁平铺到插件 2。能力拆开后可薄化 `40_Api`，不是搬家 → [flatten-capabilities §4](../04_implementation/pipeline-flatten-capabilities.md) |
-| GLB 贴图抽出 | **可延后**（④⑤ 可选后非 blocker） |
-| 导入信息 ctx（D23） | **中间层事实**；B′ 已接。D22 **不开发** → [d23-slice-report](../04_implementation/d23-slice-report.md) |
-| 自动转换上云 | 产品 **V1.2**；V1.0 人工传 AB（Issue #274） |
+| 最小线 | ②→③→⑥是可裁剪最小线，不是当前默认配置 |
+| 默认线 | 经 `PipelineOptions.FromSettings` 读取仓内 SO，②③④⑤⑥均开启；④⑤可关。直接 new Options 的字段初值不等于 SO 默认 |
+| ④归属 | 实现已物理迁入 TOol；消费 ctx 的编排暂归中间层。**内核目标改为只收 FlattenPlan，不再读 ctx。** 旧 3518 行对照删除，禁止先清空。⑥ 已有独立 Build 口，不随④重写 |
+| ④人工操作 | “普通平铺（B）”“原子迁移（B′）”均执行完整④；内部七步拆分服务代码结构，不开放任意单步产品按钮。用户已确认，这不是待决风险 |
+| ctx | 自动管线每模型在②后构建一次；人工没有②.5，点击时构建自身 ctx，此后相位内复用。事实与 SO/人工决定分开 |
+| ⑤材质 | 材质自身的透明/裁切状态由插件 2 Material OP 读取，不为此扩展模型级 ctx |
+| ⑥ | 默认双端 AB，可选 UnityPackage；旧业务门禁、runtime/xlsx/报告等全套导出已删除，不是“默认关但仍可启用” |
+| glTF | ②整包入库，④ B′保持相对 URI 树；先封装 GLB 的 D22 不开发，不用 Unity 场景 Export 替代入库 |
 
-## 插件分工（目标态）
+## 插件分工（目标与差距）
 
-| 侧 | 职责 |
-|---|---|
-| **插件 2 TOol** | 操作执行：导入/设置、③ Prefab（`Editor/Generated`）、⑤ Op；L1=资源处理子流程对外口 |
-| **插件 1 Retinar** | 业务/交付：④ 平铺+remap、⑥ 出包与门禁契约；人工规范化菜单保留 |
-| **Plugin/Pipeline**（已做 D3/D2） | 总步骤 SO + Runner + 总面板；调 1/2 窄口；**不写** L1 自动化 Prefs |
-
-### 配置分层（已确认）
-
-| 层 | 存储 | 内容 |
+| 侧 | 负责 | 当前尚未收口 |
 |---|---|---|
-| 流程总步骤（含②开关） | `PipelineStepSettings` **SO** | runImport/Prefab/Flatten/Post/Ab、Quiet（Ab = 是否导出） |
-| 导出产物/路径 | `RetinarExportSettings` **SO** | 交付根、AB 根、是否 UP、是否拷 AB 到交付夹 |
-| 资源自动细节 | 资源总面板 **EditorPrefs** + L3 SO | 设置自动/后处理自动、Op、压缩等 |
+| 中间层 Pipeline（含暂归的④编排内核） | 总步骤、按模型 ctx、分支、请求组合、结果/退出码 | 自动与人工④仍分别编排；行对齐与首错保存待修 |
+| 插件 2 TOol | 导入与设置、③ Prefab、资源执行能力、⑤ Op | 物理承载④的约 3,518 行遗产，尚未按七步拆文件；不能因在 TOol 就要求它自行重建 ctx |
+| 插件 1 Retinar | ⑥输出格式与 AB；现存平铺菜单只是转发适配 | ④仍提前写 AB 标签；格式白名单及兼容迁移见 D24-R4 |
 
-设置自动：编排**不调用**；导入触发 Unity 回调。结果汇总：暂用字符串（StepResult 延后）。D1 见 d1-ab-only（**已收口**）。
+插件 1 不应重新承担 Art Importer、Extract、Prefab Transform、材质和引用变换。这里的目标不等于当前已完全消除所有副作用。
 
-### ⑤ 与流程编排的数据边界（已确认）
+## 配置分层
 
-- **流程编排**决定：要不要做资源处理（总步骤 Options；Converter **④⑤ 默认开**，可关；轻重在 L1 纳入开关 + L3 Op）。  
-- **资源处理总面板（L1）**决定：人手动批量时做哪些类型 / 路径 / 开关。编排⑤**不读、不写**这份路径；开④时 Runner 传入本次 Art 单元（D17）。  
-- **设置自动**：只靠 Prefs 开关 + Unity `AssetPostprocessor`。  
-- **⑤ 总批量口**：`ToolPostProcessApi.RunMasterBatch` → `ToolPostProcessResult`；FailedCount&gt;0 映射 50。  
-- **StepResult**：需要按步 UI/CLI 时再加。
+**已确认方向：管线和单项操作都走 SO；同数据类可以有人工与管线不同实例。面板按 SO 来源判断可编辑/只读。**
 
-## 明确不做（本阶段）
+| 配置 | 当前落地 | 边界 |
+|---|---|---|
+| 总步骤 | `PipelineStepSettings` SO | 面板仍强制 RunImport=true，CLI 跟 SO，D26-5 未解决 |
+| 平铺单项 | `FlattenOperationSettings` 同类两实例：TOol/ConfigData/Manual 与 Pipeline/ConfigData | 人工可拖 SO；面板只编辑本来源目录，跨来源/未知来源只读；运行时冻结 `FlattenOperationPolicy` |
+| 导出 | `RetinarExportSettings` SO → 构建 Options | 不含旧门禁/全套报告能力 |
+| ⑤资源类型纳入、人工批量路径、部分 UI 状态 | 仍有 EditorPrefs | 尚未完成 SO 化，不得宣称 CLI 已脱离机器状态 |
+| ⑤材质等细节 | 各资源 Settings SO；Material 目前共用一份 | 尚未拆人工/管线实例，也没有平铺式完整快照 |
 
-- 整包「平铺并入插件 2」
-- 删规范化菜单 / 删平铺代码
-- 本迭代上 Docker / 接 lean-api 队列（契约先对齐即可）
+SO 的只读是当前面板编辑规则，不是全局 Inspector 权限锁；后续其它单项配置迁移按相同方向推进，具体范围与风险另核对。
+
+## “自动”与 Art 的边界
+
+- ②导入会触发 AssetPostprocessor；不等于 Runner 主动调用全部“设置自动”。
+- 配置导入根内、受支持 ModelImporter 的安全基线已与总闸/排除解耦；其它 Assets 基线和策略自动仍服从原闸。Art 模型由 ModelImportSettingsProcessor 硬跳过，④负责交付副本设置。
+- 贴图/后处理自动的排除规则与模型硬跳过不是同一种保护，不能统称“所有自动永不触碰 Art”。
+- ⑤是显式后处理，会处理 Art。④成功且未覆盖路径时，Runner 传本次 Art 单元；接口传 null 仍会回落人工批量路径。编排不写这些 Prefs，但部分类型纳入开关仍会读取它们。
+
+## 已确认方向与开工前核对
+
+1. D26-6（2026-09-14）：用户倾向合法跳过并明确提示，前提是架构边界足够。窄口有FailedCount/Canceled/Report，未统一typed跳过原因；先核对汇总，不让Runner读Op内部/解析报告。不足时评估中间层排错层，具体方案另核对，不直接加硬失败。
+2. D24-R4（2026-09-14）：用户同意取消④提前写AB标签，由⑥显式构建清单管理名称；先核对旧菜单/外部工具依赖，不立即删除或新增Importer副作用。
+3. D13-R1（2026-09-14）：Art 玻璃与目标移动端 AB 均已验收，退出顶部队列。透明语义仍在插件 2 Material OP，不扩模型级 ctx。
+4. 缺伴生（2026-09-14）：glTF typed `MissingUris` 非空 → ④ `FlattenFailed(40)` **整趟停止**（不承诺其余行继续，也不回滚已写出的 Art）。OBJ 缺 `.mtl`/贴图不进该闸。是否改「坏行跳过」属 Runner，不挡④换口，须另拍。
+5. B 质量（残留外部 `.fbm` 等）：当前只记风险，④ 切开后再评估是否加失败码。
+6. ④拆分（同日续）：① 不 `Build` ctx、不扩字段。④ 先冻结 plan / 按行结果，再换实现；⑥ 不重写。见 [D24 R3](../03_open-items/d24-boundary-plan.md#r3-flatten-split)。
+
+当前不另开 Docker/队列、不开放七步乱序、**不先清空旧④**、不顺手改命名/APP 取包契约。⑥ 不随④重写。
