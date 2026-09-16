@@ -22,6 +22,7 @@
 - [ ] 两个人工按钮均完成 Begin→B/B′→E?→D→C→Finish，而不是只搬文件；不会自动追加⑤⑥。
 - [ ] 自动每模型②.5一次 ctx；人工**不** `PipelineJobContext.Build`。
 - [ ] 缺 sidecar（glTF）：typed MissingUris 在 Begin 前失败，管线 exit=40，整趟④停；执行时文件消失也使 B′失败。OBJ 缺 `.mtl`/贴图当前不要求 40，记录白膜/`exit=0` 事实。
+- [ ] leftover 外部 `.fbm`：内核仍成功；管线 exit=41，⑤⑥仍跑。贴图身份警告 exit=42，槽位引用不清。二者同时有则 41。空槽不算 41/42。
 - [ ] B′在 Art/名称/名称/ 保持相对树；核对主文件及所有 sidecar，Prefab/材质引用到本单元。失败不保证自动回滚。
 - [ ] B 的复制映射、OBJ MTL、E Extract、D 引用、C 材质独立化均检查；B 返回 true 不代替资源完整验收。
 - [ ] C 两分支都跑；glTF 包原图与 Unity 材质用贴图副本并存是已接受布局。

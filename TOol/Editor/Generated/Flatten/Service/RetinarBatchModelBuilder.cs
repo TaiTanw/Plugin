@@ -12,6 +12,7 @@ using UnityEngine;
 // 入口：
 //   ToolFlattenApi.Run(plan)（管线 / 人工④）
 //   步骤 12 已删除停用的路径入口、SafeZone 创建链及其专用辅助方法。
+//   步骤 13：公开层不再转发七步；只由 FlattenBuildService.Run 调用本文件。
 // 本文件是插件 2 Generated/Flatten 内核，不再给 Pipeline 直接调用。
 //
 // 2026-09-03（backlog D24-7）删除「【遗产】从 Art 规范化导出」与「成品直达」两条链：

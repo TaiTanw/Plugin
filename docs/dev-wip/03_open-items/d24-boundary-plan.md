@@ -2,17 +2,17 @@
 
 返回 [当前待办](./backlog.md#a-open-items) · [④能力查封](../04_implementation/pipeline-flatten-capabilities.md) · [ctx](../04_implementation/pipeline-job-context.md)
 
-> 状态：**目录迁移、P0 静态查封、源资产保护、配置 SO 化与两个人工相位入口已完成；职责拆分未完成。** 实施步骤单页：[d24-flatten-steps](./d24-flatten-steps.md)。
+> 状态：**步骤 1–14 已落地**（plan 口、删重复编排、41/42 质量闸）。目录未迁、内核未拆文件。实施记录：[d24-flatten-steps](./d24-flatten-steps.md)。操作者入口：[插件根 README](../../../README.md)。
 
 ## 1. 当前结论
 
 1. `RetinarBatchModelBuilder.cs`（2280 行）、`AssetResolution.cs`（1014 行）、`AtomicRelocate.cs`（224 行）已经从插件 1 搬到插件 2 `Generated/Flatten/Service/`，合计 3,518 行。静态调用图和方法归类已经完成，但真实模型回归尚未覆盖全部风险；**文件在哪里不等于谁真正拥有。**
-2. 中间层已经能按 Begin / B / B′ / E / D / C / Finish 调用；`ToolFlattenApi` 和 `FlattenBuildService` 直接接收 `PipelineJobContext`。本轮把这部分**按职责暂归中间层**，所以直接读 ctx 暂不视为阻断缺陷；真正的问题是物理目录和命名仍像插件 2，边界没有写清。
+2. 中间层入口已是 `FromContext` → `Run(plan)`。公开七步转发已撤（步骤 13）。`FlattenBuildService.FromContext` 仍读 ctx；内核三份 partial 不读 ctx。物理目录和旧类名仍像插件 2。
 3. B 与 B′ 仍只是互斥选路。glTF typed `MissingUris` 在 Begin 前触发 `FlattenFailed(40)` **并停止整趟④**（⑤⑥不跑；已写出的前几行 Art 不回滚）。B′ 另要求所有必需输入生成精确目标。**OBJ 缺 `.mtl`/贴图不进 `MissingUris`，不是漏修 D26-2。**
 4. ④仍以完整相位交付。2026-09-10 已增加“普通平铺（B）”与“原子迁移（B′）”两个手动相位按钮；它们选择分支但都会继续完成 E?/D/C/Finish，不是七步任意执行。
 5. 插件 1 的目标边界是**只负责输出文件格式与 AB**，不再拥有资源平铺、Importer、Prefab、材质或 Art 内容变换。
 6. **物理目录暂时保留**（2026-09-14）：文件继续放在 `TOol/Generated/Flatten`，编排暂归中间层；等 R3 按文件拆完再评估搬家/下沉，不做第二次目录搬迁。
-7. **B 质量闸**（拷贝表非 null 即成功、残留外部 `.fbm` 只 Warning 仍进⑥）当前只记风险，R3 拆步后再评估是否加失败码。
+7. **B / Finish 残留外部 `.fbm`（步骤 14）**：拷贝表非 null 即成功；Finish 自愈后 Prefab 仍依赖本单元外 `*.fbm/` 贴图时内核 `Ok` 仍 true；编排 **Fail(41)** 且不 `return`，⑤⑥继续。步骤 9 已把路径放进 `LeftoverExternalFbm`。贴图身份另记 **42**。OBJ 缺 `.mtl` 不进 `MissingUris`，不要和 leftover `.fbm` 捆成一个 `if`。
 
 ## 2. 目标分层
 
@@ -21,7 +21,7 @@
 | 中间层 `Pipeline/`（含暂归的④编排内核） | ②.5 构建一次 ctx；按行对齐；校验缺失；选择 B/B′；决定是否调用 E；按序组合七步；聚合结果/退出码 | 每步重新 Build ctx；把 Pipeline SO 或菜单状态散进执行叶 |
 | 插件 2 `TOol/` | 继续承载已存在的资源执行能力；后续只在边界清楚、测试覆盖后下沉不需要 ctx 的执行叶 | 为了支持独立按钮而重复扫描源；擅自决定整趟分支或退出码 |
 | 插件 1 `Retinar.../` | AB 平台、压缩、bundle 名/variant、输出目录与文件格式 | 改 Art、Importer、Prefab、材质、轴向、伴生文件、引用映射 |
-| 人工入口适配层 | 点击时为模型/Prefab依赖建立自身ctx；普通/原子完整相位；直接选FBX另走SafeZone | 重建自动管线ctx；复用FlattenPaths进入管线④ |
+| 人工入口适配层 | 按钮选定 B/B′；Scan 组 plan；模型先③；**不** Build 管线 ctx | 重建自动管线 ctx；已删的 FlattenPaths / SafeZone |
 
 目标调用：
 
@@ -121,7 +121,7 @@ PipelineRunner
 2. 按步骤 **从前向后**：当前步完全顺利才进入下一步；卡点停下。落地 `FlattenPlan` + `FlattenRowResult`；`ToolFlattenApi` 改为只收 plan（编排继续译 ctx）。
 3. 新实现可按能力分文件（下表仍是模块名，不是「从旧类剪切」）。旧 `RetinarBatchModelBuilder` 按调用边界对照清理；第 12 步已删停用创建链，七步主体和共用 partial 保留。
 4. Finish 不再写 AB 标签（步骤第 8 步 / D24-R4，**已落地**）。⑥ 用 `AssetBundleBuild[]`。
-5. ⑥、① ctx、跳行策略、OBJ 升闸、B 质量闸：**停放**到对应步骤；第 11 步用户最新决定为 Warning 继续、保留原引用，不按同名补拷。原有 glTF 缺伴生失败规则不改，详见步骤页。
+5. ⑥、① ctx、跳行策略、OBJ 升闸：**停放**。第 11 步 **Fail(42)** 不停⑤⑥、保留原引用；第 14 步 leftover **Fail(41)** 不停⑤⑥。glTF 缺伴生仍 40 整趟停。
 
 能力模块（新实现内部，产品仍两个完整按钮）：
 
@@ -166,11 +166,11 @@ PipelineRunner
 | **死/兼容壳** | `OpenDeliverablesFolder`（菜单已走 `RetinarEditorUtil`）；`RemapCopiedAssets` 零调用；未读的 Emission 常量；菜单对话框/`FlattenSourcePaths` 旧批处理（现网按钮走 `ManualFlattenService`） | **步骤 12 已删。** 仓外无必要依赖已确认，现用菜单转发到 RetinarEditorUtil 保留 |
 | **重复承载** | 运行时依赖白名单与⑥ UP 各一份；ArtRoot 双常量；E/Finish 双 Extract 已在步骤 10 收口 | 不能先各删一份；须定单一所有者再收 |
 
-E/Finish 双 Extract 已在步骤 10 收口；步骤 11 收窄按短名借图、保留原引用并 Warning；残留 `.fbm` 质量闸未拍：这些是平铺质量问题，不是「非平铺功能」。移出⑥时不要把 Extract/自愈一起扔掉。同名覆盖（目标路径已有则复用）与借图是两条链。
+E/Finish 双 Extract 已在步骤 10 收口；步骤 11 收窄按短名借图、**Fail(42)** 保留原引用；步骤 14 leftover **Fail(41)**。这些是平铺质量问题，不是「非平铺功能」。移出⑥时不要把 Extract/自愈一起扔掉。同名覆盖与借图是两条链。
 
 ### r1b-skip
 
-D24-R1b **基本核对已完成**（2026-09-15），不再用「完全没跑」挡换口。仍**不能**凭感觉删空壳/Extract/自愈，也不能宣称 D25-4 / `.fbm` 已验证。没有逐套样例树和源 hash 时，改这些算法只能事后从损坏 Art 反查；源保护护栏也未做故障注入。10–14 等前一步落地后再评估（11 需要 9）。SafeZone 产品口与 AB 标签写入已按步骤 7/8 去掉。
+D24-R1b **基本核对已完成**（2026-09-15），不再用「完全没跑」挡换口。仍**不能**凭感觉删空壳/Extract/自愈，也不能宣称 D25-4 / leftover 已用真实样例咬过闸。没有逐套样例树和源 hash 时，改这些算法只能事后从损坏 Art 反查。步骤 **1–14 已落地**。SafeZone 产品口与 AB 标签写入已按步骤 7/8 去掉。
 
 ## 4. 本轮增减清单
 
@@ -212,7 +212,7 @@ D24-R1b **基本核对已完成**（2026-09-15），不再用「完全没跑」�
 
 D24 结构收口只有同时满足以下条件才算完成：
 
-1. 自动每模型②.5一次 ctx；人工**不**建 ctx（按钮写 Branch + Scan）。编排译成 plan；**内核 `Run(plan)` 不接收 `PipelineJobContext`。** 分步窄口仍可读 ctx。
+1. 自动每模型②.5一次 ctx；人工**不**建 ctx（按钮写 Branch + Scan）。编排译成 plan；**内核 `Run(plan)` 不接收 `PipelineJobContext`。** ctx 转换只在 `FromContext`。
 2. 管线与人工④都进同一个 `Run(plan)`，B/B′ 由 plan.Branch 互斥；人工 FBX 不再另开 SafeZone。
 3. 缺必需 sidecar 不再静默成功。内核按行返回失败；整趟停仍是当前 Runner 行为，是否改跳行另拍，不挡④换口。
 4. 旧 3,518 行在新实现切开并经 R1b 对照前不得删除。

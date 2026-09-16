@@ -2,7 +2,7 @@
 
 返回 [总目录](../README.md) · [ctx](./pipeline-job-context.md) · [④ 查封](./pipeline-flatten-capabilities.md) · [相位入参](./pipeline-phase-io.md) · [待办](../03_open-items/backlog.md)
 
-**2026-09-14适用性勘误：** 下文“现状/本刀”均指D23当时，不是当前结构。④已物理迁TOol且ctx编排暂归中间层；Bridge已删，Runner用七步；D26-2缺件失败闸、平铺SO、人工两完整相位及⑤透明修复均为后续变化。旧⑥门禁/全套导出已删除。当前请先读[整体结构](../02_structure/overview.md)，本报告保留实验记录。
+**2026-09-16适用性勘误：** ④已是 `FromContext` → `Run(plan)`；公开七步转发、SafeZone、FlattenPaths 已删；质量闸 40 停 / 41 leftover / 42 身份。下文“现状/本刀”仍指 D23 当时。当前请先读[插件根 README](../../../README.md) 与[整体结构](../02_structure/overview.md)。
 
 本文：[0](#0-doc-map) · [1](#1-status) · [2](#2-code-structure) · [3](#3-test-run) · [4](#4-notes) · [4-1](#4-1) · [5](#5-remaining)
 

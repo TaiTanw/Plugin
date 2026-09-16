@@ -2,7 +2,7 @@
 
 返回 [待办](./backlog.md#a-open-items) · [D24 边界](./d24-boundary-plan.md) · [总目录](../README.md)
 
-> 2026-09-15。④ 收口的最小可验证步骤。不含面板强制入库、退出码覆盖、重写⑥、D19。① FBX 外置图跟拷（D25-2 A）已随本轮落地，不占步骤号。本地 `main` 已提交未上推（至 `044f72d`）。
+> 2026-09-16。④ 收口步骤 **1–14 已落地**。不含面板强制入库（D26-5）、后错覆盖（D26-4）、重写⑥、D19。① FBX 外置图跟拷（D25-2 A）已随本轮落地。含 41/42 的代码**未提交**。操作者入口：[插件根 README](../../../README.md)。
 
 ## 已拍板（本页）
 
@@ -11,7 +11,8 @@
 - 手动：人用按钮选定 Branch；**禁止** `PipelineJobContext.Build`。点错 B 会确认：点「仍要平铺」才继续；**取消或关闭对话框中止**。
 - 仓内⑥ 不依赖 Prefab Importer 上的 bundle 名 → **第 8 步可做**。
 - **第 5 步：基本核对完成**（2026-09-15）。缺件 30/40 已实跑；同名跨单元已按代码记清「现在会串」。未逐套勾目录树/源 hash 的格子不挡从第 1 步开工；也**不能**凭此宣称 Extract/搜图/去标签已验证。
-- **第 11 步：2026-09-15 用户更新为 Warning。** 找不到本次合法贴图不终止批量，不停⑤⑥；日志提示。用户另确认：**保留现有引用，不清空贴图槽**，因此仍可能把外部引用带进交付包。原有 glTF 缺伴生 30/40 规则不改。
+- **第 11 步：2026-09-16 报错但不卡。** 找不到本次合法贴图 → 内核 Warning + `TextureIdentityWarnings`，`row.Ok` 仍 true，槽位引用不清；编排 `Fail(42)`，⑤⑥继续。原有 glTF 缺伴生 30/40 规则不改。
+- **第 14 步：2026-09-16 leftover `.fbm` 报错但不卡。** 内核 `Ok` 仍 true；编排 `Fail(41)`，⑤⑥继续。空槽仍只观察。
 - **编排入口用 `[数字]` 标注**，与资源处理总面板留存的自动化参数对应。`[1]` 框末打开批量选择器；`[④]` 后打开人工平铺面板；`[⑤]` 打开资源处理总面板。`Tools/批量选择器` 与 `[1]` 同一窗（旧菜单名「批量FBX导入」已改名）。`Tools/资源处理/` 子菜单已撤。
 
 ## 开发顺序
@@ -27,14 +28,15 @@
 | 4     | 已落地；手动 Scan 组 plan，不建 ctx                 | —                   |
 | 6     | 路径锁已落地；编辑器三条待人跑                           | 冒烟失败则先修口，不改 Extract |
 | 7、8   | 已落地；人工 FBX 不再 SafeZone；④ 不写 AB 标签         | —                   |
-| 9     | 已落地；结果对象带拷贝数 / Extract 次数 / 残留 .fbm / 未绑槽 | 14 仍等拍闸             |
+| 9     | 已落地；结果对象带拷贝数 / Extract 次数 / 残留 .fbm / 未绑槽 | 14 已拍 41 |
 | 10    | 已落地；Extract 只归 E，自愈不抽                     | —                   |
-| 11    | 已落地；用户常规测试暂无问题；**Warning 继续** | 重名贴图专项仍待验，不据此宣称最终依赖隔离 |
+| 11    | 已落地；**Fail(42) 不停⑤⑥**；保留原引用 | `FBX`/`FBX2` 重名专项已放行（本单元 guid，零串兄弟） |
 | 12    | 已清理旧入口、SafeZone 专用链与死成员；独立编译及 32 项 EditMode 通过 | 少量真实 CLI 结果见本节 |
-| 13–14 | **后续单独评估，本轮不推进** | 13 核对剩余兼容接口；14 仍需拍质量闸 |
+| 13    | 已落地；公开七步转发已撤，ctx 只在 FromContext | 未迁目录 |
+| 14    | **已拍 Fail(41) 不停⑤⑥**（2026-09-16）。内核 `Ok` 仍 true | 无 leftover>0 真实样例；码已加 |
 
 
-不要把「第 5 步基本核对」理解成 13–14 已解锁。1–12 已按序落地；改 Extract / 绑图 / 质量闸，仍看当时前一步产出。
+不要把「第 5 步基本核对」理解成 Extract/搜图已验完。1–14 已按序落地；41/42 报错但不卡（对比 40 整趟停）。
 
 ## 步骤
 
@@ -113,13 +115,13 @@ Finish 与死代码 SafeZone 创建链都停写、停清。⑥ 继续 `AssetBund
 
 现网 E/D/C 是 `void`，残留 `.fbm`、映射失败多半只打 Console，Finish 仍可能成功。本步让 `FlattenRowResult` 带上：哪一步失败、拷了多少、还剩哪些外部 `.fbm`、本单元未绑上的贴图槽（若已能看见）。编排读对象，不解析日志。
 
-**本步不改变**算不算失败（缺 sidecar 仍用现网 `HasMissingSidecars`→40）。升闸（残留 `.fbm`、本单元缺合法贴图）等第 11 / 14 步拿着对象再评估。
+**本步不改变**算不算失败（缺 sidecar 仍用现网 `HasMissingSidecars`→40）。残留 `.fbm` 是否 Fail 见第 14 步（现为 41、不停⑤⑥）。本单元缺合法贴图见第 11 步（现为 42、不停⑤⑥）。
 
 `FlattenRowResult` 增加 `CopiedDependencyCount`、`ExtractTexturesCallCount`、`LeftoverExternalFbm`、`UnboundTextureSlots`（`_MainTex` 空，或贴图路径不在本 Art 单元）。`Run(plan)` 在 Begin 之后填这些字段。**不改** Fail 闸。Console 打 `[Flatten] facts …`。
 
 验收：Begin 失败时计数字段为 0（`FlattenPlanTests`）；真跑一行可在日志看到 copied / extractTextures / leftoverFbm / unboundSlots。
 
-**为何 11 需要 9：** Extract/Remap 原为 `void`，本单元贴图异常缺少返回通道。第 11 步通过 `FlattenRowResult.TextureIdentityWarnings` 返回警告，同时写日志；编排不解析日志、不因此 Fail。`HasMissingSidecars` 是磁盘 URI 缺件，保持原失败规则，不能与贴图身份警告混用。
+**为何 11 需要 9：** Extract/Remap 原为 `void`，本单元贴图异常缺少返回通道。第 11 步通过 `FlattenRowResult.TextureIdentityWarnings` 返回警告；内核 `Ok` 不变。编排 `PipelineFlattenQuality` 记 `FlattenTextureIdentity(42)`，不 `return`。`HasMissingSidecars` 是磁盘 URI 缺件，保持 `FlattenFailed(40)` 整趟停，不能与贴图身份混用。
 
 ### 10. Extract 只留一个所有者 — **已落地（2026-09-15）**
 
@@ -131,9 +133,9 @@ E（`FlattenApplyImportAndExtract`）是 `ExtractTextures` 的唯一产品口。
 
 2026-09-15 CLI（`materialId` 分单元）：直18 `glb.glb` → `extractTextures=0`（ScriptedImporter，E 跳过）；歼15 GLTF → `copied=26 extractTextures=0`；OBJ/FBX 走了 E 口但无外部 `.fbm`，`ExtractTextures` 次数仍为 0。四趟 `exit=0`，自愈均「不 Extract」。
 
-### 11. 本单元贴图身份（D25-4）— Warning 继续，保留原引用
+### 11. 本单元贴图身份（D25-4）— Fail(42) 不停⑤⑥，保留原引用
 
-**依赖第 9 步**（结果通道）。**最新用户决定覆盖此前暂定 Fail：** 找不到本次合法贴图 → Warning + 日志，批量继续；不清空、不解除原引用。不得因此宣称“最终依赖已完全隔离”。不是把原有 glTF 缺必需 sidecar 也降为 Warning。
+**依赖第 9 步**（结果通道）。**2026-09-16：** 找不到本次合法贴图 → 内核 Warning + 列表，`row.Ok` 仍 true，批量继续；不清空、不解除原引用；编排 `Fail(42)` 且不 `return`（与 leftover 41、⑤ 的 50 同型）。不得因此宣称“最终依赖已完全隔离”。不是把原有 glTF 缺必需 sidecar 也降为 Warning，也不是 40 整趟停。
 
 不要在第 9 步之前改绑图算法。第 10 步不改查找，只收 Extract 所有者。
 
@@ -163,7 +165,7 @@ E（`FlattenApplyImportAndExtract`）是 `ExtractTextures` 的唯一产品口。
 - **退化的是“按名字猜图并补拷”的兜底，不是整段 Finish。** E、D、C 和 Finish 均限制普通平铺的贴图来源。Finish 不再从重导依赖里补拷陌生贴图；其他材质/动画等引用整理保留。
 - 人工不清夹时，旧同名文件不能仅因路径在本单元就成为合法副本。当前用内容一致性核对副本；同名覆盖策略本身不改。Extract 未改变的旧文件也不能凭目录扫描获得本轮身份。
 - B′ 相对 URI 树保持现状，不套这条按模型身份的规则。
-- `FlattenRowResult.TextureIdentityWarnings` 返回警告，`Ok` 不因此变 false。日志含单元、模型/材质槽、贴图路径。空槽和容器内嵌图不直接按“缺合法独立贴图”报警；第 9 步 `UnboundTextureSlots` 仍只是观察数据，不用于 Fail。
+- `FlattenRowResult.TextureIdentityWarnings` 返回警告，`Ok` 不因此变 false。日志含单元、模型/材质槽、贴图路径。空槽和容器内嵌图不直接按“缺合法独立贴图”报警；第 9 步 `UnboundTextureSlots` 仍只是观察数据，不用于 Fail。管线编排另记 **42**。
 
 **自动验收（2026-09-15）：27/27 通过，0 失败、0 跳过。** Unity 2022.3.54f1c1 EditMode：`FlattenTextureIdentityTests` 9 项 + `FlattenPlanTests` / `FlattenSmokePathTests` / `FlattenManualPlanFactoryTests` 18 项。包含实际 OBJ+MTL 引用的副本绑定、保留错误 Importer 引用、B→D→C 材质链、同名不同后缀/多候选、旧同名拒绝、Extract 文件来源证据和源材质保护。测试使用专用临时目录，已清理；没有导入或打包真实飞机样例。
 
@@ -190,15 +192,44 @@ E（`FlattenApplyImportAndExtract`）是 `ExtractTextures` 的唯一产品口。
 
 日志：项目根 `Logs/d24-step12-fbx.log`、`Logs/d24-step12-gltf.log`。歼6触发现有⑥后顶点色补刷/重打分支，最终成功；不是本步新增行为。两组输入共核对 28 个源模型/伴生文件 SHA-256，执行前后均一致。测试未覆盖真实内嵌 FBX Extract，也不据此宣称真实重名专项或移动端视觉验收完成。
 
-测试产物保留在对应 `Assets/Incoming/<测试单元>`、`Assets/IncomingPrefab/<测试单元>.prefab`、`Assets/Art/<测试单元>` 及 `Deliverables/<测试单元>`，不覆盖既有同名单元。TU 原图已更新为五页目录/文件与全流程展示，不新增截图。第 12 步完成，第 13–14 步未推进。
+测试产物保留在对应 `Assets/Incoming/<测试单元>`、`Assets/IncomingPrefab/<测试单元>.prefab`、`Assets/Art/<测试单元>` 及 `Deliverables/<测试单元>`，不覆盖既有同名单元。TU 原图已更新为五页目录/文件与全流程展示，不新增截图。第 12 步完成。
 
-### 13. 删除重复七步编排
+### 13. 删除重复七步编排 — **已落地（2026-09-16）**
 
-Runner / 手动已只调 `Run(plan)`；第 12 步随死入口移除了旧 `CreatePackagedAdjustedPrefab` 的重复七步调用。**下一步先核对还剩哪些兼容分步口、ctx 转换放在哪里，避免把“再次删除已删编排”当任务。** 本轮未删除仍保留的分步 API，也未迁移目录。
+先核对，再删无人调用的转发，不把「再删一遍步骤 12 已删编排」当任务，不迁目录，不改七步算法。
 
-### 14. `.fbm` 质量闸
+**核对（删前）：**
 
-**需要第 9 步**能看见 leftover 之后再决定。未拍板；不在换口阶段升闸。
+| 层 | 七步/选中转发 | 仓内产品调用 |
+|---|---|---|
+| `PipelineRunner` / `ManualFlattenOrchestration` | 无 | 只 `FromContext` → `Run(plan)` |
+| `ToolFlattenApi` | `TryBegin`…`TryFinish`、`Should*`、`FlattenSelectedToArt` | 无（仅自身定义） |
+| `FlattenBuildService` | 同上七步包装；`ApplyImportAndExtract(work, ctx)` 仍读 ctx | 无；`Run` 已直接调内核 |
+| `RetinarFlattenApi` | 七步包装 + `FlattenSelectedToArt` | 无 |
+| `RetinarFlattenScheduler` / 菜单 | 选中项 | `ManualFlattenService` → `ManualFlattenOrchestration` → `Run(plan)` |
+| `RetinarBatchModelBuilder` 七步 | 实现 | **`FlattenBuildService.Run` 与贴图身份测试** |
+
+**ctx 转换只在一处：** `FlattenBuildService.FromContext`（`HasExternalUris` → Branch，`ImporterKind` → 是否 E，sidecar / MissingUris 抄进 plan）。`CreateOptions(ctx, request)` 只转调 FromContext，供测试。`Run(plan)` 不读 ctx。
+
+**本步删除：** `ToolFlattenApi` 与 `FlattenBuildService` 上的公开七步方法；`ToolFlattenApi` 上无调用方的 `Should*` / `HasMissingSidecars` / `FlattenSelectedToArt`；整个 `RetinarFlattenApi`。`ShouldRelocateAtomic` / `ShouldApplyArtModelImporter` 收成 `FromContext` 私有。
+
+**保留：** 内核七步、`Run` / `FromContext`、`CreateOptions*`、`HasMissingSidecars`（探针测试）、菜单 `RetinarFlattenScheduler`、`ManualFlattenService` 薄转发、物理目录。
+
+验收：`FlattenSmokePathTests.Step13_DuplicateSevenStepPublicOrchestrationRemoved`。未迁目录。第 14 步质量闸已落地（41）。
+
+### 14. `.fbm` 质量闸 — **2026-09-16 Fail(41) 不停⑤⑥**
+
+第 14 步**不是**再改搬文件、Extract 或搜图，也**不是**第 13 步漏掉的拆类。它只回答：Finish 后 Prefab 仍依赖本单元外 `*.fbm/` 贴图时，算不算失败。
+
+**用户决定：** leftover **报错但不卡**。内核仍 Warning + `LeftoverExternalFbm`，`row.Ok` 仍 true（不走 `FlattenFailed(40)` + `return null`）。编排 `PipelineFlattenQuality.Apply` → `Fail(41)`，④循环继续、⑤⑥照跑。CLI `exit=41`（本趟已跑完后续步）。同趟若⑤硬失败则升为 **50**；⑥全失败仍 **60**。同一行若同时有身份警告，**41 优先于 42**。空槽 / OBJ 缺 `.mtl` / glTF 缺 URI 不捆进本 `if`。
+
+旧文档「B 质量闸」即此事。真正扫依赖在 **Finish 自愈之后**。这不是「`.fbm` 抽不出来」：图往往还在，只是引用仍挂在单元外缓存夹上。
+
+Prefab `GetDependencies` 中的贴图：不在本次 `Art/<名>/` 下，且某一级目录名以 `.fbm` 结尾。本单元内不算。⑥ 已无出包前 Extract 兜底。近期真实 CLI 均为 `leftoverFbm=0`，故现网样例仍会 `exit=0`。
+
+**不要和这些闸混：** glTF 缺 URI 已是 Fail(40) 整趟停；空槽只观察；① 缺伴生 Warning 仍导入；无外部 `.fbm` 则跳过 Extract（D25-2 B）；OBJ 缺 `.mtl` 不进 40；D19 顶点色无关。步骤 11 身份是 **42**，同型但不共用一个 if。
+
+验收：`PipelineFlattenQualityTests`；`FlattenSmokePathTests.Step14_QualityCodesDoNotReturnFromFlatten`。
 
 ---
 
@@ -226,4 +257,4 @@ Runner / 手动已只调 `Run(plan)`；第 12 步随死入口移除了旧 `Creat
 
 ---
 
-第 1–12 步已落地。第 11 步 Warning + 保留原引用；真实重名专项仍未确认。第 13 步先核对剩余分步口，不要再删已删编排。第 14 步 `.fbm` 质量闸仍未拍。代码在本地 `044f72d`，**未上推**。
+第 1–14 步已落地。第 14 步 **Fail(41) 不停⑤⑥**；第 11 步身份 **Fail(42) 不停⑤⑥**。glTF 缺件仍 40 整趟停。

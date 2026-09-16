@@ -545,6 +545,7 @@ public static class PipelineRunner
             }
 
             result.Info("[Pipeline] ④ [" + (i + 1) + "] Flatten 1 ← " + prefabPaths[i]);
+            PipelineFlattenQuality.Apply(result, row, i + 1);
             allArt.Add(row.ArtPrefabPath);
         }
 
@@ -626,8 +627,8 @@ public static class PipelineRunner
     }
 
     /// <summary>
-    /// D16：报告进 Messages；FailedCount&gt;0 且当前仍 Ok 时 Fail(50)。
-    /// 不覆盖已有非 0 码（如随后的 60）。取消进度条不算硬失败。
+    /// D16：报告进 Messages；FailedCount&gt;0 且当前仍 Ok 或仅 41/42 时 Fail(50)。
+    /// 不覆盖 20/30/40 等硬停码。取消进度条不算硬失败。60 随后仍可覆盖 50。
     /// </summary>
     private static void ApplyPostProcessResult(
         PipelineResult result,
@@ -642,7 +643,8 @@ public static class PipelineRunner
         result.Info(label + " 失败条=" + post.FailedCount +
                     (post.Canceled ? " 已取消" : string.Empty) +
                     "\n" + post.Report);
-        if (post.HasHardFailure && result.Ok)
+        if (post.HasHardFailure &&
+            PipelineFlattenQuality.CanEscalateToPostProcess(result.ExitCode))
         {
             result.Fail(
                 PipelineErrorCodes.PostProcessFailed,

@@ -2,7 +2,7 @@
 
 返回 [总目录](../README.md) · [已确认要求](../01_requirements/strategy.md) · [待办](../03_open-items/backlog.md)
 
-> 核对日期：2026-09-15。这是当前结构入口，取代旧图中“插件 1 仍拥有④/门禁/全套导出”的描述。目标、已实现和剩余差距分别标明。
+> 核对日期：2026-09-16。操作者入口：[插件根 README](../../../README.md)。这是当前结构入口，取代旧图中“插件 1 仍拥有④/门禁/全套导出”的描述。
 
 ## 1. 宏观分工
 
@@ -58,11 +58,11 @@ Runner 先完成入库与 ctx 收集，再按行生成 Prefab，并非每导入�
 
 自动与手动在操作层上只差 plan 内容。适配层还会差：哪份 SO、模型是否先③、失败粒度。这些不要写进操作层。
 
-现网已有 `FlattenPlan`：管线 `FromContext`，人工 `FlattenManualPlanFactory`；两端都 `ToolFlattenApi.Run(plan)`。分步窄口仍保留。内核三份 partial 不读 ctx。
+现网已有 `FlattenPlan`：管线 `FromContext`，人工 `FlattenManualPlanFactory`；两端都 `ToolFlattenApi.Run(plan)`。公开分步转发已在步骤 13 删除。内核三份 partial 不读 ctx。
 
 | 位置/类 | 现网职责 |
 |---|---|
-| `ToolFlattenApi` | `Run(plan)` / `FromContext`；分步窄口仍可读 ctx |
+| `ToolFlattenApi` | `Run(plan)` / `FromContext`。ctx 只在 FromContext 译成 plan |
 | `FlattenBuildService` | plan → Options；`Run` 转调七步 |
 | `ToolFlattenRequest` | 轴向、清夹、SO 快照（目的，不是事实） |
 | `RetinarFlattenWork` | 本行源/目标路径、Options、拷贝表 |
@@ -82,14 +82,14 @@ ctx（主模型、Importer、外 URI、sidecar、MissingUris）
 | 步 | 输入与作用 | 当前成功语义/边界 |
 |---|---|---|
 | Begin | 依 SO 清本次 Art 单元、创建 Art Prefab、建立 work | 失败不能回退源 Prefab 继续写 |
-| B | 按 SO 分类复制依赖，OBJ 补 MTL | 仍以返回表非 null 为主要成功条件；残留外部 `.fbm` 只 Warning，仍可进⑥（质量闸待 R3） |
+| B | 按 SO 分类复制依赖，OBJ 补 MTL | 拷贝表非 null 则内核 `Ok`；Finish 后再扫的残留外部 `.fbm` 由编排 **Fail(41)**，不停⑤⑥ |
 | B′ | 主模型+sidecar 保持相对树于 Art/名称/名称/ | typed MissingUris 在 Begin 前失败；复制后核验全部必需目标。“原子”指包结构整体迁移，不代表事务回滚 |
 | E | 对 Art ModelImporter 设置并 Extract | ScriptedImporter 跳过；ctx 为 null 的兼容路径走旧 E |
 | D | 按源→副本表重映射 | 与 B/B′共享路径表 |
 | C | Renderer 材质独立化及贴图引用 | 两分支都执行；不是按 ctx.MaterialForm 开关 |
 | Finish | 引用自愈、动画、空壳、轴向、碰撞体、Renderer 检查 | **不写** assetBundleName/variant（步骤 8） |
 
-E/D/C 当前为 void，并没有统一的逐步结果对象。普通分支的伴生、自愈、跨单元同名图等风险仍见 D24/D25；B′缺件修复不代表全部平铺问题已解决。
+E/D/C 内核仍是 void；步骤 9 已把 copied / leftover / unbound / 身份警告收进 `FlattenRowResult`。普通分支的伴生、自愈、跨单元同名图等风险仍见 D24/D25；B′缺件修复不代表全部平铺问题已解决。
 
 ### 人工入口
 
@@ -104,7 +104,7 @@ E/D/C 当前为 void，并没有统一的逐步结果对象。普通分支的伴
 
 ### 当前核心问题是否在④
 
-拆④、冻结 plan、3518 行内核、B/B′、跨单元按名借图（D25-4）、B 残留 `.fbm`：**在④。** AB 标签写入已从④去掉（步骤 8）。施工顺序见 [步骤单页](../03_open-items/d24-flatten-steps.md)。
+拆④、冻结 plan、3518 行内核、B/B′、跨单元按名借图（D25-4）、B 残留 `.fbm`：**在④。** 步骤 1–14 已落地（41/42 质量闸在编排）。AB 标签写入已从④去掉（步骤 8）。目录未迁。施工记录见 [步骤单页](../03_open-items/d24-flatten-steps.md)。
 
 不在④、拆④时不要顺手开：① FBX 外置贴图跟拷（D25-2 外置侧）、⑤ 跳过口径、面板强制入库、退出码后错覆盖、⑥ 构建本身、D19 冲色。行对齐：管线④步骤 3 已收口；人工步骤 4 不再用 ctx。属编排不是操作层。
 

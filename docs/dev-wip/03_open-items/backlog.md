@@ -16,9 +16,9 @@
 
 | 顺序 | ID | 严重度 | 类别 | 当前问题 | 下一验收 |
 |---:|---|---|---|---|---|
-| 1 | D24-R1b | P1 | 真实模型回归 | **2026-09-15 基本核对完成。** 缺件 30/40 已实跑；同名跨单元已代码记清会串。目录树/hash 未逐格勾，不挡换口 | ④ 第 **10** 步 CLI 已核；第 11 步用户常规测试暂无问题；第 12 步清理已落地、32 项测试通过；真实重名专项仍待验 |
-| 2 | D25-2 | P1 | FBX 伴生 | **2026-09-15（A）已落地：** ① `CopyFbxSidecarsBeside` 跟拷同目录/Texture/.fbm 及 FBX 相对贴图。内嵌仍等④ Extract | 歼6 CLI：Incoming/Art 有 `j6_11.jpg`；内嵌档未做 |
-| 3 | D25-4 | P1 | 引用隔离 | Extract 后再导入按短名挂兄弟单元；remap 把该路径当成本单元源 | 第 11 步改为 Warning 继续、保留原引用；停止按同名补拷；用户常规测试暂无问题，真实重名专项仍待验 |
+| 1 | D24-R1b | P1 | 真实模型回归 | **2026-09-15 基本核对完成。** 步骤 1–14 已落地。目录树/hash 未逐格勾 | 真实重名专项、内嵌 Extract、leftover>0 真样仍待验 |
+| 2 | D25-2 | P1 | FBX 伴生 | **（A）已落地：** ① 跟拷外置图。内嵌仍等④ Extract | 内嵌档未做 |
+| 3 | D25-4 | P1 | 引用隔离 | Extract 后再导入按短名挂兄弟单元 | 步骤 11：**Fail(42)** 不停⑤⑥，保留原引用；真实重名专项仍待验 |
 | 4 | D26-4 | P1 | 退出码 | `Fail` 后错覆盖前错 | 保留首个失败码 |
 | 5 | D26-5 | P1 | 入口一致性 | 面板强制入库，CLI 跟 SO | 两入口对同一 Options 一致，或写成显式差异 |
 | 6 | D26-6 | P1 | ⑤ 跳过 | 无统一 typed 跳过原因 | 先核汇总契约；不让 Runner 读 Op 内部 |
@@ -33,18 +33,23 @@
 详见 [D24：平铺黑盒接管与 ctx 边界](./d24-boundary-plan.md)。一句话口径：
 
 ```text
-②.5 仍只构建 ctx（紧跟①；人工点击时自建）
+②.5 仍只构建 ctx（紧跟①；人工禁止 Build ctx）
   → 编排把 ctx 译成 FlattenPlan（内核不再读 ctx）
   → 完整④：Begin → B|B′ → E? → D → C → Finish
-  → 按行返回结果；整趟停/跳行留在 Runner
+  → 40 整趟停；41 leftover / 42 身份 报错但不卡
   → ⑥ 继续 RetinarAbApi，本刀不重写
 ```
 
 管理细则：[D24 R3](./d24-boundary-plan.md#r3-flatten-split) · 步骤单页：[d24-flatten-steps](./d24-flatten-steps.md)。扩 ctx、① 建 ctx、坏行跳过、重写⑥、稳定行 ID：**停放**。
 
-2026-09-10 已增加两个人工**完整相位**按钮：普通平铺固定走 B；原子迁移固定走 B′，面向带相对 URI 的 glTF。两者都继续执行 Begin→B/B′→E?→D→C→Finish，不开放七步任意乱序。直接选模型时先用③生成 Prefab。人工 FBX 不再走 SafeZone（步骤 7）。④ 不再写 Importer AB 标签（步骤 8）。
+2026-09-10 已增加两个人工**完整相位**按钮：普通平铺固定走 B；原子迁移固定走 B′。两者都继续 E?/D/C/Finish。直接选模型时先③。人工 FBX 不再 SafeZone（步骤 7）。④ 不再写 AB 标签（步骤 8）。步骤 **1–14 已落地**。
 
 ---
+
+## decisions-2026-09-16
+
+- **步骤 1–14 收口完成。** 公开七步转发已撤。leftover `.fbm` **Fail(41)** 不停⑤⑥；贴图身份 **Fail(42)** 不停⑤⑥、槽位不清。无 leftover>0 真样。代码未提交。
+- 操作者流程提到插件根 README 最上两节。
 
 ## decisions-2026-09-15
 
@@ -53,7 +58,7 @@
 - **步骤 9：** `FlattenRowResult` 已填 copied / leftoverFbm / unboundSlots。歼6 CLI：copied=2 leftoverFbm=0 unboundSlots=1（ID02 源材质本来无贴图）。
 - **D25-2（A）：** ① `CopyFbxSidecarsBeside`；歼6 Incoming/Art 均有 `j6_11.jpg`，ID01 `_MainTex` 已绑。**（B）内嵌 Extract 闸未改。**
 - **D25-4 机制更正：** 不是 C# 全工程搜贴图。B 前半段已是源引用→拷贝→objectMap；串在 Extract 后再对 Art FBX `GetDependencies` + 按短名 `AddRemap`。同名覆盖（同一目标路径不覆盖旧文件）是另一条链；现网 remap 会把兄弟文件拷进本单元，两条链会拧在一起。
-- **Fail vs Warning：** 不是只换显示。Fail=`Fail(code)`+`return null`，停后续行和⑤⑥；Warning 不改退出码、继续打 AB。第 11 步按 2026-09-15 用户最新决定 **Warning 继续，保留原引用、不清空槽**；未知来源不再按名补拷，仍可能有外部依赖进入交付包。
+- **Fail vs Warning：** 不是只换显示。**40** = `Fail` + `return null`，停⑤⑥。**41/42** = `Fail` 不 `return`，⑤⑥继续。纯 Warning 不改退出码。第 11 步 **42**（保留原引用、不清空槽）；第 14 步 leftover **41**。未知来源不再按名补拷，仍可能有外部依赖进交付包。
 
 ## decisions-2026-09-14
 
@@ -64,7 +69,7 @@
 - **缺 sidecar：整趟④停、`FlattenFailed(40)`**（不承诺其余行继续）。
 - **④文件在 TOol、编排暂归中间层**：只是暂时保留，待后续按步拆分后再搬家/下沉。
 - **OBJ 缺 `.mtl`/贴图不进 `MissingUris` 闸**（见 [obj-vs-gltf](#obj-vs-gltf)）；不是漏修 D26-2，是探针未接入 ctx。
-- **B 质量闸**（残留 `.fbm` 等）记为风险，④逐步拆分后再评估，本轮不加失败码。
+- **B 质量闸**（残留 `.fbm`）：步骤 14 **Fail(41)** 不停⑤⑥。身份警告 **42**。空槽只观察。
 - **历史文档按文件剔除**：已删 PACKAGING_RULES 旧编号正文、分享说明旧操作篇；后续同类文件继续单文件收缩，不把考古文堆回 backlog。
 - **D13-R1 移动端验收完成**，退出顶部队列。
 - **④拆分（同日续）：** ① 不承担 `ctx.Build`、不扩字段。无头「坏一件卡一批」是 Runner 粒度，与④换口分开。④ 可新实现，但先冻结 plan 口、旧内核留到 R1b 切开；**禁止先清空再写。⑥ 已有 `RetinarAbApi`，本刀不重写。** 详见 [D24 R3](./d24-boundary-plan.md#r3-flatten-split)。
@@ -78,7 +83,7 @@
 | ① 入库 | `GltfPackageFiles.Scan`：缺 `.bin`/外图 → Warning，仍拷已有文件 | `ObjPackageFiles.Scan`：缺 `.mtl`/贴图 → Warning，仍导入网格（常白膜） |
 | ②.5 `JobContext.Build` | `PipelineGltfUriProbe` 写入 typed `MissingUris` | **不调用** `ObjPackageFiles.Scan`；`HasExternalUris=false`；`MissingUris` 保持空 |
 | ④ | `HasMissingSidecars` → `FlattenFailed(40)`，**整趟④停**（`return null`），⑤⑥不跑 | 不进 40 闸。B 跟拷已解析到的 `.mtl`；缺件仍可能 `CopiedDependencies != null` 成功 |
-| 当前产品口径 | 缺必需相对 URI = 硬失败 | 缺伴生仍可 `exit=0`；是否升闸待④拆文件后与 B 质量闸一并评估 |
+| 当前产品口径 | 缺必需相对 URI = 硬失败 | 缺伴生仍可 `exit=0`；不与 leftover **41** 捆成一闸 |
 
 `.glb` / `.fbx` 在 Build 里同样不填 `MissingUris`。FBX 源旁独立贴图另见 D25-2，不是本闸漏扫。
 
@@ -385,7 +390,7 @@ ext == .gltf
 | 贴图抽出                 | 已延后；勿当洋红 blocker。ggdddd 贴图仍嵌在 `Model/glb.glb`                                                             |
 | 单文件②路径重名（D18）        | **管线已落**：② 只清 `Incoming/<三层>/`，④ 只清 `Art/<名>/`，再拷。菜单/批量面板仍 Skip。唯一定位暂放。见 [d18k](#d18k)                    |
 | `.gltf`→GLB 再导入（D22） | **搁置、当前不开发。** `.gltf` 已可整包② + ④ B′。容器封装 ≠ DCC 重导；勿用场景 Export 当入库。若将来落盘改 `.glb` 仍与 D18 复用键交叉。见 [O](#d22-o) |
-| B 残留外部 `.fbm` | 只 Warning，仍可进⑥。质量闸待④拆文件后评估，不提前加失败码 |
+| B 残留外部 `.fbm` | 内核 `Ok` 仍 true；编排 **Fail(41)** 不停⑤⑥。贴图身份 **42**。空槽只观察 |
 | OBJ 缺伴生 | `JobContext.Build` 对 `.obj` 不跑 `ObjPackageFiles.Scan`，`MissingUris` 空；① 只 Warning。与 glTF ④40 不是同一闸 |
 | ④ 物理目录 | 代码在 `TOol/Generated/Flatten`，职责暂算中间层；拆步完成前不二次搬家 |
 
@@ -657,7 +662,7 @@ P3 已评        D22 `.gltf`→GLB 再②（容器封装，非 DCC）；见 [O](
 | D24-6  | **2026-09-03 已落地。** 两套赋值收进 `ModelImporterProfiles`。Processor **硬跳过** `RetinarPaths.ArtRoot`。交付档不读导入区 SO。 |
 | D27    | **2026-09-03 已落地（目录+窄口）。** ④ 按 ③ Prefab 同款分类进插件 2 `Generated/Flatten/`（Config / Layout / Service / Category）。管线只调 `ToolFlattenApi`（接 `PipelineJobContext` + `ToolFlattenRequest`）。`PipelineFlattenBridge` 已删。内核类名仍是 `RetinarBatchModelBuilder`（未改逻辑）。菜单 FBX 直平铺随文件迁走，管线禁止调 `FlattenPaths`。模糊点见 `TOol/Editor/Generated/Flatten/README.md`。 |
 | D25-2  | **（A）2026-09-15 已落地** ① `CopyFbxSidecarsBeside`：同目录图、`Texture/` 等夹、`*.fbm`、FBX 内相对路径。缺件 Warning 仍导入。**（B）内嵌图仍等④ Extract**（无 `.fbm` 时现网还跳过 Extract，未改）。不并进第 11 步。 |
-| D25-4  | **FBX 单元跨单元借贴图（2026-09-15 更正）。** 不是 `FindAssets` 扫全工程。修法见 [步骤第 11 步](./d24-flatten-steps.md)，**找不到本次合法贴图 Warning 继续，保留原引用**。 |
+| D25-4  | **FBX 单元跨单元借贴图。** 不是 `FindAssets` 扫全工程。修法见 [步骤第 11 步](./d24-flatten-steps.md)：找不到本次合法贴图 **Fail(42)** 不停⑤⑥，保留原引用。 |
 | D24-10 | **OBJ 轴向** 已落地（绑定行开关 + 内容节点 −90°X）。 |
 
 **原插件 1 平铺 partial 现状（D27 后：文件已在插件 2 `Generated/Flatten/Service/`）**

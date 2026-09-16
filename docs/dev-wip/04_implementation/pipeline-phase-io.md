@@ -2,8 +2,8 @@
 
 返回 [总目录](../README.md) · [流程总览](./pipeline-flow.md) · [冒烟 / StepResult](./smoke-and-results.md) · [导入 ctx D23](./pipeline-job-context.md)
 
-> 对照 `PipelineRunner` 与五个窄口。  
-> 2026-09-03：D10-1/2 已落（父目录磁盘扫 ID2；Runner 按行；无文件夹 ctx）。
+> 对照 `PipelineRunner` 与五个窄口。操作者入口：[插件根 README](../../../README.md)。  
+> ④ 现网：`FromContext` → `Run(plan)`。硬失败 40 停；leftover 41 / 身份 42 不停⑤⑥。
 
 编号别混：
 
@@ -197,7 +197,7 @@ List<string> BuildPrefabs(IList<string> sourceModelPaths, string materialId = nu
 
 管线④按行：`FromContext` → `Run(plan)`（Begin→B|B′→E?→D→C→Finish）。不再调 `FlattenPaths`。
 
-`FlattenPaths` / `CreateNormalizedPrefab` 旧链已在步骤 12 删除；当前管线/人工均走 `Run(plan)`。仍保留的分步兼容接口留待第 13 步核对。
+`FlattenPaths` / `CreateNormalizedPrefab` 旧链已在步骤 12 删除。步骤 13 已撤 `ToolFlattenApi` / `FlattenBuildService` / `RetinarFlattenApi` 上的公开七步转发；管线/人工只走 `FromContext` → `Run(plan)`。
 
 | | 现网 |
 |---|---|

@@ -5,7 +5,7 @@
 适用：Unity 2020.3 / 2022.3 Editor；与 `RetinarBatchBuilder_Share`（插件 1）配合使用。
 
 本文说明目录层级、类职责、自动化两层语义，以及和打包工具的边界。便于扩展新 Operation / 新资源类型时对照。  
-当前④入口为 `ToolFlattenApi.Run(plan)`；人工不建立 ctx。步骤 12 已删除旧 `FlattenPaths` / SafeZone 创建链及专用助手，未删除七步本体，未移动物理目录。贴图身份警告保留引用并继续；详见 [步骤单页](../docs/dev-wip/03_open-items/d24-flatten-steps.md)。
+当前④入口为 `ToolFlattenApi.Run(plan)`；人工不建立 ctx。步骤 13 已撤公开分步转发；七步本体仍只由 `FlattenBuildService.Run` 调用，未移动物理目录。详见 [步骤单页](../docs/dev-wip/03_open-items/d24-flatten-steps.md)。
 扩展名识别与加 Op / 加后缀 / 加大类、以及「总可处理文件 → Evaluate → Execute」数据流：[docs/dev-wip/04_implementation/op-recognition-and-extend.md](../docs/dev-wip/04_implementation/op-recognition-and-extend.md)
 
 ### 配置归属（EditorPrefs 与 SO，必读）

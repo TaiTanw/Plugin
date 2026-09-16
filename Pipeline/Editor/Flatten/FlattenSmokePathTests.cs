@@ -3,7 +3,7 @@ using System.IO;
 using NUnit.Framework;
 using UnityEngine;
 
-/// <summary>步骤 6–8：管线/人工调度不进 FlattenPaths；内核 Finish 不写 Importer AB 标签。</summary>
+/// <summary>步骤 6–13：调度走 Run(plan)；不进 FlattenPaths；公开层不再转发七步。</summary>
 public class FlattenSmokePathTests
 {
     [Test]
@@ -87,9 +87,56 @@ public class FlattenSmokePathTests
         foreach (string name in removed)
             Assert.That(typeof(RetinarBatchModelBuilder).GetMethod(name, flags), Is.Null, name);
         Assert.That(typeof(ToolFlattenApi).GetMethod("FlattenPaths", flags), Is.Null);
-        Assert.That(typeof(RetinarFlattenApi).GetMethod("FlattenPaths", flags), Is.Null);
+        Assert.That(typeof(FlattenSmokePathTests).Assembly.GetType("RetinarFlattenApi"), Is.Null);
         foreach (string name in new[] { "SafeZonePadding", "SafeZoneCenter", "SafeZoneSize", "EmissionIntensity", "EmissionColor", "AssetBundleVariant" })
             Assert.That(typeof(RetinarBatchModelBuilder).GetField(name, flags), Is.Null, name);
+    }
+
+    [Test]
+    public void Step13_DuplicateSevenStepPublicOrchestrationRemoved()
+    {
+        const System.Reflection.BindingFlags flags = System.Reflection.BindingFlags.Public |
+            System.Reflection.BindingFlags.Static;
+        string[] removed = { "TryBegin", "SplitDependencies", "RelocateAtomic", "ApplyImportAndExtract",
+            "Remap", "CopyRendererMaterials", "TryFinish" };
+        foreach (string name in removed)
+        {
+            Assert.That(typeof(ToolFlattenApi).GetMethod(name, flags), Is.Null, "ToolFlattenApi." + name);
+            Assert.That(typeof(FlattenBuildService).GetMethod(name, flags), Is.Null, "FlattenBuildService." + name);
+        }
+
+        Assert.That(typeof(ToolFlattenApi).GetMethod("FlattenSelectedToArt", flags), Is.Null);
+        Assert.That(typeof(ToolFlattenApi).GetMethod("ShouldRelocateAtomic", flags), Is.Null);
+        Assert.That(typeof(ToolFlattenApi).GetMethod("ShouldApplyArtModelImporter", flags), Is.Null);
+        Assert.That(typeof(ToolFlattenApi).GetMethod("HasMissingSidecars", flags), Is.Null);
+        Assert.That(typeof(FlattenSmokePathTests).Assembly.GetType("RetinarFlattenApi"), Is.Null);
+
+        Assert.That(typeof(ToolFlattenApi).GetMethod("Run", flags), Is.Not.Null);
+        Assert.That(typeof(ToolFlattenApi).GetMethod("FromContext", flags), Is.Not.Null);
+
+        string service = ReadPluginFile("TOol/Editor/Generated/Flatten/Service/FlattenBuildService.cs");
+        Assert.That(service, Does.Contain("TryBeginPackagedFlatten"));
+        Assert.That(service, Does.Contain("FlattenRelocateAtomic"));
+        Assert.That(service, Does.Contain("FlattenSplitDependencies"));
+        Assert.That(service, Does.Contain("FlattenApplyImportAndExtract"));
+        Assert.That(service, Does.Contain("FlattenRemap"));
+        Assert.That(service, Does.Contain("FlattenCopyRendererMaterials"));
+        Assert.That(service, Does.Contain("TryFinishPackagedFlatten"));
+        Assert.That(service, Does.Contain("FromContext"));
+        Assert.That(ReadPluginFile("Pipeline/Editor/PipelineRunner.cs"), Does.Contain("ToolFlattenApi.FromContext"));
+        Assert.That(ReadPluginFile("Pipeline/Editor/Flatten/Orchestration/ManualFlattenOrchestration.cs"),
+            Does.Contain("ToolFlattenApi.Run"));
+    }
+
+    [Test]
+    public void Step14_QualityCodesDoNotReturnFromFlatten()
+    {
+        string runner = ReadPluginFile("Pipeline/Editor/PipelineRunner.cs");
+        Assert.That(runner, Does.Contain("PipelineFlattenQuality.Apply"));
+        Assert.That(runner, Does.Contain("CanEscalateToPostProcess"));
+        Assert.That(runner, Does.Contain("FlattenFailed"));
+        Assert.That(PipelineErrorCodes.FlattenLeftoverFbm, Is.EqualTo(41));
+        Assert.That(PipelineErrorCodes.FlattenTextureIdentity, Is.EqualTo(42));
     }
 
     [Test]

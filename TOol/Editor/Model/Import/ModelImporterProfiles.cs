@@ -10,7 +10,7 @@ using UnityEditor;
 //
 // 现网分区：
 //   Incoming —— 只由本类 ApplyIncoming* 写，入口是 ModelImportSettingsProcessor。
-//   Art      —— 只由 ApplyArtDelivery 写，入口是 ④ FlattenBuildService.ApplyImportAndExtract。
+//   Art      —— 只由 ApplyArtDelivery 写，入口是 ④ Run(plan) 内 FlattenApplyImportAndExtract。
 // Art 路径在 Processor 里硬跳过（不只靠 SO 排除表），清空 excludedPathPrefixes 也不能复现打架。
 // =====================================================================================
 

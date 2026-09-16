@@ -1,8 +1,8 @@
 # Retinar Editor 阅读地图（插件 1）
 
-先读[当前整体结构](../../../../docs/dev-wip/02_structure/overview.md)，再看菜单/API；④大文件已不在本目录。
+操作者日常出包：插件根 [README](../../../../README.md) 的总面板 / CLI。本目录只剩⑥和菜单薄转发；④大文件已不在这里。
 
-日常出包走管线 ①→⑥（`PipelineRunner`），不经过本目录的菜单。
+先读[当前整体结构](../../../../docs/dev-wip/02_structure/overview.md)，再看菜单/API。
 
 ## 1. 现网入口
 

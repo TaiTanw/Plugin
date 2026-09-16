@@ -2,8 +2,8 @@
 
 返回 [总目录](../README.md) · [流程与中间层](./pipeline-flow.md) · [待办](../03_open-items/backlog.md)
 
-> CLI = 无头外壳；内核仍是 `PipelineRunner.Run(options)`。面板继续直调 Runner，不改成「面板调 CLI」。  
-> **D5 已完成（2026-09-02）：** 本机 `-batchmode` 验收通过；参数/退出码按现状冻结。
+> CLI = 无头外壳；内核仍是 `PipelineRunner.Run(options)`。面板继续直调 Runner。  
+> 操作者命令与退出码总表：[插件根 README](../../../README.md)。**D5 已验收**（2026-09-02）；**41/42** 为 2026-09-16 增补。
 
 ---
 
@@ -118,6 +118,8 @@ Unity.exe
 | 退出码 | `0` |
 | 产物 | `AssetBundles/Android` 与 `iOS`（或 ExportSettings 根下）有包 |
 | 洋红 | **不**算 CLI 失败（D13） |
+| leftover `.fbm` | **41**（④已跑完；⑤⑥仍跑） |
+| 贴图身份警告 | **42**（槽位引用不清；⑤⑥仍跑） |
 | Prefab 夹顶点色 | **不**算 CLI 失败（可选 D20；色在 `Model/*.FBX`） |
 | FBX 刷白 / 导出 GLB 黄 | **不**算 CLI 失败（D19 已降级；需白 GLB 见 backlog **L**） |
 
@@ -132,6 +134,7 @@ Unity.exe
 | 步骤 flag / 环境变量 / 临时 SO | backlog **B.CLI**；D5 不扩 |
 | `SourceBindings` 多行 | **D10-2 已做**（CLI 仍一个 `-source`） |
 | `LicenseOrEnv(70)` | 预留；本入口不赋值 |
+| leftover `.fbm` / 贴图身份 | **2026-09-16** 增 41 / 42；不停⑤⑥。D5 原表无此两码 |
 | ⑥ 部分失败改非 0 | **已冻**为仍 `0`；改码另开项 |
 
 **已复用：** `PipelineOptions.FromSettings`、`PipelineRunner`、窄口、D17 Art 单元路径、D16 `ToolPostProcessResult`。

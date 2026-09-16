@@ -2,8 +2,8 @@
 
 返回 [总目录](../README.md) · [CLI 入口](./cli-getting-started.md) · [待办](../03_open-items/backlog.md)
 
-> 总流程对外面分两块：**(A) 插件内中间层编排**、**(B) CLI 使用入口**。  
-> 二者共用同一套窄口与 `PipelineRunner`；CLI **不是**第二套管线。
+> 总流程分两块：**(A) 总面板 / Runner**、**(B) CLI**。操作者命令与格号：[插件根 README](../../../README.md)。  
+> 二者共用 `PipelineRunner`；CLI **不是**第二套管线。
 
 ---
 
@@ -75,7 +75,7 @@ SourcePath
 | 1 入库 / ② | `ToolImportApi.ImportSingleModel` | TOol `Shared/Api` | 入 `SourcePath`；出 `assetModelPath` → `ModelPaths`。总面板跑管线时始终入库 |
 | 2 总闸 | 不调窄口 | `ResourceProcessSwitches.MasterEnabled` | 决定用户设置自动 / 后处理自动是否生效；不替代 L1 分项。配置导入根内的模型安全基线不受此闸控制 |
 | ③ | `ToolPrefabApi.BuildPrefabs` | → `PrefabBuildService` | 入 `ModelPaths` + `MaterialId`；出 `List` Prefab 路径 |
-| ④ | `ToolFlattenApi` 能力方法 | TOol `Generated/Flatten`（职责暂归中间层） | 入 ③ 的 Prefab + **ctx** + 含 `FlattenOperationPolicy` 的 request；编排按行 Begin→B\|B′→E→D→C→Finish；出 Art Prefab覆盖⑥；D17 推 Art 单元给⑤ |
+| ④ | `ToolFlattenApi.FromContext` → `Run(plan)` | TOol `Generated/Flatten`（职责暂归中间层） | 入 ③ Prefab + ctx + request；出 Art Prefab。硬失败 **40** 停；leftover **41**、身份 **42** 不停⑤⑥ |
 | ⑤ | `ToolPostProcessApi.RunMasterBatch` | → L1 总批量 | 入 D17 的 `PostProcessFolderPaths`；出 `ToolPostProcessResult`（FailedCount 复用三层 Summary；细节在 Report） |
 | ⑥ | `RetinarAbApi.Build` | Retinar `40_Api` | 入当前 `prefabPaths` + `AbBuildOptions`（从导出 SO 填：根目录 / 是否 UP / 是否拷交付）；步骤 SO 只提供 `RunAb` |
 
@@ -131,7 +131,9 @@ Assets/Plugin/Pipeline/
 | 10 | `BadArgs` | 参数/路径 | ✓ |
 | 20 | `ImportFailed` | ② | ✓ |
 | 30 | `PrefabFailed` | ③ | ✓ |
-| 40 | `FlattenFailed` | ④ | ✓ |
+| 40 | `FlattenFailed` | ④ 缺件/硬失败 | ✓ `return null`，⑤⑥不跑 |
+| 41 | `FlattenLeftoverFbm` | ④ leftover `.fbm` | ✓ Fail 不 return；⑤⑥继续；⑤硬失败可升 50 |
+| 42 | `FlattenTextureIdentity` | ④ 贴图身份 | ✓ 同上；与 leftover 同趟时 41 优先 |
 | 50 | `PostProcessFailed` | ⑤ | ✓（FailedCount&gt;0；细节在报告） |
 | 60 | `AbFailed` | ⑥ 全失败 | ✓（部分成功仍 Ok） |
 | 70 | `LicenseOrEnv` | License/环境 | **从未赋值** |

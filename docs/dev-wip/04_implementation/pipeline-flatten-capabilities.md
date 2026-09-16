@@ -2,8 +2,7 @@
 
 返回 [总目录](../README.md) · [ctx](./pipeline-job-context.md) · [相位入参](./pipeline-phase-io.md) · [本刀报告](./d23-slice-report.md)
 
-> **状态：查封有效；B′ 已接入。** 现状与谁读 ctx → [d23 报告](./d23-slice-report.md)（总目录 **4j**）。  
-> 当前管线④输入是 **Prefab**（③产物），由 `PipelineRunner.FlattenPerPrefab` 经 `ToolFlattenApi` 组合七步，不直接调遗产 `CreatePackagedAdjustedPrefab`。菜单「对 FBX 直接平铺」走另一条 `CreateNormalizedPrefab`，**不在本查封范围**（D23b 先不管）。
+> **状态：查封有效；B′ 已接入。** 现网入口：`FlattenPerPrefab` → `FromContext` → `Run(plan)`。菜单 FBX **不再**走 `CreateNormalizedPrefab`（步骤 7/12 已删）。旧段若仍写 SafeZone / FlattenPaths，以 [overview](../02_structure/overview.md) 为准。
 
 ---
 

@@ -4,11 +4,11 @@ using UnityEngine;
 
 // =====================================================================================
 // Generated / Flatten / Service
-// 中文：④ 平铺执行层。步骤 1 起内核可 Run(plan)；现网分步窄口仍可读 ctx。
+// 中文：④ 平铺执行层。产品只 Run(plan)；ctx → plan 只在 FromContext。
 // 内核仍是 RetinarBatchModelBuilder（本目录 Service/）。
 // =====================================================================================
 
-/// <summary>④ 平铺服务。不引用步骤开关；开不开④由编排决定。</summary>
+/// <summary>④ 平铺服务。不引用步骤开关；开不开④由编排决定。公开口是 Run / FromContext。</summary>
 public static class FlattenBuildService
 {
     /// <summary>
@@ -154,8 +154,7 @@ public static class FlattenBuildService
         return plan;
     }
 
-    /// <summary>有外 URI（相对 .bin / 外图）时禁止按后缀拆夹，改走原子搬迁。</summary>
-    public static bool ShouldRelocateAtomic(PipelineJobContext ctx)
+    static bool ShouldRelocateAtomic(PipelineJobContext ctx)
     {
         return ctx != null && ctx.HasExternalUris;
     }
@@ -164,7 +163,7 @@ public static class FlattenBuildService
     /// Art 副本上的 ModelImporter 设置 + Extract 内嵌贴图。
     /// ScriptedImporter（gltf/glb）现网 Extract 本就会空转；ctx 为 null（菜单）时仍跑，与旧菜单一致。
     /// </summary>
-    public static bool ShouldApplyArtModelImporter(PipelineJobContext ctx)
+    static bool ShouldApplyArtModelImporter(PipelineJobContext ctx)
     {
         return ctx == null || ctx.ImporterKind == PipelineImporterKind.ModelImporter;
     }
@@ -182,52 +181,6 @@ public static class FlattenBuildService
     {
         string sourcePrefabPath = ctx != null ? ctx.PrimaryAssetPath : null;
         return CreateOptionsFromPlan(FromContext(ctx, request, sourcePrefabPath));
-    }
-
-    public static bool TryBegin(
-        string sourcePrefabPath,
-        PipelineJobContext ctx,
-        ToolFlattenRequest request,
-        out RetinarFlattenWork work)
-    {
-        return RetinarBatchModelBuilder.TryBeginPackagedFlatten(
-            sourcePrefabPath, CreateOptions(ctx, request), out work);
-    }
-
-    public static bool SplitDependencies(RetinarFlattenWork work)
-    {
-        return RetinarBatchModelBuilder.FlattenSplitDependencies(work);
-    }
-
-    public static bool RelocateAtomic(RetinarFlattenWork work)
-    {
-        return RetinarBatchModelBuilder.FlattenRelocateAtomic(work);
-    }
-
-    /// <summary>E。ctx 标明非 ModelImporter 时跳过（避免对 gltf 空转 Extract）。</summary>
-    public static void ApplyImportAndExtract(RetinarFlattenWork work, PipelineJobContext ctx)
-    {
-        if (!ShouldApplyArtModelImporter(ctx))
-        {
-            return;
-        }
-
-        RetinarBatchModelBuilder.FlattenApplyImportAndExtract(work);
-    }
-
-    public static void Remap(RetinarFlattenWork work)
-    {
-        RetinarBatchModelBuilder.FlattenRemap(work);
-    }
-
-    public static void CopyRendererMaterials(RetinarFlattenWork work)
-    {
-        RetinarBatchModelBuilder.FlattenCopyRendererMaterials(work);
-    }
-
-    public static bool TryFinish(RetinarFlattenWork work)
-    {
-        return RetinarBatchModelBuilder.TryFinishPackagedFlatten(work);
     }
 
     static FlattenRowResult WithFacts(FlattenRowResult row, RetinarFlattenWork work)
