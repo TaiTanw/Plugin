@@ -74,7 +74,7 @@ public static class TextureOperationRegistry
             if (operation == null)
             {
                 Debug.LogWarning("[TextureOperationRegistry] 配置里的导入自动操作 Id 在工程里找不到对应实现: " + id +
-                    "\n请到 Tools/资源处理总面板 → 贴图处理 里重新勾选，或确认对应的操作脚本是否被删除/改名。");
+                    "\n请到 Tools/手动操作栏/设置/[⑤] 贴图 里重新勾选，或确认对应的操作脚本是否被删除/改名。");
                 continue;
             }
 

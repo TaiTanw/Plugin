@@ -3,14 +3,15 @@
 > 位置：`Assets/Plugin/docs/dev-wip/`  
 > 操作者流程在插件根 [README](../../README.md) 最上两节，不在本表里找入口。  
 > 当前约定看战略，当前实现看结构，待办看顶部队列。历史规则不覆盖后续确认。  
-> 已发布标签：**v1.5.3** ≠ `main`。工单：[prd-docs#274](http://swm-server.local:3000/Admin/prd-docs/issues/274)
+> 已发布标签：**v1.6.0**。工单：[prd-docs#274](http://swm-server.local:3000/Admin/prd-docs/issues/274)
 
 ## 操作者（本层可见）
 
 ```text
-总面板 [1]入库 → [2]总闸 → [③]Prefab → [④]平铺 → [⑤]总批量 → [⑥]导出
+总面板 [1]入库 → [2]导入期 → [③]Prefab → [④]平铺 → [⑤]总批量 → [⑥]导出
 CLI: PipelineCli.Run -source …   （须关掉占用本工程的 Editor）
-人工④: B / B′ 完整相位，不接⑤⑥
+人工④: 菜单原子 / 平铺，不接⑤⑥
+全局导入: Tools > 全局导入设置（2）
 ```
 
 退出码：**40** 整趟停；**41** leftover `.fbm`、**42** 贴图身份、**50** ⑤失败 → 后面步仍跑；**60** ⑥全失败。④ 步骤 **1–14 已落地**；内核未迁目录。
@@ -41,8 +42,8 @@ D18：[d18k](./03_open-items/backlog.md#d18k) · 旧入口：[CLI_AUTOMATION_DEV
 
 ## 当前迭代一句话
 
-**默认 SO：** ②③④⑤⑥全开；④⑤可关；⑥可选 UP。最小可裁剪线仍是 ②③⑥。  
-**④：** `FromContext` → `Run(plan)`；公开七步转发已撤；步骤 1–14 落地；**未迁目录**。  
-**质量闸：** glTF 缺件 **40** 停；leftover `.fbm` **41**、贴图身份 **42** 报错但不卡。空槽只观察。  
-**仍开着：** D26-4 后错覆盖、D26-5 面板强制入库、D25-4 真实重名专项、内核拆文件、无 leftover>0 真样。  
-**对外：** (A) 总面板 · (B) [CLI](./04_implementation/cli-getting-started.md)
+**本批：** 把编排路径、导入钩子、菜单和⑥产物收成可日常使用的边界。  
+**默认 SO：** ③④⑤⑥全开；[2] 是全局导入设置不是步骤开关。④⑤可关。  
+**④：** `FromContext` → `Run(plan)`；步骤 1–14 落地；调度在 `ManualFlatten/`，内核未迁目录。  
+**⑥：** `name_android.assetbundle` / `name_ios.assetbundle`，产品夹不再分 Android/iOS。  
+**对外：** (A) 总面板 · (B) [CLI](./04_implementation/cli-getting-started.md) · (C) `手动操作栏`

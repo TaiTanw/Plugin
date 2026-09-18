@@ -78,29 +78,33 @@ public static class RetinarEditorUtil
         EnsureDiskDirectory(path);
         EditorUtility.RevealInFinder(path);
     }
-    /// <summary>
-    /// 目标平台文件夹名返回
-    /// </summary>
-    /// <param name="target"></param>
-    /// <returns></returns>
-    public static string ToPlatformFolder(BuildTarget target)
+
+    /// <summary>平台写入文件名的后缀（小写），用于 <c>name_android.assetbundle</c>。</summary>
+    public static string ToPlatformFileSuffix(BuildTarget target)
     {
         if (target == BuildTarget.iOS)
         {
-            return RetinarPaths.PlatformIOS;
+            return "ios";
         }
 
         if (target == BuildTarget.Android)
         {
-            return RetinarPaths.PlatformAndroid;
+            return "android";
         }
 
-        return target.ToString();
+        return target.ToString().ToLowerInvariant();
     }
 
-    /// <summary>历史交付文件名：小写资产名 + "." + variant。</summary>
-    public static string BuildBundleFileName(string assetName)
+    /// <summary>交付文件名：<c>name_android.assetbundle</c> / <c>name_ios.assetbundle</c>。</summary>
+    public static string BuildBundleFileName(string assetName, BuildTarget target)
     {
-        return assetName.ToLowerInvariant() + "." + RetinarPaths.AssetBundleVariant;
+        string stem = MakeSafeName(assetName).ToLowerInvariant();
+        return stem + "_" + ToPlatformFileSuffix(target) + "." + RetinarPaths.AssetBundleVariant;
+    }
+
+    /// <summary>Unity BuildAssetBundles 在输出目录里用的主文件名（无平台后缀）。</summary>
+    public static string BuildUnityBundleFileName(string assetName)
+    {
+        return MakeSafeName(assetName).ToLowerInvariant() + "." + RetinarPaths.AssetBundleVariant;
     }
 }

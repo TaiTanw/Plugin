@@ -2,11 +2,25 @@
 
 记录规则：最新版本写在最上方；每次修改必须填写“原因、改动、影响、验证、回退”。
 
+## 2026-09-18 — v1.6.0：编排边界收口
+
+- 原因：④ 收口之后要把日常人机边界收齐：管线路径、导入钩子、菜单、⑥ 产物文件名。
+- 改动：
+  1. **路径：** Incoming / IncomingPrefab / Art 由步骤 SO 真源；编排外工具自管。
+  2. **导入期：** `ImportPipelineSettings` 总开关；OnPreprocess 不读选择器导入根；⑤ 在④后跑，不复活 delayCall。
+  3. **菜单：** `打开交付文件夹` / `自动化管线总面板` / `全局导入设置（2）` / `手动操作栏`（步骤+设置）。
+  4. **⑥：** 产品夹不再分 Android/iOS；文件名为 `name_android.assetbundle` / `name_ios.assetbundle`。手工⑥选文件夹扫 Prefab，不读管线 SO。
+  5. **选择器：** 列表可改 ID2，输出到编排按该 ID。
+- 影响：当前推荐线 **v1.6.0**。APP 若仍按平台子夹 + `name.assetbundle` 取包会找不到文件。
+- 验证：编辑器菜单与面板改动已按确认项落地；本机未重跑无头全流程。
+- 回退：回退至标签 `v1.5.3`（④ 1–14 之后、本批之前用 `23b3567`）。
+- 关联问题：prd-docs#274。
+
 ## 2026-09-02 — D5 无头验收（文档收口）
 
 - 原因：本机已用 `-batchmode -executeMethod PipelineCli.Run` 跑通全流程，需把 D5 从「待验收」改成完成，并冻结参数/退出码。
 - 改动：文档标注 D5 完成（backlog 迁已结束；cli-getting-started / pipeline-flow / 总目录 / 开发日志）。**无代码。**
-- 影响：D5 关闭。契约冻：仅 `-source` + `-materialId`；步骤跟 SO；退出码 0/10/20/30/40/50/60/80；70 不赋值；⑥ `PartialOk` 仍 0。扩 flag、D10、License、AB 改名仍不在本刀。
+- 影响：D5 关闭。契约冻：仅 `-source` + `-materialId`；步骤跟 SO；退出码 0/10/20/30/40/50/60/80；70 不赋值；⑥ Android+iOS 均成功才 0。扩 flag、D10、License、AB 改名仍不在本刀。
 - 验证：Unity `2022.3.54f1c1`，`-source` 工程外 `直18.gltf`，`-materialId GLTF直18`，日志 `[Pipeline] exit=0 OK`。
 - 回退：还原本次文档即可。
 - 关联问题：prd-docs#274。

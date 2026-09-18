@@ -25,12 +25,16 @@ public static class PrefabIncomingPaths
     /// <param name="sourceModelAssetPath">Assets 下模型路径，或磁盘绝对路径</param>
     /// <param name="materialId">CLI/任务 Id；非空则覆盖三层名</param>
     /// <param name="nameDisambiguator">同名冲突时追加的 stem（可为 null）</param>
+    /// <param name="prefabRoot">非空覆盖落盘根。</param>
+    /// <param name="importRoot">非空覆盖 Incoming 夹名识别。</param>
     public static string PrefabPathForSourceModel(
         string sourceModelAssetPath,
         string materialId = null,
-        string nameDisambiguator = null)
+        string nameDisambiguator = null,
+        string prefabRoot = null,
+        string importRoot = null)
     {
-        string baseName = ResolvePrefabBaseName(sourceModelAssetPath, materialId);
+        string baseName = ResolvePrefabBaseName(sourceModelAssetPath, materialId, importRoot);
         if (!string.IsNullOrEmpty(nameDisambiguator))
         {
             string stem = BatchFbxImportService.SanitizeFolderName(nameDisambiguator);
@@ -41,11 +45,17 @@ public static class PrefabIncomingPaths
             }
         }
 
-        return PrefabRoot + "/" + baseName + ".prefab";
+        string root = string.IsNullOrWhiteSpace(prefabRoot)
+            ? PrefabRoot
+            : prefabRoot.Replace("\\", "/").TrimEnd('/');
+        return root + "/" + baseName + ".prefab";
     }
 
     /// <summary>解析 Prefab 主文件名（无扩展名、无根路径）。</summary>
-    public static string ResolvePrefabBaseName(string sourceModelAssetPath, string materialId = null)
+    public static string ResolvePrefabBaseName(
+        string sourceModelAssetPath,
+        string materialId = null,
+        string importRoot = null)
     {
         if (!string.IsNullOrWhiteSpace(materialId))
         {
@@ -58,7 +68,7 @@ public static class PrefabIncomingPaths
         // 已在 Import 区：夹名在导入时已是「三层名」，勿再对 Assets/Incoming/… 向上取三层
         // （否则会得到 Assets_Incoming_xxx）。
         string importFolderName;
-        if (TryGetIncomingImportFolderName(pathForResolve, out importFolderName))
+        if (TryGetIncomingImportFolderName(pathForResolve, out importFolderName, importRoot))
         {
             return importFolderName;
         }
@@ -94,7 +104,10 @@ public static class PrefabIncomingPaths
     /// <summary>
     /// Assets/{ImportRoot}/{夹名}/文件 → 返回夹名（导入时已按三层规则命名）。
     /// </summary>
-    private static bool TryGetIncomingImportFolderName(string assetPath, out string folderName)
+    private static bool TryGetIncomingImportFolderName(
+        string assetPath,
+        out string folderName,
+        string importRoot = null)
     {
         folderName = null;
         if (string.IsNullOrEmpty(assetPath) ||
@@ -103,8 +116,10 @@ public static class PrefabIncomingPaths
             return false;
         }
 
-        string importRoot = BatchFbxImportSettings.Current.NormalizedImportRoot;
-        string prefix = importRoot.TrimEnd('/') + "/";
+        string root = string.IsNullOrWhiteSpace(importRoot)
+            ? BatchFbxImportSettings.Current.NormalizedImportRoot
+            : importRoot.Replace("\\", "/").TrimEnd('/');
+        string prefix = root.TrimEnd('/') + "/";
         if (!assetPath.StartsWith(prefix, System.StringComparison.OrdinalIgnoreCase))
         {
             return false;

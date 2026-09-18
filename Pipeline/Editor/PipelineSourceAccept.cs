@@ -1,4 +1,3 @@
-using System;
 using System.Collections.Generic;
 
 // =====================================================================================
@@ -11,16 +10,9 @@ using System.Collections.Generic;
 /// </summary>
 public static class PipelineSourceAccept
 {
-    /// <summary>总面板订阅。参数为建议 Bindings（路径 + 缺省 ID2）。</summary>
-    public static event Action<IList<PipelineSourceBinding>> Received;
-
     /// <summary>打开编排面板并投递。筛选完成，尚未 1 入库。</summary>
     public static void SendToOrchestration(IList<PipelineSourceBinding> bindings)
     {
         PipelineWindow.AcceptBindings(bindings);
-        if (Received != null)
-        {
-            Received(bindings);
-        }
     }
 }

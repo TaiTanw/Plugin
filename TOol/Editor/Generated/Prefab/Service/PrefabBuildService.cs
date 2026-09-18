@@ -25,9 +25,13 @@ public static class PrefabBuildService
     /// <param name="sourceModelPaths">Assets 下 .fbx / .glb 等路径</param>
     /// <param name="materialId">非空时覆盖三层目录命名（任务/CLI）</param>
     /// <returns>成功写出的 Prefab 资产路径列表</returns>
+    /// <param name="prefabRoot">非空覆盖 Prefab 落盘根。</param>
+    /// <param name="importRoot">非空覆盖 Incoming 夹名识别。</param>
     public static List<string> BuildPrefabsFromModels(
         IList<string> sourceModelPaths,
-        string materialId = null)
+        string materialId = null,
+        string prefabRoot = null,
+        string importRoot = null)
     {
         var written = new List<string>();
         if (sourceModelPaths == null || sourceModelPaths.Count == 0)
@@ -36,7 +40,10 @@ public static class PrefabBuildService
             return written;
         }
 
-        EnsureAssetFolder(PrefabIncomingPaths.PrefabRoot);
+        string root = string.IsNullOrWhiteSpace(prefabRoot)
+            ? PrefabIncomingPaths.PrefabRoot
+            : prefabRoot.Replace("\\", "/").TrimEnd('/');
+        EnsureAssetFolder(root);
 
         var usedBaseNames = new HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
         bool multiWithMaterialId = !string.IsNullOrEmpty(materialId) && sourceModelPaths.Count > 1;
@@ -58,7 +65,8 @@ public static class PrefabBuildService
 
             string stem = Path.GetFileNameWithoutExtension(source);
             string disambiguator = multiWithMaterialId ? stem : null;
-            string target = PrefabIncomingPaths.PrefabPathForSourceModel(source, materialId, disambiguator);
+            string target = PrefabIncomingPaths.PrefabPathForSourceModel(
+                source, materialId, disambiguator, root, importRoot);
             string baseName = Path.GetFileNameWithoutExtension(target);
 
             int suffix = 0;
@@ -66,7 +74,8 @@ public static class PrefabBuildService
             {
                 suffix++;
                 disambiguator = string.IsNullOrEmpty(stem) ? ("i" + suffix) : (stem + "_" + suffix);
-                target = PrefabIncomingPaths.PrefabPathForSourceModel(source, materialId, disambiguator);
+                target = PrefabIncomingPaths.PrefabPathForSourceModel(
+                    source, materialId, disambiguator, root, importRoot);
                 baseName = Path.GetFileNameWithoutExtension(target);
             }
 
@@ -87,7 +96,7 @@ public static class PrefabBuildService
         }
 
         Debug.Log("[TOol][Prefab] 完成：成功 " + written.Count + " / 输入 " + sourceModelPaths.Count +
-                  " → 根目录 " + PrefabIncomingPaths.PrefabRoot);
+                  " → 根目录 " + root);
         return written;
     }
 

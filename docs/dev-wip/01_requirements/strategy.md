@@ -13,14 +13,14 @@
 | 主开发宿主 | Unity 2022.3，`Plugin2022`；2020 的 `ModleEvent` 只作对照，不原地升级 |
 | 插件仓 | `Assets/Plugin`；宿主不另建整仓、不改 Gitea 仓名 |
 | 远程 | `team` 为 Gitea 协作源，`origin` 为 GitHub 备份 |
-| 版本 | v1.5.3 是已有发布标签，不代表当前 main；④ 步骤 1–14 已落地（2026-09-16），含 41/42 的改动尚未提交 |
+| 版本 | 当前推荐 **v1.6.0**；v1.5.3 为上一发布标签 |
 
 ## 管线产品拆分
 
 | 项 | 已确认要求与当前口径 |
 |---|---|
 | 最小线 | ②→③→⑥是可裁剪最小线，不是当前默认配置 |
-| 默认线 | 经 `PipelineOptions.FromSettings` 读取仓内 SO，②③④⑤⑥均开启；④⑤可关。直接 new Options 的字段初值不等于 SO 默认 |
+| 默认线 | 操作者入口的②入库固定开启；`PipelineOptions.FromSettings` 读取仓内 SO 控制③④⑤⑥，默认均开启，④⑤可关。底层直接 new Options 可显式改写 |
 | ④归属 | 实现已物理迁入 TOol；消费 ctx 的编排暂归中间层。**内核目标改为只收 FlattenPlan，不再读 ctx。** 旧 3518 行对照删除，禁止先清空。⑥ 已有独立 Build 口，不随④重写 |
 | ④人工操作 | “普通平铺（B）”“原子迁移（B′）”均执行完整④；内部七步拆分服务代码结构，不开放任意单步产品按钮。用户已确认，这不是待决风险 |
 | ctx | 自动管线每模型在②后构建一次；人工**禁止** `PipelineJobContext.Build`，Scan 组 plan。事实与 SO/人工决定分开 |
@@ -32,7 +32,7 @@
 
 | 侧 | 负责 | 当前尚未收口 |
 |---|---|---|
-| 中间层 Pipeline（含暂归的④编排内核） | 总步骤、按模型 ctx、分支、请求组合、结果/退出码 | 自动与人工④仍分别编排；行对齐与首错保存待修 |
+| 中间层 Pipeline（含暂归的④编排内核） | 总步骤、按模型 ctx、分支、请求组合、结果/退出码 | 自动与人工④仍分别编排；首错保存已修，稳定行 ID 仍停放 |
 | 插件 2 TOol | 导入与设置、③ Prefab、资源执行能力、⑤ Op | 物理承载④的约 3,518 行遗产，尚未按七步拆文件；不能因在 TOol 就要求它自行重建 ctx |
 | 插件 1 Retinar | ⑥输出格式与 AB；现存平铺菜单只是转发适配 | ④已停写 AB 标签（步骤 8）；格式白名单见 D24-R4 |
 
@@ -44,7 +44,7 @@
 
 | 配置 | 当前落地 | 边界 |
 |---|---|---|
-| 总步骤 | `PipelineStepSettings` SO | 面板仍强制 RunImport=true，CLI 跟 SO，D26-5 未解决 |
+| 总步骤 | `PipelineStepSettings` SO | 仅控制③④⑤⑥与 quiet；操作者面板和 CLI 的②入库固定开启。底层 API 仍可直接设置 `PipelineOptions.RunImport` |
 | 平铺单项 | `FlattenOperationSettings` 同类两实例：TOol/ConfigData/Manual 与 Pipeline/ConfigData | 人工可拖 SO；面板只编辑本来源目录，跨来源/未知来源只读；运行时冻结 `FlattenOperationPolicy` |
 | 导出 | `RetinarExportSettings` SO → 构建 Options | 不含旧门禁/全套报告能力 |
 | ⑤资源类型纳入、人工批量路径、部分 UI 状态 | 仍有 EditorPrefs | 尚未完成 SO 化，不得宣称 CLI 已脱离机器状态 |

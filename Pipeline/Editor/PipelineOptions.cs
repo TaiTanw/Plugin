@@ -25,6 +25,15 @@ public sealed class PipelineOptions
     /// <summary>⑤ 资源后处理（默认关）。</summary>
     public bool RunPostProcess;
 
+    /// <summary>⑤ 纳入贴图。来自步骤 SO；编排必须显式传给内核，禁止回落资源面板 Prefs。</summary>
+    public bool PostProcessIncludeTexture = true;
+
+    /// <summary>⑤ 纳入材质。来自步骤 SO。</summary>
+    public bool PostProcessIncludeMaterial = true;
+
+    /// <summary>⑤ 纳入模型。来自步骤 SO。</summary>
+    public bool PostProcessIncludeModel = true;
+
     /// <summary>⑥ 是否导出（步骤开关）。产物种类/路径在 <see cref="AbBuildOptions"/> / 导出 SO。</summary>
     public bool RunAb = true;
 
@@ -36,6 +45,15 @@ public sealed class PipelineOptions
 
     /// <summary>禁止 DisplayDialog（编排默认 true）。</summary>
     public bool Quiet = true;
+
+    /// <summary>[1] 导入根。来自步骤 SO；空则 <see cref="PipelineWorkspace.DefaultImportRoot"/>。</summary>
+    public string ImportRoot = PipelineWorkspace.DefaultImportRoot;
+
+    /// <summary>[③] Prefab 根。来自步骤 SO。</summary>
+    public string PrefabRoot = PipelineWorkspace.DefaultPrefabRoot;
+
+    /// <summary>[④] 交付根；⑤ 单元夹与⑥ UP 前缀也用它。</summary>
+    public string ArtRoot = PipelineWorkspace.DefaultArtRoot;
 
     /// <summary>④开始前从管线平铺 SO 冻结的本趟配置。</summary>
     public FlattenOperationPolicy FlattenPolicy =

@@ -26,6 +26,8 @@ public static class BatchFbxImportService
     {
         public string SourceFbxPath;
         public string FolderName;
+        /// <summary>列表可改的 ID2；入库夹名与输出到编排都用它。空则回落三层夹名。</summary>
+        public string Id2;
         public string TargetFolderAssetPath;
         public string TargetFbxAssetPath;
         public ItemStatus Status;
@@ -187,18 +189,157 @@ public static class BatchFbxImportService
     public static List<ImportItem> RebuildItems(IList<ImportItem> existing, BatchFbxImportSettings settings)
     {
         var paths = new List<string>();
+        var id2ByPath = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         if (existing != null)
         {
             foreach (ImportItem item in existing)
             {
-                if (item != null && !string.IsNullOrEmpty(item.SourceFbxPath))
+                if (item == null || string.IsNullOrEmpty(item.SourceFbxPath))
                 {
-                    paths.Add(item.SourceFbxPath);
+                    continue;
                 }
+
+                paths.Add(item.SourceFbxPath);
+                id2ByPath[item.SourceFbxPath] = item.Id2 ?? string.Empty;
             }
         }
 
-        return BuildItems(paths, settings);
+        List<ImportItem> rebuilt = BuildItems(paths, settings);
+        for (int i = 0; i < rebuilt.Count; i++)
+        {
+            ImportItem item = rebuilt[i];
+            string preserved;
+            if (!id2ByPath.TryGetValue(item.SourceFbxPath, out preserved))
+            {
+                continue;
+            }
+
+            string suggested = item.FolderName ?? string.Empty;
+            string sanitized = string.IsNullOrWhiteSpace(preserved)
+                ? string.Empty
+                : SanitizeFolderName(preserved.Trim());
+            if (!string.Equals(sanitized, suggested, StringComparison.OrdinalIgnoreCase) ||
+                !string.Equals(preserved ?? string.Empty, suggested, StringComparison.Ordinal))
+            {
+                ApplyIncomingId2(item, preserved, settings);
+            }
+            else
+            {
+                item.Id2 = suggested;
+            }
+        }
+
+        RefreshConflictStates(rebuilt, settings);
+        return rebuilt;
+    }
+
+    /// <summary>把 ID2 写进夹名与目标路径。不重跑三层建议（除非 ID2 为空）。</summary>
+    public static void ApplyIncomingId2(ImportItem item, string id2, BatchFbxImportSettings settings)
+    {
+        if (item == null || settings == null)
+        {
+            return;
+        }
+
+        item.Id2 = id2 ?? string.Empty;
+        string folderName;
+        if (string.IsNullOrWhiteSpace(id2))
+        {
+            bool fallback;
+            string warning;
+            folderName = ResolveFolderName(item.SourceFbxPath, out fallback, out warning);
+            item.UsedFullPathFallback = fallback;
+            item.UsedFbxNameDisambiguation = false;
+            item.Message = warning;
+        }
+        else
+        {
+            folderName = SanitizeFolderName(id2.Trim());
+            item.UsedFullPathFallback = false;
+            item.UsedFbxNameDisambiguation = false;
+        }
+
+        item.FolderName = folderName;
+        string root = settings.NormalizedImportRoot;
+        item.TargetFolderAssetPath = root + "/" + folderName;
+        item.TargetFbxAssetPath = item.TargetFolderAssetPath + "/" + Path.GetFileName(item.SourceFbxPath);
+    }
+
+    /// <summary>按当前 FolderName 重算 Conflict / Warning，不改 ID2。</summary>
+    public static void RefreshConflictStates(IList<ImportItem> items, BatchFbxImportSettings settings)
+    {
+        if (items == null || settings == null)
+        {
+            return;
+        }
+
+        var finalNameCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (ImportItem item in items)
+        {
+            if (item == null || string.IsNullOrEmpty(item.FolderName))
+            {
+                continue;
+            }
+
+            int count;
+            finalNameCounts.TryGetValue(item.FolderName, out count);
+            finalNameCounts[item.FolderName] = count + 1;
+        }
+
+        foreach (ImportItem item in items)
+        {
+            if (item == null)
+            {
+                continue;
+            }
+
+            var problems = new List<string>();
+            if (finalNameCounts.TryGetValue(item.FolderName, out int nameCount) && nameCount > 1)
+            {
+                problems.Add("列表内夹名重名（ID2 冲突）");
+            }
+
+            if (AssetDatabase.IsValidFolder(item.TargetFolderAssetPath) ||
+                Directory.Exists(AssetPathUtility.ToFullPath(item.TargetFolderAssetPath)))
+            {
+                problems.Add("目标文件夹已存在");
+            }
+
+            if (settings.IsDeliveryAlertPath(item.TargetFolderAssetPath) ||
+                settings.IsDeliveryAlertPath(item.TargetFolderAssetPath + "/"))
+            {
+                problems.Add("目标落在交付区警报路径");
+            }
+
+            if (problems.Count > 0)
+            {
+                item.Status = ItemStatus.Conflict;
+                item.Message = string.Join("；", problems);
+                continue;
+            }
+
+            var warnParts = new List<string>();
+            if (item.UsedFullPathFallback)
+            {
+                warnParts.Add("路径不足 3 层，已用全路径消毒名。");
+            }
+
+            if (item.UsedFbxNameDisambiguation)
+            {
+                warnParts.Add("同夹多模型，已追加文件名消歧：" + item.FolderName);
+            }
+
+            if (warnParts.Count > 0)
+            {
+                item.Status = ItemStatus.Warning;
+                item.Message = string.Join(" | ", warnParts);
+            }
+            else
+            {
+                item.Status = ItemStatus.Ready;
+                item.Message = "就绪";
+            }
+        }
     }
 
     public static bool HasBlockingAlerts(IList<ImportItem> items, BatchFbxImportSettings settings, out string reason)
@@ -434,6 +575,7 @@ public static class BatchFbxImportService
             {
                 SourceFbxPath = fbx,
                 FolderName = folderName,
+                Id2 = folderName,
                 TargetFolderAssetPath = targetFolder,
                 TargetFbxAssetPath = targetFolder + "/" + fileName,
                 UsedFullPathFallback = fallback,
@@ -465,80 +607,13 @@ public static class BatchFbxImportService
             string stem = Path.GetFileNameWithoutExtension(item.SourceFbxPath);
             string disambiguated = SanitizeFolderName(item.FolderName + "_" + stem);
             item.FolderName = disambiguated;
+            item.Id2 = disambiguated;
             item.TargetFolderAssetPath = root + "/" + disambiguated;
             item.TargetFbxAssetPath = item.TargetFolderAssetPath + "/" + Path.GetFileName(item.SourceFbxPath);
             item.UsedFbxNameDisambiguation = true;
         }
 
-        var finalNameCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-        foreach (ImportItem item in items)
-        {
-            if (finalNameCounts.ContainsKey(item.FolderName))
-            {
-                finalNameCounts[item.FolderName]++;
-            }
-            else
-            {
-                finalNameCounts[item.FolderName] = 1;
-            }
-        }
-
-        foreach (ImportItem item in items)
-        {
-            var problems = new List<string>();
-
-            if (finalNameCounts.TryGetValue(item.FolderName, out int count) && count > 1)
-            {
-                problems.Add("列表内夹名重名（追加文件名后仍冲突）");
-            }
-
-            if (AssetDatabase.IsValidFolder(item.TargetFolderAssetPath) ||
-                Directory.Exists(AssetPathUtility.ToFullPath(item.TargetFolderAssetPath)))
-            {
-                problems.Add("目标文件夹已存在");
-            }
-
-            if (settings.IsDeliveryAlertPath(item.TargetFolderAssetPath) ||
-                settings.IsDeliveryAlertPath(item.TargetFolderAssetPath + "/"))
-            {
-                problems.Add("目标落在交付区警报路径");
-            }
-
-            if (problems.Count > 0)
-            {
-                item.Status = ItemStatus.Conflict;
-                string conflictMsg = string.Join("；", problems);
-                item.Message = string.IsNullOrEmpty(item.Message)
-                    ? conflictMsg
-                    : item.Message + " | " + conflictMsg;
-                continue;
-            }
-
-            var warnParts = new List<string>();
-            if (item.UsedFullPathFallback)
-            {
-                warnParts.Add(string.IsNullOrEmpty(item.Message)
-                    ? "路径不足 3 层，已用全路径消毒名。"
-                    : item.Message);
-            }
-
-            if (item.UsedFbxNameDisambiguation)
-            {
-                warnParts.Add("同夹多模型，已追加文件名消歧：" + item.FolderName);
-            }
-
-            if (warnParts.Count > 0)
-            {
-                item.Status = ItemStatus.Warning;
-                item.Message = string.Join(" | ", warnParts);
-            }
-            else
-            {
-                item.Status = ItemStatus.Ready;
-                item.Message = "就绪";
-            }
-        }
-
+        RefreshConflictStates(items, settings);
         return items;
     }
 

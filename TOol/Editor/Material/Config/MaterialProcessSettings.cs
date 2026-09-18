@@ -12,6 +12,8 @@ public class MaterialProcessSettings : ScriptableObject
 {
     public const string DefaultAssetPath =
         "Assets/Plugin/TOol/ConfigData/MaterialProcessSettings.asset";
+    public const string PipelineAssetPath =
+        ProcessSettingsOwnership.PipelineConfigRoot + "/MaterialProcessSettings.asset";
 
     public const string OpNormalizeDeliverableShader = "normalize_deliverable_shader";
 
@@ -37,6 +39,7 @@ public class MaterialProcessSettings : ScriptableObject
         new List<string> { OpNormalizeDeliverableShader };
 
     private static MaterialProcessSettings assetInstance;
+    private static MaterialProcessSettings pipelineInstance;
     private static MaterialProcessSettings fallbackInstance;
     private static bool fallbackWarningLogged;
 
@@ -163,6 +166,32 @@ public class MaterialProcessSettings : ScriptableObject
         return created;
     }
 
+    public static MaterialProcessSettings GetOrCreatePipelineAsset()
+    {
+        if (pipelineInstance != null)
+        {
+            pipelineInstance.EnsureMasterBatchDefaults();
+            return pipelineInstance;
+        }
+
+        pipelineInstance = AssetDatabase.LoadAssetAtPath<MaterialProcessSettings>(PipelineAssetPath);
+        if (pipelineInstance != null)
+        {
+            pipelineInstance.EnsureMasterBatchDefaults();
+            return pipelineInstance;
+        }
+
+        ProcessSettingsOwnership.EnsureAssetFolder(
+            Path.GetDirectoryName(PipelineAssetPath).Replace("\\", "/"));
+        var created = CreateInstance<MaterialProcessSettings>();
+        created.EnsureMasterBatchDefaults();
+        AssetDatabase.CreateAsset(created, PipelineAssetPath);
+        AssetDatabase.SaveAssets();
+        pipelineInstance = created;
+        Debug.Log("[MaterialProcessSettings] 已创建编排配置资产: " + PipelineAssetPath);
+        return created;
+    }
+
     private static MaterialProcessSettings FindExistingAsset()
     {
         if (assetInstance != null)
@@ -179,10 +208,20 @@ public class MaterialProcessSettings : ScriptableObject
         }
 
         string[] guids = AssetDatabase.FindAssets("t:MaterialProcessSettings");
-        if (guids != null && guids.Length > 0)
+        if (guids == null)
         {
-            assetInstance = AssetDatabase.LoadAssetAtPath<MaterialProcessSettings>(
-                AssetDatabase.GUIDToAssetPath(guids[0]));
+            return null;
+        }
+
+        for (int i = 0; i < guids.Length; i++)
+        {
+            string path = AssetDatabase.GUIDToAssetPath(guids[i]);
+            if (ProcessSettingsOwnership.IsPipelineConfigPath(path))
+            {
+                continue;
+            }
+
+            assetInstance = AssetDatabase.LoadAssetAtPath<MaterialProcessSettings>(path);
             if (assetInstance != null)
             {
                 assetInstance.EnsureMasterBatchDefaults();

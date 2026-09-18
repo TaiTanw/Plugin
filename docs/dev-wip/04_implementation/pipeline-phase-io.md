@@ -153,7 +153,7 @@ bool ImportSingleModel(string sourcePath, string incomingFolderName, out string 
 | **给谁** | ③ 的该行模型；然后该行 2.5 |
 | **识别** | 白名单后缀；gltf 跟拷伴生。筛选后缀不进本窄口 |
 
-总面板跑管线时始终入库。CLI 跟 SO 的 `runImport`。设置自动不是本窄口返回值。
+总面板与 CLI 跑操作者管线时始终入库；`PipelineStepSettings` 不再保存 `runImport`。底层 API 可直接设置 `PipelineOptions.RunImport`。设置自动不是本窄口返回值。
 
 ### 2 总闸（无窄口）
 

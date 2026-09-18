@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 
 // =====================================================================================
-// Flatten / Operations — 人工 FlattenPlan。按钮给 Branch；sidecar 只来自 Scan。禁止 ctx。
+// ManualFlatten / Plan — 人工 FlattenPlan。按钮给 Branch；sidecar 只来自 Scan。禁止 ctx。
 // =====================================================================================
 
 /// <summary>把 Scan 事实 + 人给的政策写成 Run(plan) 入参。</summary>

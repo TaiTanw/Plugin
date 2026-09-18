@@ -16,6 +16,9 @@ public sealed class ToolPostProcessResult
     /// <summary>用户取消进度条（已跑部分仍生效）。单独取消不算硬失败。</summary>
     public bool Canceled;
 
+    /// <summary>三类主批量操作均未纳入；这是可继续的配置告警，不是执行硬失败。</summary>
+    public bool NoOperationsConfigured;
+
     /// <summary>给人读的拼接报告（面板 / 日志）。</summary>
     public string Report = string.Empty;
 

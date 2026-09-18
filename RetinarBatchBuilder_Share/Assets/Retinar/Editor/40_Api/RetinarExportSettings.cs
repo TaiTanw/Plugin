@@ -25,7 +25,7 @@ public class RetinarExportSettings : ScriptableObject
     [Tooltip("⑥ 是否额外打 UnityPackage 到 Deliverables/<名>/02_unity。管线面板不另设勾选，只读本字段。")]
     public bool exportUnityPackage;
 
-    [Tooltip("是否把 AB 拷到 Deliverables/<名>/03_assetbundles。")]
+    [Tooltip("是否把 AB 拷到 Deliverables/<名>/03_assetbundles（同夹 name_android / name_ios，不按平台分子夹）。")]
     public bool copyAbToDeliverables = true;
 
     private static RetinarExportSettings assetInstance;

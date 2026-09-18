@@ -7,11 +7,11 @@ using UnityEngine;
 // =====================================================================================
 
 /// <summary>
-/// 预设体制作配置（常量起步；后续可改为 ScriptableObject）。
+/// 预设体制作配置（人工默认根）。编排③读 PipelineStepSettings.prefabRootPath。
 /// </summary>
 public static class PrefabBuildSettings
 {
-    /// <summary>默认把自动生成的 Prefab 放到此 Assets 根下（可改）。</summary>
+    /// <summary>人工 / 未传 override 时的 Prefab 根。</summary>
     public const string DefaultPrefabRoot = "Assets/IncomingPrefab";
 
     /// <summary>

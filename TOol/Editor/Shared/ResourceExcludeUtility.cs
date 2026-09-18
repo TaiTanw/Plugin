@@ -27,4 +27,17 @@ public static class ResourceExcludeUtility
 
         return false;
     }
+
+    public static bool IsUnderRoot(string assetPath, string root)
+    {
+        if (string.IsNullOrEmpty(assetPath) || string.IsNullOrEmpty(root))
+        {
+            return false;
+        }
+
+        string p = assetPath.Replace("\\", "/").TrimEnd('/');
+        string r = root.Replace("\\", "/").TrimEnd('/');
+        return p.Equals(r, System.StringComparison.OrdinalIgnoreCase) ||
+               p.StartsWith(r + "/", System.StringComparison.OrdinalIgnoreCase);
+    }
 }

@@ -5,12 +5,12 @@
 // =====================================================================================
 
 /// <summary>
-/// 平铺配置（常量起步；后续可改为 ScriptableObject）。
+/// 平铺配置（人工 / 内核默认根）。编排④读 PipelineStepSettings.artRootPath，经 Options 传入。
 /// </summary>
 public static class FlattenBuildSettings
 {
     /// <summary>
-    /// 交付区根。须与 <c>RetinarPaths.ArtRoot</c> 字面量一致（⑥ 仍读那一处）。
+    /// 人工平铺默认交付根。编排不读此处。⑥ 无 Options.ArtRoot 时仍回落 RetinarPaths.ArtRoot。
     /// </summary>
     public const string ArtRoot = "Assets/Art";
 

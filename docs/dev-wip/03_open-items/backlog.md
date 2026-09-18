@@ -12,23 +12,52 @@
 
 ## A. Open items
 
-**排序规则：P0 阻断正确交付或阻断继续拆分；P1 会静默产错或让两入口不一致；P2 为边界债务；P3 为延后项。每级从上到下执行。**
-
-| 顺序 | ID | 严重度 | 类别 | 当前问题 | 下一验收 |
-|---:|---|---|---|---|---|
-| 1 | D24-R1b | P1 | 真实模型回归 | **2026-09-15 基本核对完成。** 步骤 1–14 已落地。目录树/hash 未逐格勾 | 真实重名专项、内嵌 Extract、leftover>0 真样仍待验 |
-| 2 | D25-2 | P1 | FBX 伴生 | **（A）已落地：** ① 跟拷外置图。内嵌仍等④ Extract | 内嵌档未做 |
-| 3 | D25-4 | P1 | 引用隔离 | Extract 后再导入按短名挂兄弟单元 | 步骤 11：**Fail(42)** 不停⑤⑥，保留原引用；真实重名专项仍待验 |
-| 4 | D26-4 | P1 | 退出码 | `Fail` 后错覆盖前错 | 保留首个失败码 |
-| 5 | D26-5 | P1 | 入口一致性 | 面板强制入库，CLI 跟 SO | 两入口对同一 Options 一致，或写成显式差异 |
-| 6 | D26-6 | P1 | ⑤ 跳过 | 无统一 typed 跳过原因 | 先核汇总契约；不让 Runner 读 Op 内部 |
-| 7 | D26-7 | P2 | 行对齐 | 管线④已按下标配对；人工④已不建 ctx | 可关 |
-| 8 | D26-8 | P2 | 死接口 | `Received` 零订阅 | 接线或删除 |
-| 9 | D10-3 / D11 / D14 | P2 | 产品能力 | Pack / 清 Incoming / 动画音效 | 不与 D24 同刀 |
-| 10 | D24-9 / D15 / D21 | P3 | 清理 | 死自动层、扫描范围、Skip 口径 | P1 后处理 |
+**本表只保留会影响服务器正确交付、错误码或可诊断性的 P0/P1。产品扩展、目录卫生、人工窗口便利项移出严格队列。每级从上到下执行。**
 
 
-### 当前关键拆分
+| 顺序  | ID      | 严重度    | 类别     | 当前问题                                                                         | 下一验收                                  |
+| --- | ------- | ------ | ------ | ---------------------------------------------------------------------------- | ------------------------------------- |
+| 1   | D24-R1b | P1     | 真实模型回归 | 步骤 1–14 **已落地**（`23b3567` 已上推）。目录树/hash 未逐格勾                                 | leftover>0 咬 **41**；内嵌 Extract；真实重名专项 |
+| 2   | D25-2   | P1     | FBX 伴生 | **（A）已落地：** ① 跟拷外置图。**（B）** 内嵌仍等④ Extract                                    | 内嵌档未做                                 |
+| 3   | D25-4   | P1     | 引用隔离   | Extract 后再导入按短名挂兄弟单元                                                         | **Fail(42)** 不停⑤⑥，保留原引用；真实重名专项仍待验     |
+| 4   | D26-6   | ~~P1~~ | ⑤ 跳过   | 已修：`ToolPostProcessResult.NoOperationsConfigured` 提供 typed 配置告警；⑤ 不阻断，报告并继续⑥ |                                       |
+
+
+
+
+### 接下来的重点（④ 1–14 之后）
+
+**本仓先做质量闸有没有咬过，再做编排债。不要拆 3518 行目录、不要重写⑥、不要在本仓接 License/Docker。**
+
+
+| 优先  | 做什么                                        | 为什么                               |
+| --- | ------------------------------------------ | --------------------------------- |
+| 1   | leftover>0 真样 → CLI **41** 且⑤⑥仍跑           | 14 步闸已加，现网样例全是 0，等于没验收            |
+| 2   | 内嵌 FBX Extract（D25-2 B）/ 真实重名（D25-4）       | 否则 42 与隔离仍是纸面                     |
+| 3   | D26-6 typed 跳过契约                           | 服务器需区分真正无工作与配置空跑；不让 Runner 解析文本报告 |
+| 停放  | 内核拆文件、稳定行 ID、坏行跳过、⑥改名、License 70、Docker 镜像 | ④编号单已完；外壳属 V1.2 基建                |
+
+
+操作者入口仍看 [插件根 README](../../../README.md)。
+
+### V1.2 工单 #274（2026-09-16 读帖，未回）
+
+最新回帖：[comment 17984](http://swm-server.local:3000/Admin/prd-docs/issues/274#issuecomment-17984)（2026-09-06，lean-api-bot / kimi-code）。通知已标已读。**本仓不回帖**，先核对下面评估。
+
+**那句评估拆开看：**「Unity 2022.3 AB 构建器是 V1.2 自动转换流水线的核心件（headless Unity Docker、双平台 AB 构建、License 处理）」
+
+
+| 判断               | 说明                                                                                                                                                                                                                                                                       |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 系统层：**方向对**      | 没有自动转换内核，V1.2 出不了 APP 可加载 AB；工期/风险也确实高                                                                                                                                                                                                                                   |
+| 括号三件事捆成一件：**不对** | 只有 **双端 AB** 是本仓核心。Docker 镜像、队列、COS、License 激活是基建/Worker                                                                                                                                                                                                                 |
+| 本仓已交付            | Windows `-batchmode` + `PipelineCli.Run`；②③④⑤⑥；`RetinarAbApi` 双端 LZ4。v1.5.0 起 YuWu 已声明接手；现网 `23b3567`                                                                                                                                                                    |
+| 本仓未做             | Docker 镜像、容器内 License、COS 上传。错误码 **70 从未赋值**                                                                                                                                                                                                                             |
+| 工单正文 vs 现网       | 正文仍是 GLB→GO→AB / 方案偏 URP / `2022.3.48f1` / `{id}_android.assetbundle`。现网是 FBX/OBJ/GLB/glTF 全管线、Built-in Standard 烤、本机 `2022.3.54f1c1`、`AssetBundles/{Android,iOS}/{name}.assetbundle`（上传层可改名）                                                                            |
+| 机器人漏读            | 「无法判断未开始还是在研」不成立：已有 [14305](http://swm-server.local:3000/Admin/prd-docs/issues/274#issuecomment-14305)。「本周给出 License+Docker 结论」把内核进度和基建 POC 绑死了。P0 vs「V1.0 不实施」是标签问题，[15049](http://swm-server.local:3000/Admin/prd-docs/issues/274#issuecomment-15049) 已移出 milestone 49 |
+
+
+工单工作项对照：1 Docker **非本仓**；2 编辑器脚本 **已被全管线替代且已落地**；3 双端 AB **已落地**；4 License **非本仓**；5 落盘 AB **已有**，COS **非本仓**。
 
 详见 [D24：平铺黑盒接管与 ctx 边界](./d24-boundary-plan.md)。一句话口径：
 
@@ -46,10 +75,16 @@
 
 ---
 
+
+
 ## decisions-2026-09-16
 
-- **步骤 1–14 收口完成。** 公开七步转发已撤。leftover `.fbm` **Fail(41)** 不停⑤⑥；贴图身份 **Fail(42)** 不停⑤⑥、槽位不清。无 leftover>0 真样。代码未提交。
-- 操作者流程提到插件根 README 最上两节。
+- **D26-4 / D26-5 已收口。** `PipelineResult.Fail` 保留首个非 0 退出码，后续阶段仍记录日志但不覆盖根因；操作者入口的入库固定开启，SO 只控制后续步骤，面板不再重复覆盖。Unity EditMode 84/84 通过；歼15 FBX 服务器式 CLI `exit=0`，双端 AB 成功。
+- **步骤 1–14 收口完成并已上推** `23b3567`（GitHub + Gitea）。公开七步转发已撤。leftover `.fbm` **Fail(41)** 不停⑤⑥；贴图身份 **Fail(42)** 不停⑤⑥、槽位不清。无 leftover>0 真样。
+- 操作者流程在插件根 README 最上两节。
+- **#274 未回帖。** 对「AB 构建器 = V1.2 核心件（Docker + 双端 AB + License）」的评估：系统层方向对；**不能把三件事都算本仓核心。** 本仓已交付的是 Windows/`-batchmode` 转换内核（②③④⑤⑥ + `RetinarAbApi` 双端 AB）。Docker 镜像、队列、COS、License 激活是基建/Worker，错误码 **70 从未赋值**。YuWu 2026-08-27 已在工单声明接手与 v1.5.0 进度；之后 v1.5.3 与 ④ 1–14 已落地。P0 与正文「V1.0 不实施」冲突，回帖前需产品统一。
+
+
 
 ## decisions-2026-09-15
 
@@ -60,30 +95,36 @@
 - **D25-4 机制更正：** 不是 C# 全工程搜贴图。B 前半段已是源引用→拷贝→objectMap；串在 Extract 后再对 Art FBX `GetDependencies` + 按短名 `AddRemap`。同名覆盖（同一目标路径不覆盖旧文件）是另一条链；现网 remap 会把兄弟文件拷进本单元，两条链会拧在一起。
 - **Fail vs Warning：** 不是只换显示。**40** = `Fail` + `return null`，停⑤⑥。**41/42** = `Fail` 不 `return`，⑤⑥继续。纯 Warning 不改退出码。第 11 步 **42**（保留原引用、不清空槽）；第 14 步 leftover **41**。未知来源不再按名补拷，仍可能有外部依赖进交付包。
 
+
+
 ## decisions-2026-09-14
 
 - ④AB标签：同意迁到⑥构建清单管理，先核对旧菜单与外部工具依赖。本轮只更新文档。
 - ⑤NoOp：倾向跳过并明确提示，不让编排读取执行层内部。现有窄口无统一typed跳过原因，先核对汇总是否足够；不足时评估中间层排错层，新层方案尚未拍板。
 - MaterialProcessSettings.EnsureMasterBatchDefaults会为空列表补规范化OP；“材质列表清空=禁用”不成立，纳入D26-6。
 - 人工B/B′完整④已确认，不再列风险；④改为「plan 口 + 新实现、旧代码对照删除」，不是先清空 3518 行。
-- **缺 sidecar：整趟④停、`FlattenFailed(40)`**（不承诺其余行继续）。
+- **缺 sidecar：整趟④停、**`FlattenFailed(40)`（不承诺其余行继续）。
 - **④文件在 TOol、编排暂归中间层**：只是暂时保留，待后续按步拆分后再搬家/下沉。
-- **OBJ 缺 `.mtl`/贴图不进 `MissingUris` 闸**（见 [obj-vs-gltf](#obj-vs-gltf)）；不是漏修 D26-2，是探针未接入 ctx。
+- **OBJ 缺** `.mtl`**/贴图不进** `MissingUris` **闸**（见 [obj-vs-gltf](#obj-vs-gltf)）；不是漏修 D26-2，是探针未接入 ctx。
 - **B 质量闸**（残留 `.fbm`）：步骤 14 **Fail(41)** 不停⑤⑥。身份警告 **42**。空槽只观察。
 - **历史文档按文件剔除**：已删 PACKAGING_RULES 旧编号正文、分享说明旧操作篇；后续同类文件继续单文件收缩，不把考古文堆回 backlog。
 - **D13-R1 移动端验收完成**，退出顶部队列。
-- **④拆分（同日续）：** ① 不承担 `ctx.Build`、不扩字段。无头「坏一件卡一批」是 Runner 粒度，与④换口分开。④ 可新实现，但先冻结 plan 口、旧内核留到 R1b 切开；**禁止先清空再写。⑥ 已有 `RetinarAbApi`，本刀不重写。** 详见 [D24 R3](./d24-boundary-plan.md#r3-flatten-split)。
+- **④拆分（同日续）：** ① 不承担 `ctx.Build`、不扩字段。无头「坏一件卡一批」是 Runner 粒度，与④换口分开。④ 可新实现，但先冻结 plan 口、旧内核留到 R1b 切开；**禁止先清空再写。⑥ 已有** `RetinarAbApi`**，本刀不重写。** 详见 [D24 R3](./d24-boundary-plan.md#r3-flatten-split)。
+
+
 
 ## obj-vs-gltf
 
 **OBJ vs glTF 缺伴生（2026-09-14 核对）。** 两套扫描都存在，**不是同一条④闸**。
 
-| | glTF（`.gltf`） | OBJ（`.obj`） |
-|---|---|---|
-| ① 入库 | `GltfPackageFiles.Scan`：缺 `.bin`/外图 → Warning，仍拷已有文件 | `ObjPackageFiles.Scan`：缺 `.mtl`/贴图 → Warning，仍导入网格（常白膜） |
-| ②.5 `JobContext.Build` | `PipelineGltfUriProbe` 写入 typed `MissingUris` | **不调用** `ObjPackageFiles.Scan`；`HasExternalUris=false`；`MissingUris` 保持空 |
-| ④ | `HasMissingSidecars` → `FlattenFailed(40)`，**整趟④停**（`return null`），⑤⑥不跑 | 不进 40 闸。B 跟拷已解析到的 `.mtl`；缺件仍可能 `CopiedDependencies != null` 成功 |
-| 当前产品口径 | 缺必需相对 URI = 硬失败 | 缺伴生仍可 `exit=0`；不与 leftover **41** 捆成一闸 |
+
+|                        | glTF（`.gltf`）                                                           | OBJ（`.obj`）                                                              |
+| ---------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| ① 入库                   | `GltfPackageFiles.Scan`：缺 `.bin`/外图 → Warning，仍拷已有文件                    | `ObjPackageFiles.Scan`：缺 `.mtl`/贴图 → Warning，仍导入网格（常白膜）                  |
+| ②.5 `JobContext.Build` | `PipelineGltfUriProbe` 写入 typed `MissingUris`                           | **不调用** `ObjPackageFiles.Scan`；`HasExternalUris=false`；`MissingUris` 保持空 |
+| ④                      | `HasMissingSidecars` → `FlattenFailed(40)`，**整趟④停**（`return null`），⑤⑥不跑 | 不进 40 闸。B 跟拷已解析到的 `.mtl`；缺件仍可能 `CopiedDependencies != null` 成功           |
+| 当前产品口径                 | 缺必需相对 URI = 硬失败                                                         | 缺伴生仍可 `exit=0`；不与 leftover **41** 捆成一闸                                   |
+
 
 `.glb` / `.fbx` 在 Build 里同样不填 `MissingUris`。FBX 源旁独立贴图另见 D25-2，不是本闸漏扫。
 
@@ -92,8 +133,6 @@
 ## archived-analysis
 
 **以下是历史调查与已完成切片的归档证据。** 当前执行顺序只看上方表；旧段落中的“下一刀”“本刀”均以当时日期为准。
-
-
 
 ## d18k
 
@@ -363,11 +402,11 @@ ext == .gltf
 
 ### CLI / 运维
 
-1. **B.CLI** 扩参（步骤 flag / 环境变量 / 临时 SO）— **D5 已冻**仅 `-source` + `-materialId`，步骤跟 SO。再扩须另开项
+1. **B.CLI** 扩参（步骤 flag / 环境变量 / 临时 SO）— **D5 已冻**仅 `-source` + `-materialId`；②入库固定，③–⑥跟 SO。再扩须另开项
 2. License：Personal vs Pro；多机互踢策略（**D5 已冻**：错误码 70 本入口不赋值）
 3. Unity 精确版本号（现网打 AB 头为 `2022.3.54f1c1`）
 4. iOS on Linux 失败时的拆分构建方案（基建）
-5. ⑥ **部分** AB 失败改非 0 — **D5 已冻**：`PartialOk` 仍 0；全失败才 60。改码须另开项
+5. ⑥ **部分** AB 失败改非 0 — **D5 已更新**：Android+iOS 均成功才 0；任一端失败即 60。
 
 ---
 
@@ -378,21 +417,21 @@ ext == .gltf
 **C. 已知风险（实现时注意）**
 
 
-| 风险                   | 说明                                                                                                        |
-| -------------------- | --------------------------------------------------------------------------------------------------------- |
-| ⑥ 输入源                | 未平铺时应用**任意 Prefab**（近直通），勿写死必须 Art                                                                        |
-| ④ 后打 AB              | 开④时 Runner **已**改用平铺返回的 Art Prefab                                                                        |
-| Legacy 大函数拆 options  | 易影响现有「导出全部/选中」菜单回归                                                                                        |
-| ⑤ + GLB 内嵌           | 压图空跑 ≠ 合规；面板需提示                                                                                           |
-| 总面板命名                | 勿与「资源处理总面板」混淆                                                                                             |
-| URP 落差 / GLB 洋红      | 见 [d13-glb-magenta](./d13-glb-magenta.md)。主因 Shader，不是空 AB。**D13-R1 含移动端已验收** |
+| 风险                   | 说明                                                                                                                                                             |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ⑥ 输入源                | 未平铺时应用**任意 Prefab**（近直通），勿写死必须 Art                                                                                                                             |
+| ④ 后打 AB              | 开④时 Runner **已**改用平铺返回的 Art Prefab                                                                                                                             |
+| Legacy 大函数拆 options  | 易影响现有「导出全部/选中」菜单回归                                                                                                                                             |
+| ⑤ + GLB 内嵌           | 压图空跑 ≠ 合规；面板需提示                                                                                                                                                |
+| 总面板命名                | 勿与「资源处理总面板」混淆                                                                                                                                                  |
+| URP 落差 / GLB 洋红      | 见 [d13-glb-magenta](./d13-glb-magenta.md)。主因 Shader，不是空 AB。**D13-R1 含移动端已验收**                                                                                  |
 | Art 通道混淆             | **导入期自动流不碰 Art** ≠ **中间层⑤/L1 不碰 Art**。⑤是代跑面板手动总批量。见 tech-and-ops「三条通道」、[PACKAGING_RULES 现行 Importer 分区](../../../RetinarBatchBuilder_Share/PACKAGING_RULES.md) |
-| 贴图抽出                 | 已延后；勿当洋红 blocker。ggdddd 贴图仍嵌在 `Model/glb.glb`                                                             |
-| 单文件②路径重名（D18）        | **管线已落**：② 只清 `Incoming/<三层>/`，④ 只清 `Art/<名>/`，再拷。菜单/批量面板仍 Skip。唯一定位暂放。见 [d18k](#d18k)                    |
-| `.gltf`→GLB 再导入（D22） | **搁置、当前不开发。** `.gltf` 已可整包② + ④ B′。容器封装 ≠ DCC 重导；勿用场景 Export 当入库。若将来落盘改 `.glb` 仍与 D18 复用键交叉。见 [O](#d22-o) |
-| B 残留外部 `.fbm` | 内核 `Ok` 仍 true；编排 **Fail(41)** 不停⑤⑥。贴图身份 **42**。空槽只观察 |
-| OBJ 缺伴生 | `JobContext.Build` 对 `.obj` 不跑 `ObjPackageFiles.Scan`，`MissingUris` 空；① 只 Warning。与 glTF ④40 不是同一闸 |
-| ④ 物理目录 | 代码在 `TOol/Generated/Flatten`，职责暂算中间层；拆步完成前不二次搬家 |
+| 贴图抽出                 | 已延后；勿当洋红 blocker。ggdddd 贴图仍嵌在 `Model/glb.glb`                                                                                                                  |
+| 单文件②路径重名（D18）        | **管线已落**：② 只清 `Incoming/<三层>/`，④ 只清 `Art/<名>/`，再拷。菜单/批量面板仍 Skip。唯一定位暂放。见 [d18k](#d18k)                                                                         |
+| `.gltf`→GLB 再导入（D22） | **搁置、当前不开发。** `.gltf` 已可整包② + ④ B′。容器封装 ≠ DCC 重导；勿用场景 Export 当入库。若将来落盘改 `.glb` 仍与 D18 复用键交叉。见 [O](#d22-o)                                                      |
+| B 残留外部 `.fbm`        | 内核 `Ok` 仍 true；编排 **Fail(41)** 不停⑤⑥。贴图身份 **42**。空槽只观察                                                                                                          |
+| OBJ 缺伴生              | `JobContext.Build` 对 `.obj` 不跑 `ObjPackageFiles.Scan`，`MissingUris` 空；① 只 Warning。与 glTF ④40 不是同一闸                                                             |
+| ④ 物理目录               | 代码在 `TOol/Generated/Flatten`，职责暂算中间层；拆步完成前不二次搬家                                                                                                                |
 
 
 ---
@@ -615,14 +654,14 @@ P3 已评        D22 `.gltf`→GLB 再②（容器封装，非 DCC）；见 [O](
 ### 现网所有权（2026-09-03 再拍：插件 1 只留 ⑥）
 
 
-| 步        | 执行者                                                               | 归属       |
-| -------- | ----------------------------------------------------------------- | -------- |
-| 1 入库     | `ToolImportApi`                                                   | 插件 2     |
-| 2.5 ctx  | `PipelineJobContext`                                              | 中间层      |
-| ③ Prefab | `PrefabBuildService.TryBuildOnePrefab` → `Assets/IncomingPrefab/` | 插件 2     |
-| ④ 平铺     | `ToolFlattenApi` → `FlattenBuildService`（内核 `RetinarBatchModelBuilder` 已在插件 2 `Generated/Flatten`） | **插件 2（D27）** |
-| ⑤ 总批量    | `ResourcePostProcessService`                                      | 插件 2     |
-| ⑥ AB     | `RetinarAbApi.Build`                                              | **插件 1 唯一允许留下的步** |
+| 步        | 执行者                                                                                                | 归属                |
+| -------- | -------------------------------------------------------------------------------------------------- | ----------------- |
+| 1 入库     | `ToolImportApi`                                                                                    | 插件 2              |
+| 2.5 ctx  | `PipelineJobContext`                                                                               | 中间层               |
+| ③ Prefab | `PrefabBuildService.TryBuildOnePrefab` → `Assets/IncomingPrefab/`                                  | 插件 2              |
+| ④ 平铺     | `ToolFlattenApi` → `FlattenBuildService`（内核 `RetinarBatchModelBuilder` 已在插件 2 `Generated/Flatten`） | **插件 2（D27）**     |
+| ⑤ 总批量    | `ResourcePostProcessService`                                                                       | 插件 2              |
+| ⑥ AB     | `RetinarAbApi.Build`                                                                               | **插件 1 唯一允许留下的步** |
 
 
 中间层→插件 1 现只剩：⑥ AB、`RetinarExportSettings`。④ 走 `ToolFlattenApi`。
@@ -648,7 +687,7 @@ P3 已评        D22 `.gltf`→GLB 再②（容器封装，非 DCC）；见 [O](
 | 项     | 内容                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | D25-1 | ~~OBJ 源/副本材质数 35 vs 111，三处引用改写被跳过~~ **2026-09-03 已改（方案 A）并验收通过**：`Art/<obj单元>/Model/` 下已有 `obj.mtl`，`exit=0`，三条 LogError 消失，模型带色。① `CopyObjSidecarsBeside` 把 `obj.mtl` 拷进 Incoming → Incoming 按 mtl 出 35 材质；④ 只按「Prefab 依赖 + 后缀分类」搬运，`.mtl` 既非 Unity 依赖、也不在 `ModelFlattenProcessor.DefaultSuffixes`(fbx/obj/glb/gltf) → Art 副本按 group 出 111 个默认白材质 → `MapSubAssetsBetweenCopies` 判非同源，Material 整类引用改写跳过。**曾评估按材质名配对（方案 C）并否决**：两侧材质名分别来自 `usemtl`(35 去重) 与 `g`(111)，只部分重合，配对不完整且会错配（同 `Plane_Zhi18` 那类静默坏引用）。落地：新增 `CopyObjMaterialLibrariesBesideCopiedModels`（读 `mtllib` 跟拷）；`FlattenModelCompanionFolders` 与 `ValidateModelFoldersAreClean` 放行 `.mtl`；规则 19/20/21 措辞同步 |
-| D25-3 | `materialLocation=InPrefab` **不是遗留，删门禁时不得连坐。** 依据 `PACKAGING_RULES` 规则 20/21/37 + `RetinarBatchModelBuilder.cs:592-612`：External 会让目标工程首次导入 UnityPackage 时 Unity **自动**在 `Model/` 下生成 `Materials/` 与 `<FBX名>.fbm`。约束理由是 Unity 行为，与已删除的 `ValidateModelFoldersAreClean` 无关。**已写进规则 20 正文**。                                                                                                                                                                                                                                                                                                                                                            |
+| D25-3 | `materialLocation=InPrefab` **不是遗留，删门禁时不得连坐。** 依据 `PACKAGING_RULES` 规则 20/21/37 + `RetinarBatchModelBuilder.cs:592-612`：External 会让目标工程首次导入 UnityPackage 时 Unity **自动**在 `Model/` 下生成 `Materials/` 与 `<FBX名>.fbm`。约束理由是 Unity 行为，与已删除的 `ValidateModelFoldersAreClean` 无关。**已写进规则 20 正文**。                                                                                                                                                                                                                                                                                                                                                                                 |
 
 
 **P1 · ④ 分离**
@@ -656,26 +695,29 @@ P3 已评        D22 `.gltf`→GLB 再②（容器封装，非 DCC）；见 [O](
 > **2026-09-03 再拍并落地 D27：** ④ 进插件 2 `Generated/Flatten/`，插件 1 只留 ⑥。D25-2/4 仍挂 P1。
 
 
-| 项      | 内容                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| D24-5  | **2026-09-03 已落地（不搬目录）。** `RetinarFlattenApi` 拆成 `TryBegin` / `SplitDependencies` / `RelocateAtomic` / `ApplyImportAndExtract` / `Remap` / `CopyRendererMaterials` / `TryFinish`；状态与源→副本表住 `RetinarFlattenWork`。`PipelineRunner.FlattenPerPrefab` 按行组合，B↔B′ 在编排里互斥。`FlattenPaths` 仍给菜单（含 FBX 直平铺）。实现未搬出 Retinar。 |
-| D24-6  | **2026-09-03 已落地。** 两套赋值收进 `ModelImporterProfiles`。Processor **硬跳过** `RetinarPaths.ArtRoot`。交付档不读导入区 SO。 |
+| 项      | 内容                                                                                                                                                                                                                                                                                                                                        |
+| ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| D24-5  | **2026-09-03 已落地（不搬目录）。** `RetinarFlattenApi` 拆成 `TryBegin` / `SplitDependencies` / `RelocateAtomic` / `ApplyImportAndExtract` / `Remap` / `CopyRendererMaterials` / `TryFinish`；状态与源→副本表住 `RetinarFlattenWork`。`PipelineRunner.FlattenPerPrefab` 按行组合，B↔B′ 在编排里互斥。`FlattenPaths` 仍给菜单（含 FBX 直平铺）。实现未搬出 Retinar。                          |
+| D24-6  | **2026-09-03 已落地。** 两套赋值收进 `ModelImporterProfiles`。Processor **硬跳过** `RetinarPaths.ArtRoot`。交付档不读导入区 SO。                                                                                                                                                                                                                                  |
 | D27    | **2026-09-03 已落地（目录+窄口）。** ④ 按 ③ Prefab 同款分类进插件 2 `Generated/Flatten/`（Config / Layout / Service / Category）。管线只调 `ToolFlattenApi`（接 `PipelineJobContext` + `ToolFlattenRequest`）。`PipelineFlattenBridge` 已删。内核类名仍是 `RetinarBatchModelBuilder`（未改逻辑）。菜单 FBX 直平铺随文件迁走，管线禁止调 `FlattenPaths`。模糊点见 `TOol/Editor/Generated/Flatten/README.md`。 |
-| D25-2  | **（A）2026-09-15 已落地** ① `CopyFbxSidecarsBeside`：同目录图、`Texture/` 等夹、`*.fbm`、FBX 内相对路径。缺件 Warning 仍导入。**（B）内嵌图仍等④ Extract**（无 `.fbm` 时现网还跳过 Extract，未改）。不并进第 11 步。 |
-| D25-4  | **FBX 单元跨单元借贴图。** 不是 `FindAssets` 扫全工程。修法见 [步骤第 11 步](./d24-flatten-steps.md)：找不到本次合法贴图 **Fail(42)** 不停⑤⑥，保留原引用。 |
-| D24-10 | **OBJ 轴向** 已落地（绑定行开关 + 内容节点 −90°X）。 |
+| D25-2  | **（A）2026-09-15 已落地** ① `CopyFbxSidecarsBeside`：同目录图、`Texture/` 等夹、`*.fbm`、FBX 内相对路径。缺件 Warning 仍导入。**（B）内嵌图仍等④ Extract**（无 `.fbm` 时现网还跳过 Extract，未改）。不并进第 11 步。                                                                                                                                                                          |
+| D25-4  | **FBX 单元跨单元借贴图。** 不是 `FindAssets` 扫全工程。修法见 [步骤第 11 步](./d24-flatten-steps.md)：找不到本次合法贴图 **Fail(42)** 不停⑤⑥，保留原引用。                                                                                                                                                                                                                          |
+| D24-10 | **OBJ 轴向** 已落地（绑定行开关 + 内容节点 −90°X）。                                                                                                                                                                                                                                                                                                       |
 
-**原插件 1 平铺 partial 现状（D27 后：文件已在插件 2 `Generated/Flatten/Service/`）**
+
+**原插件 1 平铺 partial 现状（D27 后：文件已在插件 2** `Generated/Flatten/Service/`**）**
 
 ⑥ 几乎不在这些文件里。`RetinarAbApi.cs` + `RetinarDeliverableIo` 才是 ⑥。管线/人工④走 `Run(plan)`；`FlattenPaths` 旧链已于步骤 12 删除。
 
-| 文件 | 行数 | 实际职责 | ⑥ 是否读 |
-| --- | --- | --- | --- |
-| `RetinarBatchModelBuilder.cs` | 1677 | 七步主体、空壳/轴向/碰撞盒/现用动画、复制与引用工具；步骤 12 已删 SafeZone 及旧专用链 | 否（步骤 8 已停写 `assetBundleName`） |
-| `RetinarBatchModelBuilder.AssetResolution.cs` | 891 | E 抽取、引用整理、自愈、搬移和顶点色快照；步骤 12 已删旧源资产搜集链 | 白名单注释自称 ⑥ 仍读；出包校验已删，现主要给 ④ 自愈 |
-| `RetinarBatchModelBuilder.AtomicRelocate.cs` | 224 | 仅 B′ | 否 |
-| `RetinarBatchModelBuilder.TextureBinding.cs` | 73 | 步骤 11 已知来源贴图绑定 | 否 |
-| `Category/` / `Service/FlattenCopyRunner.cs` | — | 分类注册表与复制 | 否 |
+
+| 文件                                            | 行数   | 实际职责                                                | ⑥ 是否读                         |
+| --------------------------------------------- | ---- | --------------------------------------------------- | ----------------------------- |
+| `RetinarBatchModelBuilder.cs`                 | 1677 | 七步主体、空壳/轴向/碰撞盒/现用动画、复制与引用工具；步骤 12 已删 SafeZone 及旧专用链 | 否（步骤 8 已停写 `assetBundleName`） |
+| `RetinarBatchModelBuilder.AssetResolution.cs` | 891  | E 抽取、引用整理、自愈、搬移和顶点色快照；步骤 12 已删旧源资产搜集链               | 白名单注释自称 ⑥ 仍读；出包校验已删，现主要给 ④ 自愈 |
+| `RetinarBatchModelBuilder.AtomicRelocate.cs`  | 224  | 仅 B′                                                | 否                             |
+| `RetinarBatchModelBuilder.TextureBinding.cs`  | 73   | 步骤 11 已知来源贴图绑定                                      | 否                             |
+| `Category/` / `Service/FlattenCopyRunner.cs`  | —    | 分类注册表与复制                                            | 否                             |
+
 
 步骤 12 已删除 SafeZone 专用链，现用空壳、碰撞盒、轴向与动画工具保留。物理目录未迁移，不能把删旧链当作全部拆分完成。行数为本轮快照。
 
@@ -711,6 +753,8 @@ P3 已评        D22 `.gltf`→GLB 再②（容器封装，非 DCC）；见 [O](
 | 规则 23                                                  | 补两条子款：轴向修正是「保留源 TRS」的唯一例外；外壳根不放宽                                                                   |
 
 
+
+
 **首轮验收发现的接线漏（已修）**：`PipelineRunner.NormalizeBindings` 用两参构造重建每一行、再于 `ImportFromBindings` 覆盖 `options.SourceBindings`，开关在入库阶段就被抹掉，④ 永远读到 false。绑定行在面板与 Runner 之间共重建三次（`ApplyBindings` / `CopyBindings` / `NormalizeBindings`），全是逐字段手抄，加字段必漏。已统一改走 `PipelineSourceBinding.CloneWith`，以后新增字段只改那一处。
 另补一条负向日志：嗅到默认 Z-up 却没开修正时打 `④ [n] 未开轴向修正（该源导出器默认 Z-up）`——「没勾」与「开关没传到」在产物上完全一样（都是「没变化」），没这条只能靠翻 Prefab 里的四元数才能分辨。
 
@@ -724,24 +768,22 @@ P3 已评        D22 `.gltf`→GLB 再②（容器封装，非 DCC）；见 [O](
 
 **D26 · 2026-09-03 全仓扫查新增（D24/D25 之外）**
 
-共性是**「静默成功」**：步开着、质量闸没咬，整趟仍 `exit=0`。这与「业务关掉某步」不是一回事——`PipelineStepSettings.runFlatten/runPostProcess/runAb` 关掉则该步不跑，0 表示「按配置跑完」，合法。以下为历史发现；D26-1/2 已于 2026-09-10 修复，D26-4/5/6 仍开放。
+共性是**「静默成功」**：步开着、质量闸没咬，整趟仍 `exit=0`。这与「业务关掉某步」不是一回事——`PipelineStepSettings.runFlatten/runPostProcess/runAb` 关掉则该步不跑，0 表示「按配置跑完」，合法。以下为历史发现；D26-1/2 已于 2026-09-10 修复，D26-4/5 已于 2026-09-16 修复，D26-6 已于 2026-09-16 收口。
 
 D26-2 现网已改（**仅 glTF 探针路径**）：`PipelineGltfUriProbe` 同时写 typed `MissingUris` 与展示 Warning；Runner 在 Begin 前直接映射 `FlattenFailed(40)` 并停止整趟④；B′ 还会拒绝已知缺件，并要求全部执行时输入生成精确目标。控制流不解析 Warning 文案。OBJ 的 `ObjPackageFiles.Scan` 只用于① Warning，不进 ctx，见 [obj-vs-gltf](#obj-vs-gltf)。
 
 
-| 项     | 优先级    | 内容                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| ----- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| D26-1 | ~~P0~~ | **2026-09-10 已修。** Art 仍硬跳过；配置导入根内的受支持模型始终应用安全基线，不受 `MasterEnabled` 或排除前缀影响；其它 Assets 路径保留原总闸/排除语义；用户偏好策略仍要求总闸与“模型·设置自动”同时开启。目录边界与基线/策略组合已有 19 个 EditMode 测试。 |
-| D26-2 | ~~P0~~ | **2026-09-10 已修（glTF）。** ctx 增加 typed `MissingUris`；Runner 在④ Begin 前 Fail(40) 并停止整趟；B′ 拒绝缺件或执行时丢件。typed 控制流已有 3 个 EditMode 测试。**OBJ 缺 `.mtl`/贴图不进该闸。** |
-| D26-3 | ~~P1~~ | `.obj` ~~不在~~ `supportedExtensions` ~~的 C# 默认与迁移里~~ **2026-09-03 已修。** 现网资产有 `.obj` 故未暴露，但代码默认是 `.fbx/.glb/.gltf`、`EnsureSupportedExtensionsDefaults` 只补 glb/gltf → 新工程或重建 SO 时，① 能入库 OBJ 而 ⑤ 收集 / 设置自动 / 后处理自动都不认（含 P0 刚加的 OBJ 法线基线，它自己就闸在 `IsSupportedModelExtension` 上）。落地：默认补 `.obj`；迁移改成每批一个键的 `MigrateOnce`，加 `TOol.ModelExt.ObjMigrated.v1`；tooltip 改成「与 ToolImportApi 白名单对齐，两处必须同步」                                                                                                                                               |
-| D26-4 | P1     | `PipelineResult.Fail` **无条件覆盖退出码**（`PipelineResult.cs:21-27`），多步失败只剩最后一步的码。⑤ 设 50 后 ⑥ 再设 60，CLI 只看得到 60。应改成「已有非 0 则保留首个」                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| D26-5 | P1     | **面板强制** `RunImport=true`**，CLI 跟 SO 的** `runImport`（`PipelineWindow.cs:621-622` vs `PipelineCli.cs:32`）。CLI 关了 `runImport` 再给工程外 `-source`，报 `BadArgs(10)` 而非 `ImportFailed(20)`（`PipelineRunner.cs:346-350`）。同工程两套行为                                                                                                                                                                                                                                                                                                                    |
-| D26-6 | P1     | **⑤ 三层** `masterBatchOperationIds` **全空时静默 Skip 且** `FailedCount=0`（`ResourcePostProcessService.cs:121-126,149-154,179-184`），`HasHardFailure=false` 不映射 50。`runPostProcess=true` 却整步空跑仍 `exit=0`。与 D24-9 同类但不同字段，一起定「空配置算不算失败」                                                                                                                                                                                                                                                                                                            |
-| D26-7 | P2     | **④ 多 Prefab 时 ctx 下标不足回退** `contexts[0]`（`PipelineRunner.cs:453-456`）。长度不一致时后续行拿第一份 ctx 去映射 `SkipDependencySplit`/B′ sidecar，可能错走拆夹。**注意**：D24-10 新加的 binding 取用（同处）已用 `i < Count` 直接给 null 而非回退，两处口径不一，一并统一                                                                                                                                                                                                                                                                                                                             |
-| D26-8 | P2     | `PipelineSourceAccept.Received` **事件零订阅**（`PipelineSourceAccept.cs:15-24`），全仓无 `+=`，实际只走 `PipelineWindow.AcceptBindings`。要么接线要么删                                                                                                                                                                                                                                                                                                                                                                                                          |
-| D26-9 | P2     | 文档：`cli-getting-started.md:82-87` 未写 CLI 依赖本机 EditorPrefs 总闸，与 `pipeline-flow.md:43` 不一致；`op-recognition-and-extend.md:68` 的默认扩展名列表随 D26-3 一起改                                                                                                                                                                                                                                                                                                                                                                                            |
-
-
+| 项     | 优先级    | 内容                                                                                                                                                                                                                                                                                                                                                                                          |
+| ----- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| D26-1 | ~~P0~~ | **2026-09-10 已修。** Art 仍硬跳过；配置导入根内的受支持模型始终应用安全基线，不受 `MasterEnabled` 或排除前缀影响；其它 Assets 路径保留原总闸/排除语义；用户偏好策略仍要求总闸与“模型·设置自动”同时开启。目录边界与基线/策略组合已有 19 个 EditMode 测试。                                                                                                                                                                                                                               |
+| D26-2 | ~~P0~~ | **2026-09-10 已修（glTF）。** ctx 增加 typed `MissingUris`；Runner 在④ Begin 前 Fail(40) 并停止整趟；B′ 拒绝缺件或执行时丢件。typed 控制流已有 3 个 EditMode 测试。**OBJ 缺** `.mtl`**/贴图不进该闸。**                                                                                                                                                                                                                                 |
+| D26-3 | ~~P1~~ | `.obj` ~~不在~~ `supportedExtensions` ~~的 C# 默认与迁移里~~ **2026-09-03 已修。** 现网资产有 `.obj` 故未暴露，但代码默认是 `.fbx/.glb/.gltf`、`EnsureSupportedExtensionsDefaults` 只补 glb/gltf → 新工程或重建 SO 时，① 能入库 OBJ 而 ⑤ 收集 / 设置自动 / 后处理自动都不认（含 P0 刚加的 OBJ 法线基线，它自己就闸在 `IsSupportedModelExtension` 上）。落地：默认补 `.obj`；迁移改成每批一个键的 `MigrateOnce`，加 `TOol.ModelExt.ObjMigrated.v1`；tooltip 改成「与 ToolImportApi 白名单对齐，两处必须同步」 |
+| D26-4 | ~~P1~~ | **2026-09-16 已修。** `PipelineResult.Fail` 只在当前码为 0 时记录退出码；后续失败消息仍全部保留。⑤/⑥继续策略不变                                                                                                                                                                                                                                                                                                              |
+| D26-5 | ~~P1~~ | **2026-09-16 已修。** 操作者面板与 CLI 的入库固定开启；删除 `PipelineStepSettings.runImport` 与面板重复覆盖。底层 `PipelineOptions.RunImport` 仍允许 API 显式关闭                                                                                                                                                                                                                                                               |
+| D26-6 | P1     | **⑤ 三层** `masterBatchOperationIds` **全空时静默 Skip 且** `FailedCount=0`（`ResourcePostProcessService.cs:121-126,149-154,179-184`），`HasHardFailure=false` 不映射 50。`runPostProcess=true` 却整步空跑仍 `exit=0`。与 D24-9 同类但不同字段，一起定「空配置算不算失败」                                                                                                                                                              |
+| D26-7 | ~~P2~~ | **已修并关闭。** 管线④按下标配对 Prefab/ctx，数量不一致直接 Fail；人工④不构建 ctx                                                                                                                                                                                                                                                                                                                                      |
+| D26-8 | ~~P2~~ | **2026-09-16 已修。** 删除零订阅 `PipelineSourceAccept.Received` 及无效触发；只保留 `PipelineWindow.AcceptBindings` 实际投递路径                                                                                                                                                                                                                                                                                   |
+| D26-9 | P2     | 文档：`cli-getting-started.md:82-87` 未写 CLI 依赖本机 EditorPrefs 总闸，与 `pipeline-flow.md:43` 不一致；`op-recognition-and-extend.md:68` 的默认扩展名列表随 D26-3 一起改                                                                                                                                                                                                                                              |
 
 
 扫查同时确认**没有**问题的三类（避免重复排查）：`Pipeline/`+`TOol/` 内无 `TODO|FIXME|NotImplemented`；`modelUseExternalMaterials=false` 时插件 1 与插件 2 在 Incoming 区无活跃 Importer 冲突（`RetinarBatchModelBuilder.cs:599-605` 那段打架需开关为 true 才复现，已记 D24-3）。
@@ -749,12 +791,10 @@ D26-2 现网已改（**仅 glTF 探针路径**）：`PipelineGltfUriProbe` 同�
 **P2 · 删除死路径与失真文档**
 
 
-| 项     | 内容                                                                                                                          |
-| ----- | --------------------------------------------------------------------------------------------------------------------------- |
-| D24-7 | ~~删三道校验 / 遗产导出菜单 / DirectPackage / IRetinarAcceptanceGate / 交付物写盘子树~~ **2026-09-03 一阶段 + 二阶段已删。** 管线验收 `exit=0`。详见下方 [d24-7-cut](#d24-7-cut) |
+| 项     | 内容                                                                                                                                                          |
+| ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| D24-7 | ~~删三道校验 / 遗产导出菜单 / DirectPackage / IRetinarAcceptanceGate / 交付物写盘子树~~ **2026-09-03 一阶段 + 二阶段已删。** 管线验收 `exit=0`。详见下方 [d24-7-cut](#d24-7-cut)                |
 | D24-8 | 失真文档：`PACKAGING_RULES.md` 规则 33；`TOol/ARCHITECTURE.md` 168 / 335 行（把钩子当在场）；`op-recognition-and-extend.md` §1、`pipeline-phase-io.md` §3（「SO 只管后处理」，实际也闸设置自动） |
-
-
 
 
 **D24-7 一阶段删除清单（2026-09-03）**
@@ -773,6 +813,8 @@ D26-2 现网已改（**仅 glTF 探针路径**）：`PipelineGltfUriProbe` 同�
 | `PartitionAssetsThatPassValidation` / `CollectValidationFailures` / `Indent` / `WriteValidationFailureReport` / `ValidateExternalDependencies` / `HasExternalEmbeddedMediaDependency` / `BuildDependencyDiagnosticLine` / `ValidateModelFoldersAreClean` | `…AssetResolution.cs`         |
 
 
+
+
 **刻意留下的**：
 
 - `IsApprovedRuntimeDependency` + `ApprovedRuntimeDependencyPrefixes`——④ 的依赖分类与 ⑥ `RetinarAbApi` 都在读，不是校验专属。
@@ -781,18 +823,20 @@ D26-2 现网已改（**仅 glTF 探针路径**）：`PipelineGltfUriProbe` 同�
 
 **同日追加**：`30_Business` 整层删除（`IRetinarDeliverableOutput` / `RetinarBusinessIds` / `RetinarBusinessProfile`）——四个文件只互相引用，无外部调用方，也没有已创建的 Profile 资产；`00_RetinarPaths.cs` 里一处 `<see cref="RetinarDeliverableIds"/>` 已改掉（否则 CS1574）。
 
-**D24-7 二阶段（2026-09-03 手工删完，管线验收 `exit=0` 之后）**
+**D24-7 二阶段（2026-09-03 手工删完，管线验收** `exit=0` **之后）**
 
 交付物写盘子树与只服务它的辅助一并去掉。不再写 `00_` / `01_source` / `06_docs` / xlsx。
 
-| 已删 | 说明 |
-|---|---|
-| `WriteDocsFiles` / `WriteRuntimeRequirements` / `ExportUnityPackages` / `CopyBuiltBundlesToDeliverables` / `CopyBuiltBundle` / 贴图报告一族 / `BuildAssetBundles` / `CopySourceFilesToDeliverables` / `BuildDccModelReport` | 一阶段后已无调用方 |
-| `RetinarBatchModelBuilder.AssetInfoWorkbook.cs`（整文件） | 只被 `WriteDocsFiles` 调 |
-| `CopyAssetFile` | `01_source` 拷贝残留 |
-| `CollectAssetStats` + `AssetStats` | 只给 xlsx 填数，`.Stats` 全仓无读取 |
-| `NormalizePreparedPrefabBounds` + `RebasePrefabRootToOrigin` + `GetMovablePrefabRoots` | 无调用方；FBX SafeZone 仍内联在 `CreateNormalizedPrefab` |
-| `TryRestrictPackagedModelMaterialSearch` | 无调用方；`ApplyModelImportSettings` 已把 Art 模型收成 InPrefab + Local |
+
+| 已删                                                                                                                                                                                                                    | 说明                                                           |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| `WriteDocsFiles` / `WriteRuntimeRequirements` / `ExportUnityPackages` / `CopyBuiltBundlesToDeliverables` / `CopyBuiltBundle` / 贴图报告一族 / `BuildAssetBundles` / `CopySourceFilesToDeliverables` / `BuildDccModelReport` | 一阶段后已无调用方                                                    |
+| `RetinarBatchModelBuilder.AssetInfoWorkbook.cs`（整文件）                                                                                                                                                                  | 只被 `WriteDocsFiles` 调                                        |
+| `CopyAssetFile`                                                                                                                                                                                                       | `01_source` 拷贝残留                                             |
+| `CollectAssetStats` + `AssetStats`                                                                                                                                                                                    | 只给 xlsx 填数，`.Stats` 全仓无读取                                    |
+| `NormalizePreparedPrefabBounds` + `RebasePrefabRootToOrigin` + `GetMovablePrefabRoots`                                                                                                                                | 无调用方；FBX SafeZone 仍内联在 `CreateNormalizedPrefab`              |
+| `TryRestrictPackagedModelMaterialSearch`                                                                                                                                                                              | 无调用方；`ApplyModelImportSettings` 已把 Art 模型收成 InPrefab + Local |
+
 
 > **教训**：二阶段第一版用脚本按名字批量删，在去注释文本上配平却把下标用回原文，切伤 5 处。本工程没有 git，靠 `_backup_Plugin_legacy_copy` 逐段比对才复原。后续删除只用精确文本替换。
 
@@ -821,39 +865,39 @@ D26-2 现网已改（**仅 glTF 探针路径**）：`PipelineGltfUriProbe` 同�
 ### 已做
 
 
-| ID     | 事项                                   | 收口说明                                                                                                                                                                                                                               |
-| ------ | ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 接口+中间层 | 1/2 窄口 + `Plugin/Pipeline` Runner    | 编排内核                                                                                                                                                                                                                               |
-| D3     | 自动化管线总面板                             | `Tools > 自动化管线总面板`                                                                                                                                                                                                                 |
-| D2     | Runner：单文件导入、字符串结果；⑤后改默认开            | 曾含「写 L1 路径」（②.2），已删除；⑤ 靠 D17。StepResult 延后                                                                                                                                                                                         |
-| （无 ID） | 删除②.2 导入后写 L1 批量路径                   | 编排不再改 `ResourceBatchFolderStore`；L1 Prefs 仅人手动批量；⑤ 仍用 D17 Art 单元                                                                                                                                                                   |
-| D1     | ⑥ 契约核对（命名/压缩/main）                   | 契约 1/2 **退化已锁**；文档 [d1-ab-only](../04_implementation/d1-ab-only.md)                                                                                                                                                                |
-| D4     | ② 路径入库进管线；收集认 `.glb`                 | 真 `-batchmode` 后由 D5 验收                                                                                                                                                                                                            |
-| D5     | CLI 无头验收后固化参数/退出码表                   | 2026-09-02 本机 `-batchmode` `直18.gltf` `-materialId GLTF直18` → `exit=0`。契约冻：仅 `-source`/`-materialId`；步骤跟 SO；码 0/10/20/30/40/50/60/80；70 不赋值；⑥ `PartialOk` 仍 0。见 [cli-getting-started](../04_implementation/cli-getting-started.md) |
-| D8     | 直通与 BuildAbOnly 合并 Options           | `RetinarExportSettings` + `RetinarAbApi.Build`                                                                                                                                                                                     |
-| D6     | UnityGLTF 去本机 `file:`，改 git 依赖       | [d6-unitygltf-docker](../04_implementation/d6-unitygltf-docker.md)；本机拉包若未做，属环境验证不是开放功能                                                                                                                                             |
-| L3     | Shared 对外 Facade                     | **已建** `Shared/Api/`                                                                                                                                                                                                               |
-| D9     | materialId 选源默认名 / 清除同步              | `PipelineMaterialId` + 面板；D10 绑定列表仅预备                                                                                                                                                                                              |
-| D12    | ⑤ 模型扩展名 + L3 识别只读展示                  | `ModelProcessSettings` + `ResourceRecognitionGui`                                                                                                                                                                                  |
-| D13 主体 | GLB 洋红 / 交付 Shader 规范化               | [d13-glb-magenta](./d13-glb-magenta.md)；Material L1/L2/L3；ggdddd APP 验通                                                                                                                                                            |
-| D16    | ⑤ `ToolPostProcessResult` + Fail(50) | 窄口返回 FailedCount（复用三层 Summary）+ Report；有一条 Execute Failed 即 50；Skip/未命中不算。⑤失败⑥仍跑。无 codec 口径不齐见 **D21**                                                                                                                             |
-| D17    | ④成功后写本次 Art 单元到⑤扫描根                  | Runner 写 `PostProcessFolderPaths`；null 才回落 L1 Prefs；编排不改 Prefs                                                                                                                                                                     |
-| D19    | 管线⑤⑥不以顶点刷白为门禁（降级）                    | FBX 白会被重导冲掉，主要在导出 GLB 露黄。需白：人工刷 + **不要**再触发导入导出后导 GLB。见 [L](#d19-l)                                                                                                                                                                |
-| D18    | 同路径重名按单元夹清空再写                     | ②清本趟 Incoming 单元；④清本趟 Art 单元。唯一定位另议，见 [d18k](#d18k) |
-| D20    | “Prefab 夹未刷顶点色”排查收口                  | 顶点色属于 Model Mesh，不属于 `.prefab` 文件；不挡 CLI，见 [d20-m](#d20-m) |
-| D22    | `.gltf` 先封装 GLB 再入库                      | 明确搁置；现网整包② + 原子④，禁止拿 Unity 场景 Export 当入库，见 [d22-o](#d22-o) |
-| D23    | ctx + glTF B′ 原子搬迁                        | 编辑器实跑已通；ctx 在②.5构建，B′保留相对 URI 树 |
-| D24 已完成切片 | D24-1/5/6/7/10                         | Importer 入口、七步窄口、Importer Profiles、遗产删除、OBJ 轴向已落地；剩余工作另见 [当前 D24 计划](./d24-boundary-plan.md) |
-| D27    | ④文件目录迁入插件 2                           | `Generated/Flatten/` + `ToolFlattenApi` 已落地；**只代表物理迁移，不代表黑盒接管完成** |
-| D24-R1 | 平铺黑盒静态查封与高危保护                     | 已完成调用图、方法分类、入口/边界与风险排序，见 [flatten-core-audit](../04_implementation/flatten-core-audit.md)；并补 Begin 失败不得回退源 Prefab、外部材质复制失败不得写源材质两处护栏。真实模型回归仍按审计清单逐项补。 |
-| D13-R1 | glTF透明 + 移动端 AB | 2026-09-10 OP 修复；2026-09-11 Art 玻璃确认；2026-09-14 用户确认移动端验收完成。不扩 ctx。 |
-| D24-8 / D26-9 文档切片 | 当前约定同步（2026-09-14） | 修正④归属/人工完整入口、SO范围、⑤材质、导入基线与失败语义，旧规则标历史。后续代码变化须同步，不代表D24结构总收口。 |
-| D26-1 | 导入根安全基线与总闸解耦                       | Incoming 基线不受总闸/排除影响；其它 Assets 与策略自动保持原闸；19 个 EditMode 测试通过。 |
-| D26-2 | glTF 缺伴生失败闸                              | typed `MissingUris` → ④ `FlattenFailed(40)` 整趟停；B′ 全量核验；3 个 EditMode 测试通过。OBJ 不进此闸。 |
-| D24-R2 | 平铺配置 SO 与运行快照                           | 人工/管线使用同一 `FlattenOperationSettings` 数据类、不同目录实例；分类/清夹/碰撞体在运行前冻结，内核不再读平铺 EditorPrefs。 |
-| D24-R3b | 人工普通平铺 / 原子迁移                          | 平铺面板与菜单已有两个相位按钮；普通 B 遇外部 URI **确认后才平铺**（取消/叉号中止）；B′ 缺件拒绝；不开放七步乱序。 |
-| D24-R4 | ④ 停写 Prefab Importer AB 标签 | 2026-09-15 步骤 8：Finish / SafeZone 创建链均不再写或清 `assetBundleName`。⑥ 仍 `AssetBundleBuild[]`。 |
-| （无 ID） | 平铺分类与碰撞体迁出 EditorPrefs                 | `AddBoxCollider` 默认 false；旧兼容属性仅代理人工 SO。 |
+| ID                 | 事项                                   | 收口说明                                                                                                                                                                                                                                         |
+| ------------------ | ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 接口+中间层             | 1/2 窄口 + `Plugin/Pipeline` Runner    | 编排内核                                                                                                                                                                                                                                         |
+| D3                 | 自动化管线总面板                             | `Tools > 自动化管线总面板`                                                                                                                                                                                                                           |
+| D2                 | Runner：单文件导入、字符串结果；⑤后改默认开            | 曾含「写 L1 路径」（②.2），已删除；⑤ 靠 D17。StepResult 延后                                                                                                                                                                                                   |
+| （无 ID）             | 删除②.2 导入后写 L1 批量路径                   | 编排不再改 `ResourceBatchFolderStore`；L1 Prefs 仅人手动批量；⑤ 仍用 D17 Art 单元                                                                                                                                                                             |
+| D1                 | ⑥ 契约核对（命名/压缩/main）                   | 契约 1/2 **退化已锁**；文档 [d1-ab-only](../04_implementation/d1-ab-only.md)                                                                                                                                                                          |
+| D4                 | ② 路径入库进管线；收集认 `.glb`                 | 真 `-batchmode` 后由 D5 验收                                                                                                                                                                                                                      |
+| D5                 | CLI 无头验收后固化参数/退出码表                   | 2026-09-02 本机 `-batchmode` `直18.gltf` `-materialId GLTF直18` → `exit=0`。契约冻：仅 `-source`/`-materialId`；②入库固定、③–⑥跟 SO；码 0/10/20/30/40/50/60/80；70 不赋值；⑥ Android+iOS 均成功才 0。见 [cli-getting-started](../04_implementation/cli-getting-started.md) |
+| D8                 | 直通与 BuildAbOnly 合并 Options           | `RetinarExportSettings` + `RetinarAbApi.Build`                                                                                                                                                                                               |
+| D6                 | UnityGLTF 去本机 `file:`，改 git 依赖       | [d6-unitygltf-docker](../04_implementation/d6-unitygltf-docker.md)；本机拉包若未做，属环境验证不是开放功能                                                                                                                                                       |
+| L3                 | Shared 对外 Facade                     | **已建** `Shared/Api/`                                                                                                                                                                                                                         |
+| D9                 | materialId 选源默认名 / 清除同步              | `PipelineMaterialId` + 面板；D10 绑定列表仅预备                                                                                                                                                                                                        |
+| D12                | ⑤ 模型扩展名 + L3 识别只读展示                  | `ModelProcessSettings` + `ResourceRecognitionGui`                                                                                                                                                                                            |
+| D13 主体             | GLB 洋红 / 交付 Shader 规范化               | [d13-glb-magenta](./d13-glb-magenta.md)；Material L1/L2/L3；ggdddd APP 验通                                                                                                                                                                      |
+| D16                | ⑤ `ToolPostProcessResult` + Fail(50) | 窄口返回 FailedCount（复用三层 Summary）+ Report；有一条 Execute Failed 即 50；Skip/未命中不算。⑤失败⑥仍跑。无 codec 口径不齐见 **D21**                                                                                                                                       |
+| D17                | ④成功后写本次 Art 单元到⑤扫描根                  | Runner 写 `PostProcessFolderPaths`；null 才回落 L1 Prefs；编排不改 Prefs                                                                                                                                                                               |
+| D19                | 管线⑤⑥不以顶点刷白为门禁（降级）                    | FBX 白会被重导冲掉，主要在导出 GLB 露黄。需白：人工刷 + **不要**再触发导入导出后导 GLB。见 [L](#d19-l)                                                                                                                                                                          |
+| D18                | 同路径重名按单元夹清空再写                        | ②清本趟 Incoming 单元；④清本趟 Art 单元。唯一定位另议，见 [d18k](#d18k)                                                                                                                                                                                          |
+| D20                | “Prefab 夹未刷顶点色”排查收口                  | 顶点色属于 Model Mesh，不属于 `.prefab` 文件；不挡 CLI，见 [d20-m](#d20-m)                                                                                                                                                                                   |
+| D22                | `.gltf` 先封装 GLB 再入库                  | 明确搁置；现网整包② + 原子④，禁止拿 Unity 场景 Export 当入库，见 [d22-o](#d22-o)                                                                                                                                                                                   |
+| D23                | ctx + glTF B′ 原子搬迁                   | 编辑器实跑已通；ctx 在②.5构建，B′保留相对 URI 树                                                                                                                                                                                                              |
+| D24 已完成切片          | D24-1/5/6/7/10                       | Importer 入口、七步窄口、Importer Profiles、遗产删除、OBJ 轴向已落地；剩余工作另见 [当前 D24 计划](./d24-boundary-plan.md)                                                                                                                                                 |
+| D27                | ④文件目录迁入插件 2                          | `Generated/Flatten/` + `ToolFlattenApi` 已落地；**只代表物理迁移，不代表黑盒接管完成**                                                                                                                                                                            |
+| D24-R1             | 平铺黑盒静态查封与高危保护                        | 已完成调用图、方法分类、入口/边界与风险排序，见 [flatten-core-audit](../04_implementation/flatten-core-audit.md)；并补 Begin 失败不得回退源 Prefab、外部材质复制失败不得写源材质两处护栏。真实模型回归仍按审计清单逐项补。                                                                                        |
+| D13-R1             | glTF透明 + 移动端 AB                      | 2026-09-10 OP 修复；2026-09-11 Art 玻璃确认；2026-09-14 用户确认移动端验收完成。不扩 ctx。                                                                                                                                                                          |
+| D24-8 / D26-9 文档切片 | 当前约定同步（2026-09-14）                   | 修正④归属/人工完整入口、SO范围、⑤材质、导入基线与失败语义，旧规则标历史。后续代码变化须同步，不代表D24结构总收口。                                                                                                                                                                                |
+| D26-1              | 导入根安全基线与总闸解耦                         | Incoming 基线不受总闸/排除影响；其它 Assets 与策略自动保持原闸；19 个 EditMode 测试通过。                                                                                                                                                                                 |
+| D26-2              | glTF 缺伴生失败闸                          | typed `MissingUris` → ④ `FlattenFailed(40)` 整趟停；B′ 全量核验；3 个 EditMode 测试通过。OBJ 不进此闸。                                                                                                                                                          |
+| D24-R2             | 平铺配置 SO 与运行快照                        | 人工/管线使用同一 `FlattenOperationSettings` 数据类、不同目录实例；分类/清夹/碰撞体在运行前冻结，内核不再读平铺 EditorPrefs。                                                                                                                                                         |
+| D24-R3b            | 人工普通平铺 / 原子迁移                        | 平铺面板与菜单已有两个相位按钮；普通 B 遇外部 URI **确认后才平铺**（取消/叉号中止）；B′ 缺件拒绝；不开放七步乱序。                                                                                                                                                                            |
+| D24-R4             | ④ 停写 Prefab Importer AB 标签           | 2026-09-15 步骤 8：Finish / SafeZone 创建链均不再写或清 `assetBundleName`。⑥ 仍 `AssetBundleBuild[]`。                                                                                                                                                      |
+| （无 ID）             | 平铺分类与碰撞体迁出 EditorPrefs               | `AddBoxCollider` 默认 false；旧兼容属性仅代理人工 SO。                                                                                                                                                                                                     |
 
 
 
@@ -876,10 +920,12 @@ D26-2 现网已改（**仅 glTF 探针路径**）：`PipelineGltfUriProbe` 同�
 ### 取消 / 明确不做
 
 
-| 事项                                 | 说明                                                                     |
-| ---------------------------------- | ---------------------------------------------------------------------- |
+| 事项                                 | 说明                                                                          |
+| ---------------------------------- | --------------------------------------------------------------------------- |
 | ~~整包平铺迁插件 2~~                      | **2026-09-03 曾改为「分类拷贝抽离、交付步骤留插件 1」（D24-5 窄口）。同日再翻案：插件 1 只留 ⑥，④ 实现迁出（D27）。** |
-| Quiet = 退出编辑器                      | 禁止                                                                     |
-| 退出默认删 `Assets/Art`                 | 禁止                                                                     |
-| 为 Pack 另开一套 ②③⑥                    | 禁止（见 D14）                                                              |
-| 用 UnityGLTF 场景 Export 当 `.gltf` 入库 | 禁止（DCC 重导）；入库最多做容器封装，见 [O](#d22-o) / D22                               |
+| Quiet = 退出编辑器                      | 禁止                                                                          |
+| 退出默认删 `Assets/Art`                 | 禁止                                                                          |
+| 为 Pack 另开一套 ②③⑥                    | 禁止（见 D14）                                                                   |
+| 用 UnityGLTF 场景 Export 当 `.gltf` 入库 | 禁止（DCC 重导）；入库最多做容器封装，见 [O](#d22-o) / D22                                    |
+
+

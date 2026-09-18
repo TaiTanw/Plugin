@@ -2,7 +2,7 @@
 
 返回 [待办](./backlog.md#a-open-items) · [D24 边界](./d24-boundary-plan.md) · [总目录](../README.md)
 
-> 2026-09-16。④ 收口步骤 **1–14 已落地**。不含面板强制入库（D26-5）、后错覆盖（D26-4）、重写⑥、D19。① FBX 外置图跟拷（D25-2 A）已随本轮落地。含 41/42 的代码**未提交**。操作者入口：[插件根 README](../../../README.md)。
+> 2026-09-16。④ 收口步骤 **1–14 已落地并上推 `23b3567`**。不含重写⑥、D19；D26-5 入库入口一致性与 D26-4 首错保留已于 2026-09-16 另行收口。① FBX 外置图跟拷（D25-2 A）已随本轮落地。操作者入口：[插件根 README](../../../README.md)。
 
 ## 已拍板（本页）
 
@@ -64,7 +64,7 @@
 
 按钮 → `plan.Branch`。B′ sidecar 用 `GltfPackageFiles.Scan`，不是 `JobContext.Build`。选中 `.gltf` 直接 Scan；Prefab 用 `GetDependencies` 找 `.gltf` 再 Scan。FBX/OBJ 不 Scan、无提示。点「普通平铺」且有相对 URI：弹窗确认（`FlattenManualPrompt.ConfirmSplitWithRelativeUris`）；**仍要平铺**才继续，**取消/叉号中止**，不建 Prefab、不跑④。
 
-调度/操作分目录（中间层 `Pipeline/Editor/Flatten/`），未搬内核。管线总面板 `[④]`「打开平铺面板」进同一 `FlattenWindow`（人工 SO）；管线运行仍读管线平铺 SO。
+调度/计划分目录（中间层 `Pipeline/Editor/ManualFlatten/`：`Orchestration` + `Plan`），未搬内核。管线总面板 `[④]`「打开平铺面板」进同一 `FlattenWindow`（人工 SO）；管线运行仍读管线平铺 SO。
 
 验收：`FlattenManualPlanFactoryTests`（Split 不拒外 URI；B′ 缺 `.bin` 失败；完整 sidecar 组 Relocate plan）。
 

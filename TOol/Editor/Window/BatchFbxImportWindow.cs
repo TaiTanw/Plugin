@@ -24,9 +24,12 @@ public class BatchFbxImportWindow : EditorWindow
     private Vector2 listScroll;
     private string lastSummary;
     private bool isRunning;
+    private bool foldConfig;
+
+    private const string PrefFoldConfig = "TOol.BatchImport.Fold.Config";
 
     /// <summary>与管线 [1]「打开批量选择器」同一窗口。</summary>
-    [MenuItem("Tools/批量选择器")]
+    [MenuItem("Tools/手动操作栏/步骤/[1] 入库/打开批量选择器", false, 31)]
     public static void ShowWindow()
     {
         GetWindow<BatchFbxImportWindow>("批量选择器").minSize = new Vector2(640f, 460f);
@@ -36,10 +39,12 @@ public class BatchFbxImportWindow : EditorWindow
     {
         settings = BatchFbxImportSettings.GetOrCreateAsset();
         EnsureFilterDefaults();
+        foldConfig = EditorPrefs.GetBool(PrefFoldConfig, false);
     }
 
     private void OnDisable()
     {
+        EditorPrefs.SetBool(PrefFoldConfig, foldConfig);
         settingsSerialized = null;
     }
 
@@ -55,17 +60,12 @@ public class BatchFbxImportWindow : EditorWindow
             mainScroll = scroll.scrollPosition;
 
             EditorGUILayout.HelpBox(
-                "内核可识别：" + ToolImportApi.FormatSupportedExtensionsDisplay() + "\n" +
-                "下面勾选只过滤本次收集列表，不表示没勾的格式内核不认识；CLI 指定文件仍认全表。\n" +
-                "改勾选会按上次拖入/浏览的路径重新收集（取消的文件再勾选会回来）。清空列表才忘掉这些路径。\n" +
-                "「执行导入」：只把文件送进导入区（Conflict 仍拦住；Warning 可导）。不建 Prefab、不平铺、不导出。\n" +
-                "「同夹多模型」Warning（本面板夹名）：只看当前列表里三层名是否撞车，不扫盘上未列出的文件。\n" +
-                "「输出到编排」建议 ID2：扫父目录磁盘上全部内核格式（不管本面板勾选）。\n" +
-                "「输出到编排面板」：筛选完成，把路径 + 建议 ID2 交给总面板，不拷贝。编排运行按行走全流程。\n" +
-                "建议 ID2：父目录磁盘上还有其它内核格式文件、或三层不足时，三层+文件全名。\n" +
-                "夹名（本面板自己导入时）：三层；同夹多文件追加文件名（Warning）。目标已存在 / 交付区 = Conflict。",
+                "识别 " + ToolImportApi.FormatSupportedExtensionsDisplay() + "。下方勾选只缩小本次列表。\n" +
+                "「执行导入」拷进本页导入根；「输出到编排」只交路径和 ID2，不拷贝。\n" +
+                "ID2 可改。目标已存在或落在交付区预警 = Conflict。",
                 MessageType.Info);
 
+            DrawExtensionFilter();
             DrawSettings();
             DrawDropArea();
             DrawList();
@@ -81,15 +81,32 @@ public class BatchFbxImportWindow : EditorWindow
 
     private void DrawSettings()
     {
-        EditorGUILayout.LabelField("配置（ConfigData）", EditorStyles.boldLabel);
+        EditorGUILayout.Space(4f);
+        bool open = EditorGUILayout.Foldout(
+            foldConfig, "配置（导入根 / 交付区预警）", true, EditorStyles.foldoutHeader);
+        if (open != foldConfig)
+        {
+            foldConfig = open;
+            EditorPrefs.SetBool(PrefFoldConfig, open);
+        }
+
+        if (!foldConfig)
+        {
+            if (!settings.TryValidateImportRoot(out string foldedError))
+            {
+                EditorGUILayout.HelpBox(foldedError, MessageType.Error);
+            }
+
+            return;
+        }
+
         using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
         {
             EditorGUILayout.HelpBox(
-                "deliveryAlertPathPrefixes 只拦「入库目标」是否落在交付区；" +
-                "与贴图/模型高级设置里的 excludedPathPrefixes 是另一份列表。",
+                "只服务本窗「执行导入」。预警表与贴图/模型不介入目录不是同一份。",
                 MessageType.None);
 
-            DrawExtensionFilter();
+            SettingsAssetPathGui.DrawPinned(settings);
 
             EditorGUI.BeginChangeCheck();
             ScriptableObjectSettingsGui.Draw(settings, ref settingsSerialized);
@@ -208,7 +225,7 @@ public class BatchFbxImportWindow : EditorWindow
             listScroll = listScope.scrollPosition;
             if (items.Count == 0)
             {
-                EditorGUILayout.LabelField("尚无条目。拖入文件夹后在此显示源路径、目标夹名与冲突状态。");
+                EditorGUILayout.LabelField("尚无条目。拖入后显示源路径、可改 ID2 与冲突状态。");
                 return;
             }
 
@@ -225,7 +242,7 @@ public class BatchFbxImportWindow : EditorWindow
                     using (new EditorGUILayout.HorizontalScope())
                     {
                         EditorGUILayout.LabelField(
-                            (i + 1) + ". [" + item.Status + "] " + item.FolderName + "  ·  " + fileName,
+                            (i + 1) + ". [" + item.Status + "]  " + fileName,
                             EditorStyles.boldLabel);
                         using (new EditorGUI.DisabledScope(isRunning))
                         {
@@ -234,6 +251,17 @@ public class BatchFbxImportWindow : EditorWindow
                                 RemoveAt(i);
                                 break;
                             }
+                        }
+                    }
+
+                    using (new EditorGUI.DisabledScope(isRunning))
+                    {
+                        EditorGUI.BeginChangeCheck();
+                        string id2 = EditorGUILayout.TextField("ID2", item.Id2 ?? string.Empty);
+                        if (EditorGUI.EndChangeCheck())
+                        {
+                            BatchFbxImportService.ApplyIncomingId2(item, id2, settings);
+                            BatchFbxImportService.RefreshConflictStates(items, settings);
                         }
                     }
 
@@ -379,16 +407,35 @@ public class BatchFbxImportWindow : EditorWindow
 
     private void OutputToOrchestration()
     {
-        var paths = new List<string>();
+        var bindings = new List<PipelineSourceBinding>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         for (int i = 0; i < items.Count; i++)
         {
-            if (items[i] != null && !string.IsNullOrEmpty(items[i].SourceFbxPath))
+            BatchFbxImportService.ImportItem item = items[i];
+            if (item == null || string.IsNullOrEmpty(item.SourceFbxPath))
             {
-                paths.Add(items[i].SourceFbxPath);
+                continue;
             }
+
+            string source = item.SourceFbxPath.Replace("\\", "/").Trim();
+            if (!seen.Add(source))
+            {
+                continue;
+            }
+
+            string id2;
+            if (string.IsNullOrWhiteSpace(item.Id2))
+            {
+                id2 = PipelineMaterialId.SuggestDefault(source);
+            }
+            else
+            {
+                id2 = BatchFbxImportService.SanitizeFolderName(item.Id2.Trim());
+            }
+
+            bindings.Add(new PipelineSourceBinding(source, id2));
         }
 
-        List<PipelineSourceBinding> bindings = PipelineMaterialId.SuggestBindingsForSelection(paths);
         if (bindings.Count == 0)
         {
             lastSummary = "没有可输出的路径。";
@@ -396,14 +443,14 @@ public class BatchFbxImportWindow : EditorWindow
         }
 
         PipelineSourceAccept.SendToOrchestration(bindings);
-        lastSummary = "已输出 " + bindings.Count + " 条到编排面板（未入库）。建议 ID2：父目录仅一个内核文件用三层；还有其它则加文件全名。";
+        lastSummary = "已输出 " + bindings.Count + " 条到编排面板（未入库）。ID2 用本表所填；空行才回落建议。";
         Repaint();
     }
 
     private void DrawExtensionFilter()
     {
         EnsureFilterDefaults();
-        EditorGUILayout.LabelField("本次收集格式（子集）", EditorStyles.miniBoldLabel);
+        EditorGUILayout.LabelField("本次收集格式", EditorStyles.miniBoldLabel);
         string[] all = ToolImportApi.GetSupportedModelExtensions();
         using (new EditorGUI.DisabledScope(isRunning))
         {

@@ -41,39 +41,12 @@ public class ModelImportSettingsProcessorTests
         }
     }
 
-    [TestCase(false, false, false, false)]
-    [TestCase(false, false, true, true)]
-    [TestCase(false, true, false, false)]
-    [TestCase(false, true, true, true)]
-    [TestCase(true, false, false, true)]
-    [TestCase(true, false, true, true)]
-    [TestCase(true, true, false, false)]
-    [TestCase(true, true, true, true)]
-    public void Baseline_ImportRootBypassesMasterAndExcludeOnlyInsideRoot(
-        bool masterEnabled,
-        bool excluded,
-        bool isInImportRoot,
-        bool expected)
+    [TestCase(false, false)]
+    [TestCase(true, true)]
+    public void Policy_FollowsExternalFlagOnly(bool modelUseExternalMaterials, bool expected)
     {
         Assert.That(
-            ModelImportSettingsProcessor.ShouldApplyIncomingBaseline(
-                masterEnabled, excluded, isInImportRoot),
-            Is.EqualTo(expected));
-    }
-
-    [TestCase(false, false, false)]
-    [TestCase(false, true, false)]
-    [TestCase(true, false, false)]
-    [TestCase(true, true, true)]
-    public void Policy_RequiresMasterAndModelSettingsAuto(
-        bool masterEnabled,
-        bool modelSettingsAuto,
-        bool expected)
-    {
-        Assert.That(
-            ModelImportSettingsProcessor.ShouldApplyIncomingPolicy(
-                masterEnabled,
-                modelSettingsAuto),
+            ModelImportSettingsProcessor.ShouldApplyIncomingPolicy(modelUseExternalMaterials),
             Is.EqualTo(expected));
     }
 }

@@ -8,7 +8,7 @@
 
 - 自动总面板与CLI共用PipelineRunner；面板可用bindings多行，CLI仍单-source。
 - ②可导入工程外模型；Pack解包填表未实现，不另开一套管线。
-- 当前SO默认②③④⑤⑥开启；总面板强制RunImport=true、CLI跟SO，差异见D26-5。
+- 操作者总面板与 CLI 的②入库固定开启；SO 默认③④⑤⑥开启。底层 API 仍可显式关闭入库。D26-5 已收口。
 - 文档改动检查链接/一致性即可；代码改动按风险运行针对测试，④大范围拆分需真实模型回归，不以“能编译”或单个样例成功代替。
 - 2026-09-10相关EditMode测试35/35通过、2026-09-11Art玻璃验收是历史证据，本轮未重跑；2026-09-14用户确认移动端AB已验收。
 
@@ -27,10 +27,10 @@
 | ③ | Prefab路径列表 | 空则30 |
 | ④ | Begin/B/B′/Finish的bool及work；E/D/C为void | glTF MissingUris预检 → 40 并停止整趟；OBJ缺件不进该闸；尚无统一FlattenPhaseResult |
 | ⑤ | ToolPostProcessResult：FailedCount、Canceled、Report | Execute硬失败累计>0映射50；Report给人读，不解析作控制流 |
-| ⑥ | RetinarAbBuildResult | 全失败60，PartialOk仍0（既有契约） |
-| 整趟 | PipelineResult：ExitCode、Messages、PrefabOutputs、AbOutputs | CLI退出/面板显示；后错覆盖首错仍是D26-4 |
+| ⑥ | RetinarAbBuildResult | Android+iOS 均成功才0；任一端失败60 |
+| 整趟 | PipelineResult：ExitCode、Messages、PrefabOutputs、AbOutputs | CLI退出/面板显示；首个非 0 退出码保留，后续失败仍追加 Messages（D26-4 已修） |
 
-⑤50后⑥仍跑；⑥全失败会把50覆盖成60。统一StepResult/首错保留尚未实现，不能把下文建议当当前保证。
+⑤50后⑥仍跑；若⑥也失败，日志会记录60对应消息，但退出码保持更早的50。统一StepResult尚未实现；首错保留已由 D26-4 收口。
 
 ## 4. D26-6：空操作与排错边界
 

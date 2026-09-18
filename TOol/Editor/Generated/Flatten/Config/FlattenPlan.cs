@@ -44,4 +44,7 @@ public sealed class FlattenPlan
 
     /// <summary>glTF 已声明但不存在的必需伴生。非空时 Run 在 Begin 前失败（与编排现网闸相同）。</summary>
     public List<string> MissingUris = new List<string>();
+
+    /// <summary>④ 写出根。空则内核用 FlattenBuildSettings.ArtRoot。</summary>
+    public string ArtRoot;
 }

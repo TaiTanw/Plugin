@@ -71,7 +71,7 @@ Unity.exe
 - 入口必须是 Editor 程序集里 **`public static void` 无参**方法。
 - CLI **强制** `Quiet=true`（batchmode 禁 Dialog）。**Quiet ≠ `-quit`**。
 - 退出码 = `PipelineResult.ExitCode`。缺 `-source` → `10`（BadArgs）。⑤ `FailedCount>0` → `50`。未捕获异常 → `80`（Other）。
-- `70` LicenseOrEnv **预留，本入口不赋值**。⑥ 至少打出一端（`PartialOk`）仍 `0`；全失败才 `60`。
+- `70` LicenseOrEnv **预留，本入口不赋值**。⑥ Android 与 iOS 两端均成功才 `0`；任一端失败即 `60`（仍保留完整日志并继续已允许的后续诊断）。
 
 无头时工程须关掉占用该 `-projectPath` 的 Editor，否则 batchmode 进不去。
 
@@ -84,7 +84,7 @@ Unity.exe
 | `-source <path>` 或 `-source=` | 是 | `SourcePath` | 工程外 **.glb/.fbx/.gltf/.obj** 或 `Assets/…`。`.gltf` 会整包入库（旁路一起拷）；不必先转 GLB |
 | `-materialId <name>` | 否 | `MaterialId` | 覆盖 Prefab 三层命名 |
 
-步骤开关全部跟 `PipelineStepSettings` SO，**不加 flag 覆盖**。扩步骤 flag / 输出根 / 多源（D10）/ 清 Incoming（D11）须另开项。
+②入库对操作者 CLI 固定开启；③–⑥与 quiet 跟 `PipelineStepSettings` SO，**不加 flag 覆盖**。扩步骤 flag / 输出根 / 多源（D10）/ 清 Incoming（D11）须另开项。
 
 ```text
 1. 解析 -source / 可选 -materialId

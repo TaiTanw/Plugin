@@ -8,6 +8,7 @@ using UnityEditor;
 //   固定为：模型阶段 → 贴图阶段（为以后材质驱动贴图派生预留，v1 不做拖拽排序）。
 //
 // delayCall 原因与贴图侧相同：脱离 OnPostprocessAllAssets 的导入调用栈，避免嵌套导入。
+// 现网 SourceFileProcessor 为空钩子，本调度器无入队；Prefs 闸保留但不复活。
 // =====================================================================================
 public static class ImportPostProcessScheduler
 {

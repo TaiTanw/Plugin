@@ -48,4 +48,7 @@ public sealed class ToolFlattenRequest
     /// true：套空外壳时给内容节点叠 −90°X。人给的输入，不猜文件。
     /// </summary>
     public bool ConvertZUpToYUp;
+
+    /// <summary>④ 写出根。空则内核用 FlattenBuildSettings.ArtRoot。</summary>
+    public string ArtRoot;
 }

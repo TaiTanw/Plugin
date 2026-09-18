@@ -11,8 +11,10 @@ using UnityEngine;
 public class ModelProcessSettings : ScriptableObject
 {
     public const string DefaultAssetPath = "Assets/Plugin/TOol/ConfigData/ModelProcessSettings.asset";
+    public const string PipelineAssetPath =
+        ProcessSettingsOwnership.PipelineConfigRoot + "/ModelProcessSettings.asset";
 
-    [Header("导入区 Importer · 基线（配置导入根内不受本机自动总闸）")]
+    [Header("导入区 Importer · 基线（配置导入根内必写，无开关）")]
     [Tooltip("导入时剔除 DCC 带出来的灯光与摄像机节点。\n" +
              "必须在 ③ 生成 Prefab 之前生效：③ 存出的是独立 Prefab 资产，" +
              "相机灯光一旦烤成节点，④ 再写 importCameras=false 也回收不掉。")]
@@ -23,10 +25,11 @@ public class ModelProcessSettings : ScriptableObject
              "百级子网格时能压垮 Console。代价：源文件真带 vn 时会改用重算法线。")]
     public bool modelCalculateNormalsForObj = true;
 
-    [Header("导入区 Importer · 策略（需本机「模型 · 设置自动」勾选）")]
+    [Header("导入区 Importer · 策略（本份 SO 勾选即导入回调；默认关）")]
     [Tooltip("导入时把材质来源设为 External（外部 .mat 由编辑器生成）。\n" +
              "D24-3：④ 拆分前保持关闭。开启会让 Incoming 旁边生成 Materials/，" +
-             "改变 ④ 的输入（历史上与插件 1 的 InPrefab 互相覆盖过）。")]
+             "改变 ④ 的输入（历史上与插件 1 的 InPrefab 互相覆盖过）。\n" +
+             "编排「全局导入设置（2）」与人工高级设置各一份资产，互不影响。")]
     public bool modelUseExternalMaterials = false;
 
     [Header("可处理的模型扩展名")]
@@ -42,14 +45,14 @@ public class ModelProcessSettings : ScriptableObject
     public List<string> masterBatchOperationIds = new List<string> { "set_vertex_colors_white" };
 
     [Header("不介入的目录（自动流）")]
-    [Tooltip("路径以此列表任一前缀开头时，仅「设置自动 / 后处理自动」（导入期钩子）跳过。默认排除 Assets/Art/。" +
-             "配置导入根内的模型安全基线例外：即使此处误排除 Incoming，仍会剔灯剔相机并处理 OBJ 法线。" +
-             "L1「执行全部」、子面板手动、中间层⑤（代跑同一总批量）都不读本列表，可以对 Art 刷顶点色。" +
-             "注意：本列表与 TextureProcessSettings.excludedPathPrefixes、BatchFbxImportSettings.deliveryAlertPathPrefixes " +
-             "是三份独立配置（默认都写 Assets/Art/），改一处不会自动同步；改交付根时请三处对照。")]
+    [Tooltip("路径以此列表任一前缀开头时，历史上仅「设置自动 / 后处理自动」跳过。默认排除 Assets/Art/。" +
+             "现网 OnPreprocess 与⑤总批量都不读本列表；仅残留在全局导入设置高级折叠。" +
+             "注意：与 TextureProcessSettings.excludedPathPrefixes、BatchFbxImportSettings.deliveryAlertPathPrefixes " +
+             "是三份独立配置，改一处不会自动同步。")]
     public List<string> excludedPathPrefixes = new List<string> { "Assets/Art/" };
 
     private static ModelProcessSettings assetInstance;
+    private static ModelProcessSettings pipelineInstance;
     private static ModelProcessSettings fallbackInstance;
     private static bool fallbackWarningLogged;
 
@@ -239,6 +242,46 @@ public class ModelProcessSettings : ScriptableObject
         return created;
     }
 
+    public static ModelProcessSettings GetOrCreatePipelineAsset()
+    {
+        if (pipelineInstance != null)
+        {
+            pipelineInstance.EnsureMasterBatchDefaults();
+            return pipelineInstance;
+        }
+
+        pipelineInstance = AssetDatabase.LoadAssetAtPath<ModelProcessSettings>(PipelineAssetPath);
+        if (pipelineInstance != null)
+        {
+            pipelineInstance.EnsureMasterBatchDefaults();
+            return pipelineInstance;
+        }
+
+        ProcessSettingsOwnership.EnsureAssetFolder(
+            Path.GetDirectoryName(PipelineAssetPath).Replace("\\", "/"));
+        var created = CreateInstance<ModelProcessSettings>();
+        created.modelUseExternalMaterials = false;
+        AssetDatabase.CreateAsset(created, PipelineAssetPath);
+        AssetDatabase.SaveAssets();
+        pipelineInstance = created;
+        created.EnsureMasterBatchDefaults();
+        Debug.Log("[ModelProcessSettings] 已创建编排配置资产: " + PipelineAssetPath);
+        return created;
+    }
+
+    /// <summary>导入回调：有编排资产则用编排，否则人工 Current。</summary>
+    public static ModelProcessSettings ForImportCallbacks()
+    {
+        ModelProcessSettings pipeline =
+            AssetDatabase.LoadAssetAtPath<ModelProcessSettings>(PipelineAssetPath);
+        if (pipeline != null)
+        {
+            return pipeline;
+        }
+
+        return Current;
+    }
+
     private static ModelProcessSettings FindExistingAsset()
     {
         if (assetInstance != null)
@@ -257,6 +300,11 @@ public class ModelProcessSettings : ScriptableObject
         foreach (string guid in AssetDatabase.FindAssets("t:ModelProcessSettings"))
         {
             string path = AssetDatabase.GUIDToAssetPath(guid);
+            if (ProcessSettingsOwnership.IsPipelineConfigPath(path))
+            {
+                continue;
+            }
+
             assetInstance = AssetDatabase.LoadAssetAtPath<ModelProcessSettings>(path);
             if (assetInstance != null)
             {

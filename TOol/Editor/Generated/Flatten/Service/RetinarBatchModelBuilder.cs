@@ -37,7 +37,15 @@ public static partial class RetinarBatchModelBuilder
         ExtractTexturesInvokeCount = 0;
     }
 
-    private const string ArtRoot = FlattenBuildSettings.ArtRoot;
+    private static string s_artRoot = FlattenBuildSettings.ArtRoot;
+
+    private static string ArtRoot
+    {
+        get
+        {
+            return string.IsNullOrEmpty(s_artRoot) ? FlattenBuildSettings.ArtRoot : s_artRoot;
+        }
+    }
 
     // Z-up → Y-up。与 Unity 读到 FBX 头里 up-axis 时自己写的那个旋转一致。
     // OBJ 格式没有 up-axis 字段，Unity 一律当 Y-up 读，所以只能由人在绑定行上指定。
@@ -67,6 +75,7 @@ public static partial class RetinarBatchModelBuilder
     {
         work = null;
         flattenOptions = flattenOptions ?? RetinarFlattenOptions.Default;
+        s_artRoot = FlattenArtPaths.ResolveOverride(flattenOptions.ArtRoot);
         if (string.IsNullOrEmpty(sourcePath) ||
             !string.Equals(Path.GetExtension(sourcePath), ".prefab", System.StringComparison.OrdinalIgnoreCase))
         {

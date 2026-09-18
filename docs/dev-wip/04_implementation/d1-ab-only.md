@@ -14,19 +14,19 @@
 | 输入 | 开④用其返回Art Prefab；关④用③或预填Prefab列表 |
 | 构建 | 显式AssetBundleBuild[]；不靠扫描全部已打标签的资产决定本次输入 |
 | 压缩 | ChunkBasedCompression（LZ4） |
-| 路径 | 默认AssetBundles/{Android,iOS}；按配置拷至Deliverables/名称/03_assetbundles；UP在02_unity |
-| 文件名 | name.assetbundle + 平台目录；未改为{id}_android/ios.assetbundle |
+| 路径 | 默认 `AssetBundles/` 根下平铺，不再分 Android/iOS 夹；按配置拷至 Deliverables；UP 仍在 02_unity。Unity 构建暂存在 `Library/RetinarAbBuild/{android\|ios}` |
+| 文件名 | `{stem}_android.assetbundle` / `{stem}_ios.assetbundle` |
 | 包内main | 不强制改main，继续现网取包方式 |
 | Quiet | 不弹确认，不等于退出编辑器；CLI负责退出进程 |
 | 不做 | 旧规范化业务门禁、全套00–06、runtime/xlsx/贴图报告已删除 |
 
 当前正常SO默认②③④⑤⑥全开；“②③⑥”是可裁剪最小线，不是当前默认。
 
-## 契约 1 / 2（已确认可退化）
+## 契约 1 / 2（v1.6.0 已改文件名）
 
-文件名/包内main继续现网契约。工单提出{id}_android.assetbundle + {id}_ios.assetbundle是历史评估，未获APP改取包确认，不改默认；上传层改名仍是备选。历史工单证据见[日志§2](../05_dev-log/timeline.md#2-issue-274)，本次未查询远程新状态。
+自 **v1.6.0** 起产品默认即 `{stem}_android.assetbundle` / `{stem}_ios.assetbundle`，产品夹不再分平台。包内 `main` 仍不强制改。无回退到旧平台子夹。APP 若仍按 `AssetBundles/{Android,iOS}/name.assetbundle` 取包需改路径。历史工单见[日志§2](../05_dev-log/timeline.md#2-issue-274)。
 
-④AB标签归属迁移与文件名重开不是一件事。2026-09-14用户同意取消④提前写标签，转由⑥构建清单管理名称；先核对旧菜单/外部工具依赖，不借此改变APP文件名契约或新增Importer写入。
+④ 不再提前写 AB 标签；⑥ 构建清单管理名称。
 
 ## ④ + ⑥：如何找到 Art 资源？
 

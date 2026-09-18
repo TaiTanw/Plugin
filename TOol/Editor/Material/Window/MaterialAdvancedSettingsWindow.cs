@@ -19,15 +19,43 @@ public class MaterialAdvancedSettingsWindow : EditorWindow
     private bool foldConfig = true;
     private bool foldOps = true;
 
+    [MenuItem("Tools/手动操作栏/设置/[⑤] 材质", false, 53)]
     public static void ShowWindow()
     {
-        var window = GetWindow<MaterialAdvancedSettingsWindow>("材质高级设置");
+        ShowWindow(MaterialProcessSettings.GetOrCreateAsset(), false);
+    }
+
+    public static void ShowPipelineWindow()
+    {
+        ShowWindow(MaterialProcessSettings.GetOrCreatePipelineAsset(), true);
+    }
+
+    private static void ShowWindow(MaterialProcessSettings target, bool pipelineScope)
+    {
+        var window = GetWindow<MaterialAdvancedSettingsWindow>(
+            pipelineScope ? "材质高级设置（编排）" : "材质高级设置");
         window.minSize = new Vector2(520f, 320f);
+        window.Bind(target, pipelineScope);
+    }
+
+    private bool pipelineScope;
+
+    private void Bind(MaterialProcessSettings target, bool pipeline)
+    {
+        pipelineScope = pipeline;
+        settings = target;
+        settingsSerialized = null;
+        Repaint();
     }
 
     private void OnEnable()
     {
-        settings = MaterialProcessSettings.GetOrCreateAsset();
+        if (settings == null)
+        {
+            settings = pipelineScope
+                ? MaterialProcessSettings.GetOrCreatePipelineAsset()
+                : MaterialProcessSettings.GetOrCreateAsset();
+        }
         foldConfig = EditorPrefs.GetBool(PrefFoldConfig, true);
         foldOps = EditorPrefs.GetBool(PrefFoldOps, true);
     }
@@ -43,7 +71,9 @@ public class MaterialAdvancedSettingsWindow : EditorWindow
     {
         if (settings == null)
         {
-            settings = MaterialProcessSettings.GetOrCreateAsset();
+            settings = pipelineScope
+                ? MaterialProcessSettings.GetOrCreatePipelineAsset()
+                : MaterialProcessSettings.GetOrCreateAsset();
         }
 
         settings.EnsureMasterBatchDefaults();
@@ -52,9 +82,9 @@ public class MaterialAdvancedSettingsWindow : EditorWindow
         {
             scroll = scrollScope.scrollPosition;
             EditorGUILayout.HelpBox(
-                "本页为团队约定（ScriptableObject，进版本库）。\n" +
-                "「主面板批量包含」决定资源总面板 / 管线⑤跑哪些材质 Op。\n" +
-                "L2 精准面板的勾选是本机 Prefs，与本页主批量勾选是两套。",
+                pipelineScope
+                    ? "本页为编排⑤设置（Pipeline/ConfigData）。目标 Shader 与主批量 Op 只影响管线⑤。"
+                    : "本页为人工设置（TOol/ConfigData）。目标 Shader 与主批量 Op 只影响资源处理总面板。",
                 MessageType.Info);
 
             ResourceRecognitionGui.DrawMaterial();
@@ -75,14 +105,7 @@ public class MaterialAdvancedSettingsWindow : EditorWindow
 
         using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
         {
-            using (new EditorGUILayout.HorizontalScope())
-            {
-                EditorGUILayout.ObjectField(settings, typeof(MaterialProcessSettings), false);
-                if (GUILayout.Button("在 Project 中定位", GUILayout.Width(120f)))
-                {
-                    EditorGUIUtility.PingObject(settings);
-                }
-            }
+            SettingsAssetPathGui.DrawPinned(settings);
 
             EditorGUILayout.HelpBox(
                 "targetShaderName：不合规材质烤到的目标（默认 Standard）。\n" +
@@ -147,7 +170,7 @@ public class MaterialAdvancedSettingsWindow : EditorWindow
                         operation.Description, EditorStyles.wordWrappedMiniLabel);
 
                     bool master = settings.masterBatchOperationIds.Contains(operation.Id);
-                    bool newMaster = EditorGUILayout.ToggleLeft("主面板批量包含（SO）", master);
+                    bool newMaster = EditorGUILayout.ToggleLeft("批量包含（本份 SO）", master);
                     if (newMaster != master)
                     {
                         Undo.RecordObject(settings, "修改材质主面板批量操作");

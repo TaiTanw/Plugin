@@ -7,7 +7,7 @@ using System.Collections.Generic;
 /// <summary>
 /// 插件 2 · 资源处理子流程对外接口。
 /// 与 L1「按批量路径执行全部」同一内核（手动路径，不读 excludedPathPrefixes）。
-/// 中间层⑤只是代调本口，不是导入期 AssetPostprocessor 自动流。
+/// 中间层⑤只是代调本口；纳入三类由调用方传入，本口不读管线 SO。
 /// </summary>
 public static class ToolPostProcessApi
 {
@@ -19,9 +19,18 @@ public static class ToolPostProcessApi
         IList<string> folders = null,
         bool? includeTexture = null,
         bool? includeModel = null,
-        bool? includeMaterial = null)
+        bool? includeMaterial = null,
+        TextureProcessSettings textureSettings = null,
+        MaterialProcessSettings materialSettings = null,
+        ModelProcessSettings modelSettings = null)
     {
         return ResourcePostProcessService.RunMasterBatch(
-            folders, includeTexture, includeModel, includeMaterial);
+            folders,
+            includeTexture,
+            includeModel,
+            includeMaterial,
+            textureSettings,
+            materialSettings,
+            modelSettings);
     }
 }

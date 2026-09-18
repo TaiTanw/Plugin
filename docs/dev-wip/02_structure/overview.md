@@ -9,6 +9,7 @@
 ```text
 Assets/Plugin/                     Git 根
 ├─ Pipeline/                      自动化入口、总步骤 SO、Runner、ctx
+│  └─ Editor/ManualFlatten/        人工④唯一调度入口（自动④仍在 Runner）
 ├─ TOol/                          插件 2：导入、③生成、⑤资源操作
 │  └─ Editor/Generated/Flatten/    ④物理存放处；ctx 编排部分暂归中间层
 └─ RetinarBatchBuilder_Share/      插件 1：⑥ AB/可选 UnityPackage、菜单适配
@@ -34,9 +35,9 @@ Runner 先完成入库与 ctx 收集，再按行生成 Prefab，并非每导入�
 
 当前差距：
 
-- 总面板强制 `RunImport=true`；CLI 使用 SO。两者共用 Runner，但入口配置还不完全等价（D26-5）。
+- 操作者总面板与 CLI 的入库固定开启；`PipelineStepSettings` 不再保存 `runImport`。底层 API 仍可显式关闭 `PipelineOptions.RunImport`。
 - Prefab/ctx 数量不足时管线④已 Fail（步骤 3）；人工④不建 ctx（步骤 4）。尚无稳定行 ID。
-- ⑤失败记 50 但仍可继续⑥；后错覆盖首错尚未修（D26-4）。不能把“共享入口”写成“成功准则已经完整”。
+- ⑤失败记 50 但仍可继续⑥；后续失败保留消息但不覆盖首个非 0 退出码（D26-4 已修）。
 - Runner 仍有 D19 顶点色诊断/补偿分支，不是只剩业务无关的窄口转发。
 
 ## 3. ④平铺：三层（目标）与现网差在哪
@@ -97,7 +98,7 @@ E/D/C 内核仍是 void；步骤 9 已把 copied / leftover / unbound / 身份�
 
 - 普通平铺按钮固定 B；Scan 到外 URI **只提示不拦截**。原子迁移固定 B′，只接受完整且唯一的外 URI glTF 包。
 - 输入为已在 Assets 导入的模型/Prefab。直接选 `.fbx/.obj/.glb/.gltf` 都先③再 `Run(plan)`。
-- 人工没有②.5；按钮给出 Branch 后 `FlattenManualPlanFactory` 组 plan，**不** `PipelineJobContext.Build`。调度在 `Pipeline/Editor/Flatten/Orchestration`，操作数据在 `Operations`。
+- 人工没有②.5；按钮给出 Branch 后 `FlattenManualPlanFactory` 组 plan，**不** `PipelineJobContext.Build`。调度在 `Pipeline/Editor/ManualFlatten/Orchestration`，组计划在 `Plan`。
 - 人工 FBX **不再**走 SafeZone / `FlattenPaths`（步骤 7）；步骤 12 已删除旧创建链与专用助手。现用空壳、轴向、碰撞盒、动画和七步工具保留。
 - 两按钮是完整④，不是只拷文件的裸 B/B′，也不自动追加⑤⑥。这已由用户确认。
 - 自动与人工都进 `ToolFlattenApi.Run(plan)`。尚未合并为一个相位 Runner 类。
@@ -106,7 +107,7 @@ E/D/C 内核仍是 void；步骤 9 已把 copied / leftover / unbound / 身份�
 
 拆④、冻结 plan、3518 行内核、B/B′、跨单元按名借图（D25-4）、B 残留 `.fbm`：**在④。** 步骤 1–14 已落地（41/42 质量闸在编排）。AB 标签写入已从④去掉（步骤 8）。目录未迁。施工记录见 [步骤单页](../03_open-items/d24-flatten-steps.md)。
 
-不在④、拆④时不要顺手开：① FBX 外置贴图跟拷（D25-2 外置侧）、⑤ 跳过口径、面板强制入库、退出码后错覆盖、⑥ 构建本身、D19 冲色。行对齐：管线④步骤 3 已收口；人工步骤 4 不再用 ctx。属编排不是操作层。
+不在④、拆④时不要顺手开：① FBX 外置贴图跟拷（D25-2 外置侧）、⑤ 跳过口径、⑥ 构建本身、D19 冲色。入库入口一致性与首错保留已在 D26-5/4 收口。行对齐：管线④步骤 3 已收口；人工步骤 4 不再用 ctx。属编排不是操作层。
 
 ## 4. SO 与运行状态
 
@@ -176,4 +177,4 @@ Pipeline 传范围时不改人工路径；传 null 才回落 L1 路径。类型�
 - 当前约定：[strategy](../01_requirements/strategy.md)；优先级：[backlog](../03_open-items/backlog.md)；④接管：[D24 计划](../03_open-items/d24-boundary-plan.md)。
 - 原始源保护仍有效；受控 Incoming/Art 单元的明确重建不承诺旧副本 GUID 保持不变。
 - 历史规则/报告保留追溯，不能覆盖当前明确确认，也不能把“曾建议”自动视作“已实现”。
-- 文档随步骤更新；代码改动见 [步骤单页](../03_open-items/d24-flatten-steps.md)。未提交。编辑器冒烟须人在 Unity 补跑。
+- 文档随步骤更新；代码改动见 [步骤单页](../03_open-items/d24-flatten-steps.md)。`23b3567` 已上推。编辑器冒烟须人在 Unity 补跑。

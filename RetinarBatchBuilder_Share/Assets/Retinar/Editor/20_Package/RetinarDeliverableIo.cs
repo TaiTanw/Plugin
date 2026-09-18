@@ -31,40 +31,27 @@ public static class RetinarDeliverableIo
         return Path.Combine(dir, assetName + ".unitypackage");
     }
 
-    public static string GetAssetBundleDeliverableDir(
-        string assetName,
-        string platformFolder,
-        string deliverableRoot = null)
+    public static string GetAssetBundleDeliverableDir(string assetName, string deliverableRoot = null)
     {
         string dir = Path.Combine(
             GetAssetDeliverableRoot(assetName, deliverableRoot),
-            RetinarPaths.DeliverableAssetBundlesFolder,
-            platformFolder);
+            RetinarPaths.DeliverableAssetBundlesFolder);
         RetinarEditorUtil.EnsureDiskDirectory(dir);
         return dir;
     }
 
     /// <summary>
-    /// 从工程根 AB 构建目录拷贝到 Deliverables。
+    /// 把已构建的 AB 拷到 <c>Deliverables/&lt;名&gt;/03_assetbundles/</c>（不再按平台分子夹）。
     /// </summary>
     public static void CopyBuiltBundleToDeliverables(
         string assetName,
-        string bundleFileName,
-        string platformFolder,
-        string assetBundleRoot = null,
+        string destFileName,
+        string sourceBundlePath,
         string deliverableRoot = null)
     {
-        string projectRoot = Directory.GetCurrentDirectory();
-        string abRoot = string.IsNullOrWhiteSpace(assetBundleRoot)
-            ? RetinarPaths.AssetBundleRoot
-            : assetBundleRoot.Trim().Replace("\\", "/").TrimEnd('/');
-        string sourceDir = Path.Combine(projectRoot, abRoot, platformFolder);
-        string bundleSource = Path.Combine(sourceDir, bundleFileName);
-        string manifestSource = bundleSource + ".manifest";
-        string targetDir = GetAssetBundleDeliverableDir(assetName, platformFolder, deliverableRoot);
-
-        CopyFileIfExists(bundleSource, Path.Combine(targetDir, bundleFileName));
-        CopyFileIfExists(manifestSource, Path.Combine(targetDir, bundleFileName + ".manifest"));
+        string targetDir = GetAssetBundleDeliverableDir(assetName, deliverableRoot);
+        CopyFileIfExists(sourceBundlePath, Path.Combine(targetDir, destFileName));
+        CopyFileIfExists(sourceBundlePath + ".manifest", Path.Combine(targetDir, destFileName + ".manifest"));
     }
 
     public static void CopyFileIfExists(string sourcePath, string targetPath)

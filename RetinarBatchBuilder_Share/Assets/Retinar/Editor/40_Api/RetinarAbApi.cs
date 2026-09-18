@@ -25,6 +25,264 @@ public static class RetinarAbApi
         return Build(prefabPaths, RetinarAbBuildOptions.CreateDefaultAbOnly());
     }
 
+    /// <summary>Project 选中的 .prefab（不含文件夹）。</summary>
+    public static List<string> CollectSelectedPrefabAssetPaths()
+    {
+        var paths = new List<string>();
+        var seen = new HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
+        UnityEngine.Object[] selected = Selection.GetFiltered<UnityEngine.Object>(SelectionMode.Assets);
+        if (selected == null)
+        {
+            return paths;
+        }
+
+        for (int i = 0; i < selected.Length; i++)
+        {
+            string path = AssetDatabase.GetAssetPath(selected[i]);
+            if (string.IsNullOrEmpty(path) ||
+                !path.EndsWith(".prefab", System.StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            string n = path.Replace("\\", "/");
+            if (seen.Add(n))
+            {
+                paths.Add(n);
+            }
+        }
+
+        return paths;
+    }
+
+    /// <summary>文件夹下全部 .prefab（含子夹）。不读管线 / 导出 SO。</summary>
+    public static List<string> CollectPrefabAssetPathsUnderFolder(string folder)
+    {
+        var paths = new List<string>();
+        var seen = new HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
+        if (string.IsNullOrWhiteSpace(folder) || !AssetDatabase.IsValidFolder(folder))
+        {
+            return paths;
+        }
+
+        string root = folder.Replace("\\", "/").TrimEnd('/');
+        string[] guids = AssetDatabase.FindAssets("t:Prefab", new[] { root });
+        for (int g = 0; g < guids.Length; g++)
+        {
+            string p = AssetDatabase.GUIDToAssetPath(guids[g]).Replace("\\", "/");
+            if (string.IsNullOrEmpty(p) ||
+                !p.EndsWith(".prefab", System.StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            if (seen.Add(p))
+            {
+                paths.Add(p);
+            }
+        }
+
+        paths.Sort(System.StringComparer.OrdinalIgnoreCase);
+        return paths;
+    }
+
+    /// <summary>按导出 SO 打选中 Prefab（人工菜单）。不读管线步骤 SO。</summary>
+    public static RetinarAbBuildResult BuildFromSelection()
+    {
+        List<string> paths = CollectSelectedPrefabAssetPaths();
+        RetinarAbBuildOptions options = RetinarAbBuildOptions.FromExportSettings(
+            RetinarExportSettings.Current,
+            quietOverride: false);
+        var result = new RetinarAbBuildResult();
+        if (paths.Count == 0)
+        {
+            result.FailLines.Add("未选中 Project 内 .prefab");
+            NotifyManual(result, options, "选中导出");
+            return result;
+        }
+
+        result = Build(paths, options);
+        NotifyManual(result, options, "选中导出");
+        return result;
+    }
+
+    /// <summary>
+    /// 弹框选 Assets 下文件夹，扫描其中全部 Prefab。输出总父夹名 = 预设体文件名。
+    /// 不读管线步骤 SO。
+    /// </summary>
+    public static RetinarAbBuildResult BuildFromPickedFolder()
+    {
+        RetinarAbBuildOptions options = RetinarAbBuildOptions.FromExportSettings(
+            RetinarExportSettings.Current,
+            quietOverride: false);
+        var result = new RetinarAbBuildResult();
+
+        if (!EditorUtility.DisplayDialog(
+            "批量导出文件夹预设体",
+            "将选择工程 Assets 下的一个文件夹，并扫描其中全部 .prefab（含子夹）。\n" +
+            "每个预设体的文件名（不含扩展名）作为输出总父夹名：Deliverables/<预设体名>/，" +
+            "AB 文件名为 <预设体名>_android/_ios.assetbundle。",
+            "选择文件夹",
+            "取消"))
+        {
+            result.FailLines.Add("已取消");
+            return result;
+        }
+
+        string folder;
+        string pickError;
+        if (!TryPickAssetsFolder(out folder, out pickError))
+        {
+            result.FailLines.Add(pickError);
+            if (!string.Equals(pickError, "已取消", System.StringComparison.Ordinal))
+            {
+                NotifyManual(result, options, "文件夹批量导出");
+            }
+
+            return result;
+        }
+
+        List<string> paths = CollectPrefabAssetPathsUnderFolder(folder);
+        options.ArtRoot = folder;
+
+        if (paths.Count == 0)
+        {
+            result.FailLines.Add("文件夹下没有 .prefab: " + folder);
+            NotifyManual(result, options, "文件夹批量导出");
+            return result;
+        }
+
+        string dup = FindDuplicatePrefabStems(paths);
+        if (dup != null)
+        {
+            result.FailLines.Add(dup);
+            NotifyManual(result, options, "文件夹批量导出");
+            return result;
+        }
+
+        string preview = folder + "\n共 " + paths.Count + " 个 Prefab。" +
+                         "\n输出总父夹 = 预设体文件名（Deliverables/<名>/）。";
+        int show = paths.Count < 8 ? paths.Count : 8;
+        for (int i = 0; i < show; i++)
+        {
+            preview += "\n  " + Path.GetFileNameWithoutExtension(paths[i]);
+        }
+
+        if (paths.Count > show)
+        {
+            preview += "\n  …";
+        }
+
+        if (!options.Quiet &&
+            !EditorUtility.DisplayDialog("确认批量导出", preview, "导出", "取消"))
+        {
+            result.FailLines.Add("已取消");
+            return result;
+        }
+
+        result = Build(paths, options);
+        NotifyManual(result, options, "文件夹批量导出");
+        return result;
+    }
+
+    private static bool TryPickAssetsFolder(out string assetFolder, out string error)
+    {
+        assetFolder = null;
+        error = null;
+        string dataAbs = Path.GetFullPath(Application.dataPath)
+            .TrimEnd(Path.DirectorySeparatorChar, '/');
+        string start = dataAbs;
+        string artAbs = Path.Combine(dataAbs, "Art");
+        if (Directory.Exists(artAbs))
+        {
+            start = artAbs;
+        }
+
+        string picked = EditorUtility.OpenFolderPanel("选择要扫描的文件夹", start, "");
+        if (string.IsNullOrEmpty(picked))
+        {
+            error = "已取消";
+            return false;
+        }
+
+        string full = Path.GetFullPath(picked)
+            .TrimEnd(Path.DirectorySeparatorChar, '/');
+        if (string.Equals(full, dataAbs, System.StringComparison.OrdinalIgnoreCase))
+        {
+            assetFolder = "Assets";
+            return true;
+        }
+
+        string prefix = dataAbs + Path.DirectorySeparatorChar;
+        if (!full.StartsWith(prefix, System.StringComparison.OrdinalIgnoreCase))
+        {
+            error = "请选择本工程 Assets 下的文件夹: " + picked;
+            return false;
+        }
+
+        string rel = full.Substring(dataAbs.Length).Replace("\\", "/").Trim('/');
+        assetFolder = "Assets/" + rel;
+        if (!AssetDatabase.IsValidFolder(assetFolder))
+        {
+            error = "不是工程内资产文件夹: " + assetFolder;
+            return false;
+        }
+
+        return true;
+    }
+
+    private static string FindDuplicatePrefabStems(IList<string> paths)
+    {
+        var first = new Dictionary<string, string>(System.StringComparer.OrdinalIgnoreCase);
+        for (int i = 0; i < paths.Count; i++)
+        {
+            string stem = RetinarEditorUtil.MakeSafeName(
+                Path.GetFileNameWithoutExtension(paths[i]));
+            string existing;
+            if (first.TryGetValue(stem, out existing))
+            {
+                return "预设体文件名重复，无法作为输出总父夹: " + stem +
+                       "\n  " + existing + "\n  " + paths[i];
+            }
+
+            first.Add(stem, paths[i]);
+        }
+
+        return null;
+    }
+
+    private static void NotifyManual(
+        RetinarAbBuildResult result,
+        RetinarAbBuildOptions options,
+        string logLabel)
+    {
+        string body = FormatManualSummary(result);
+        Debug.Log("[Retinar][Ab] " + logLabel + "\n" + body);
+        if (options != null && options.Quiet)
+        {
+            return;
+        }
+
+        EditorUtility.DisplayDialog(
+            result != null && result.Ok ? "导出完成" : "导出未完成",
+            body,
+            "OK");
+    }
+
+    private static string FormatManualSummary(RetinarAbBuildResult result)
+    {
+        if (result == null)
+        {
+            return "无结果";
+        }
+
+        return "成功 " + result.OkNames.Count +
+               " 失败 " + result.FailLines.Count +
+               (result.FailLines.Count > 0
+                   ? "\n" + string.Join("\n", result.FailLines.ToArray())
+                   : string.Empty);
+    }
+
     /// <summary>按 Options 打 AB，可选 UnityPackage；不改 Prefab、不跑门禁。</summary>
     public static RetinarAbBuildResult Build(IList<string> prefabPaths, RetinarAbBuildOptions options)
     {
@@ -70,18 +328,22 @@ public static class RetinarAbApi
                 continue;
             }
 
-            string bundleFileName = RetinarEditorUtil.BuildBundleFileName(assetName);
-            if (!BuildAndCopyAssetBundles(
-                    prefabPath, assetName, bundleFileName, result.FailLines, options))
+            List<string> builtFiles;
+            if (!BuildAndCopyAssetBundles(prefabPath, assetName, result.FailLines, options, out builtFiles))
             {
                 continue;
+            }
+
+            if (builtFiles != null)
+            {
+                result.BuiltBundleFiles.AddRange(builtFiles);
             }
 
             if (options.ExportUnityPackage)
             {
                 List<string> dropped;
                 if (!ExportUnityPackageForPrefab(
-                        prefabPath, assetName, deliverableRoot, result.FailLines, out dropped))
+                        prefabPath, assetName, deliverableRoot, result.FailLines, out dropped, options))
                 {
                     continue;
                 }
@@ -94,7 +356,6 @@ public static class RetinarAbApi
             }
 
             result.OkNames.Add(assetName);
-            result.BuiltBundleFiles.Add(bundleFileName);
             Debug.Log("[Retinar][Ab] 完成: " + assetName + " ← " + prefabPath +
                       (options.ExportUnityPackage ? " (+UP)" : " (AB only)"));
         }
@@ -102,14 +363,15 @@ public static class RetinarAbApi
         return result;
     }
 
-    /// <summary>打双端 AB，并按 Options 拷到交付目录。</summary>
+    /// <summary>打双端 AB，产物平铺在 AB 根与 03_assetbundles，文件名带 _android / _ios。</summary>
     public static bool BuildAndCopyAssetBundles(
         string prefabPath,
         string assetName,
-        string bundleFileName,
         List<string> failLines,
-        RetinarAbBuildOptions options = null)
+        RetinarAbBuildOptions options,
+        out List<string> builtFiles)
     {
+        builtFiles = new List<string>();
         if (failLines == null)
         {
             failLines = new List<string>();
@@ -122,6 +384,9 @@ public static class RetinarAbApi
 
         string abRoot = options.NormalizedAssetBundleRoot;
         string deliverableRoot = options.NormalizedDeliverableRoot;
+        string projectRoot = Directory.GetCurrentDirectory();
+        string productDir = Path.Combine(projectRoot, abRoot);
+        RetinarEditorUtil.EnsureDiskDirectory(productDir);
 
         var build = new AssetBundleBuild
         {
@@ -134,49 +399,53 @@ public static class RetinarAbApi
         BuildTarget[] targets = { BuildTarget.Android, BuildTarget.iOS };
         foreach (BuildTarget target in targets)
         {
-            string platformFolder = RetinarEditorUtil.ToPlatformFolder(target);
-            string outputPath = Path.Combine(
-                Directory.GetCurrentDirectory(),
-                abRoot,
-                platformFolder);
-            RetinarEditorUtil.EnsureDiskDirectory(outputPath);
+            string suffix = RetinarEditorUtil.ToPlatformFileSuffix(target);
+            string staging = Path.Combine(projectRoot, "Library", "RetinarAbBuild", suffix);
+            RetinarEditorUtil.EnsureDiskDirectory(staging);
 
             AssetBundleManifest manifest = BuildPipeline.BuildAssetBundles(
-                outputPath,
+                staging,
                 builds,
                 BuildAssetBundleOptions.ChunkBasedCompression,
                 target);
 
             if (manifest == null)
             {
-                failLines.Add(assetName + " — " + platformFolder + " BuildAssetBundles 返回 null");
+                failLines.Add(assetName + " — " + suffix + " BuildAssetBundles 返回 null");
                 return false;
             }
 
-            string builtPath = Path.Combine(outputPath, bundleFileName);
+            string unityName = RetinarEditorUtil.BuildUnityBundleFileName(assetName);
+            string builtPath = Path.Combine(staging, unityName);
             if (!File.Exists(builtPath))
             {
-                string alt = Path.Combine(outputPath, assetName.ToLowerInvariant());
+                string alt = Path.Combine(staging, assetName.ToLowerInvariant());
                 if (File.Exists(alt))
                 {
-                    File.Copy(alt, builtPath, true);
-                    if (File.Exists(alt + ".manifest"))
-                    {
-                        File.Copy(alt + ".manifest", builtPath + ".manifest", true);
-                    }
+                    builtPath = alt;
                 }
             }
 
             if (!File.Exists(builtPath))
             {
-                failLines.Add(assetName + " — 未找到 AB 文件: " + builtPath);
+                failLines.Add(assetName + " — 未找到 AB 文件: " + Path.Combine(staging, unityName));
                 return false;
             }
+
+            string productName = RetinarEditorUtil.BuildBundleFileName(assetName, target);
+            string productPath = Path.Combine(productDir, productName);
+            File.Copy(builtPath, productPath, true);
+            if (File.Exists(builtPath + ".manifest"))
+            {
+                File.Copy(builtPath + ".manifest", productPath + ".manifest", true);
+            }
+
+            builtFiles.Add(productName);
 
             if (options.CopyAbToDeliverables)
             {
                 RetinarDeliverableIo.CopyBuiltBundleToDeliverables(
-                    assetName, bundleFileName, platformFolder, abRoot, deliverableRoot);
+                    assetName, productName, productPath, deliverableRoot);
             }
         }
 
@@ -188,10 +457,12 @@ public static class RetinarAbApi
         string assetName,
         string deliverableRoot,
         List<string> failLines,
-        out List<string> dropped)
+        out List<string> dropped,
+        RetinarAbBuildOptions options)
     {
         dropped = new List<string>();
-        string[] packageAssets = CollectPackageAssetPaths(prefabPath, dropped);
+        string[] packageAssets = CollectPackageAssetPaths(
+            prefabPath, dropped, options != null ? options.NormalizedArtRoot : RetinarPaths.ArtRoot);
         if (packageAssets.Length == 0)
         {
             failLines.Add(assetName + " — UnityPackage 依赖列表为空");
@@ -218,10 +489,10 @@ public static class RetinarAbApi
         return true;
     }
 
-    private static string[] CollectPackageAssetPaths(string prefabPath, List<string> dropped)
+    private static string[] CollectPackageAssetPaths(string prefabPath, List<string> dropped, string artRoot)
     {
         prefabPath = prefabPath.Replace("\\", "/");
-        string artFolderPrefix = TryGetArtAssetFolderPrefix(prefabPath);
+        string artFolderPrefix = TryGetArtAssetFolderPrefix(prefabPath, artRoot);
 
         List<string> deps = AssetDatabase.GetDependencies(prefabPath, true)
             .Select(p => p.Replace("\\", "/"))
@@ -265,9 +536,12 @@ public static class RetinarAbApi
         return false;
     }
 
-    private static string TryGetArtAssetFolderPrefix(string assetPath)
+    private static string TryGetArtAssetFolderPrefix(string assetPath, string artRoot)
     {
-        string prefix = RetinarPaths.ArtRoot + "/";
+        string root = string.IsNullOrWhiteSpace(artRoot)
+            ? RetinarPaths.ArtRoot
+            : artRoot.Replace("\\", "/").TrimEnd('/');
+        string prefix = root + "/";
         if (!assetPath.StartsWith(prefix, System.StringComparison.OrdinalIgnoreCase))
         {
             return null;
@@ -277,10 +551,16 @@ public static class RetinarAbApi
         int slash = relative.IndexOf('/');
         if (slash <= 0)
         {
-            return null;
+            return root;
         }
 
-        return RetinarPaths.ArtRoot + "/" + relative.Substring(0, slash);
+        string first = relative.Substring(0, slash);
+        if (string.Equals(first, "Prefab", System.StringComparison.OrdinalIgnoreCase))
+        {
+            return root;
+        }
+
+        return root + "/" + first;
     }
 }
 

@@ -12,7 +12,7 @@ public class BatchFbxImportSettings : ScriptableObject
     public const string DefaultAssetPath = "Assets/Plugin/TOol/ConfigData/BatchFbxImportSettings.asset";
 
     [Header("导入区")]
-    [Tooltip("外部 FBX 拷入的工程内根路径。必须是 Assets/ 下路径，且不得落在下方交付区警报前缀内。")]
+    [Tooltip("外部模型拷入的工程内根路径。只服务批量选择器「执行导入」。编排 [1] 读步骤 SO 工作区导入根，不读本字段。")]
     public string importRootPath = "Assets/Incoming";
 
     [Header("交付区警报")]

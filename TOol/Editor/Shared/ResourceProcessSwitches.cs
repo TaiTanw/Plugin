@@ -2,16 +2,16 @@ using UnityEditor;
 
 // =====================================================================================
 // 职责边界：
-//   Shared 层。只回答"当前这台机器：自动化要不要跑 / 某类资源的设置或后处理要不要跑"。
-//   不做任何贴图/模型处理。状态全部放 EditorPrefs（本机个人设置，不进版本库）。
+// 人工总批量「纳入三类」走 EditorPrefs。导入期总闸 Prefs 已不作为 Processor 闸。
+// 总闸 / 设置自动 / 后处理自动 UI 已迁到「全局导入设置（2）」高级折叠；不复活 delayCall 入队。
 //
 // 层级：
 //   总开关 MasterEnabled —— 关掉则设置自动、后处理自动都不跑（手动面板仍可用）。
 //   D26-1 例外：配置导入根内的模型安全基线不属于用户自动策略，不受此闸控制。
 //   分项：贴图/模型 × 设置自动/后处理自动 —— 总开关打开时才生效
 //
-//   设置自动   = AssetPostprocessor 里改 Importer 参数
-//   后处理自动 = 导入结束后 delayCall 跑的 Operation
+//   设置自动   = 历史上 AssetPostprocessor 改 Importer；现网改由编排 SO + 可选钩子总闸。
+//   后处理自动 = 导入结束后 delayCall 跑 Operation；现网 Processor 为空钩子。
 //
 // 旧版只有一个 AssetProcessSwitch.IsEnabled。首次读取时若旧 key 为 true，
 // 会把四路分项一并打开一次；总开关本身默认开启。
@@ -75,21 +75,21 @@ public static class ResourceProcessSwitches
         set { Set(ref modelPostProcessAuto, ModelPostProcessKey, value); }
     }
 
-    /// <summary>总面板「执行全部」是否跑贴图批量。默认 true；不影响分项按钮。</summary>
+    /// <summary>资源面板「执行全部」是否跑贴图批量。默认 true；不影响分项按钮。编排⑤不读本开关。</summary>
     public static bool MasterBatchIncludeTexture
     {
         get { return Get(ref masterBatchIncludeTexture, MasterBatchIncludeTextureKey, true); }
         set { Set(ref masterBatchIncludeTexture, MasterBatchIncludeTextureKey, value); }
     }
 
-    /// <summary>总面板「执行全部」是否跑模型批量。默认 true；不影响分项按钮。</summary>
+    /// <summary>资源面板「执行全部」是否跑模型批量。默认 true；不影响分项按钮。编排⑤不读本开关。</summary>
     public static bool MasterBatchIncludeModel
     {
         get { return Get(ref masterBatchIncludeModel, MasterBatchIncludeModelKey, true); }
         set { Set(ref masterBatchIncludeModel, MasterBatchIncludeModelKey, value); }
     }
 
-    /// <summary>总面板「执行全部」是否跑材质批量（交付 Shader 规范化）。默认 true。</summary>
+    /// <summary>资源面板「执行全部」是否跑材质批量（交付 Shader 规范化）。默认 true。编排⑤不读本开关。</summary>
     public static bool MasterBatchIncludeMaterial
     {
         get { return Get(ref masterBatchIncludeMaterial, MasterBatchIncludeMaterialKey, true); }

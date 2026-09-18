@@ -16,6 +16,9 @@ public class FlattenSmokePathTests
         Assert.That(text, Does.Not.Contain("FlattenPaths"));
         Assert.That(text, Does.Not.Contain("CreateNormalizedPrefab"));
         Assert.That(text, Does.Not.Contain("SafeZone"));
+        Assert.That(text, Does.Contain("PipelineWorkspace.TryValidate"));
+        Assert.That(text, Does.Not.Contain("RetinarPaths.ArtRoot"));
+        Assert.That(text, Does.Not.Contain("BatchFbxImportSettings"));
     }
 
     [Test]
@@ -32,7 +35,7 @@ public class FlattenSmokePathTests
     [Test]
     public void ManualOrchestration_DoesNotCallFlattenPaths()
     {
-        string text = ReadPluginFile("Pipeline/Editor/Flatten/Orchestration/ManualFlattenOrchestration.cs");
+        string text = ReadPluginFile("Pipeline/Editor/ManualFlatten/Orchestration/ManualFlattenOrchestration.cs");
 
         Assert.That(text, Does.Contain("ToolFlattenApi.Run"));
         Assert.That(text, Does.Contain("ToolPrefabApi.BuildPrefabs"));
@@ -68,7 +71,7 @@ public class FlattenSmokePathTests
     [Test]
     public void ManualPrompt_HasCancelButtonAndAbortsOnFalse()
     {
-        string prompt = ReadPluginFile("Pipeline/Editor/Flatten/Orchestration/FlattenManualPrompt.cs");
+        string prompt = ReadPluginFile("Pipeline/Editor/ManualFlatten/Orchestration/FlattenManualPrompt.cs");
         Assert.That(prompt, Does.Contain("仍要平铺"));
         Assert.That(prompt, Does.Contain("取消"));
         Assert.That(prompt, Does.Contain("DisplayDialog"));
@@ -124,7 +127,7 @@ public class FlattenSmokePathTests
         Assert.That(service, Does.Contain("TryFinishPackagedFlatten"));
         Assert.That(service, Does.Contain("FromContext"));
         Assert.That(ReadPluginFile("Pipeline/Editor/PipelineRunner.cs"), Does.Contain("ToolFlattenApi.FromContext"));
-        Assert.That(ReadPluginFile("Pipeline/Editor/Flatten/Orchestration/ManualFlattenOrchestration.cs"),
+        Assert.That(ReadPluginFile("Pipeline/Editor/ManualFlatten/Orchestration/ManualFlattenOrchestration.cs"),
             Does.Contain("ToolFlattenApi.Run"));
     }
 

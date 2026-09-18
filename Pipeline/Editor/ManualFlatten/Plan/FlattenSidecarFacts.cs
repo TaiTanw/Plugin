@@ -4,10 +4,10 @@ using System.IO;
 using UnityEditor;
 
 // =====================================================================================
-// Flatten / Operations — glTF 轻扫描事实。不是 PipelineJobContext（不 Load 主资产/Importer/材质/轴向）。
+// ManualFlatten / Plan — glTF 轻扫描事实。不是 PipelineJobContext（不 Load 主资产/Importer/材质/轴向）。
 // =====================================================================================
 
-/// <summary>一次 Scan 的操作数据：相对 URI、伴生 Assets 路径、缺件。</summary>
+/// <summary>一次 Scan 的计划事实：相对 URI、伴生 Assets 路径、缺件。</summary>
 public sealed class FlattenSidecarFacts
 {
     public string GltfAssetPath;

@@ -149,7 +149,7 @@ Assets/Plugin/Pipeline/
 | `ToolPrefabApi` | ✓ | ✓ | 多 materialId 靠 D10 |
 | `ToolFlattenApi` | ✓ 接 ctx | ✓ | glTF `MissingUris` → Begin 前 Fail(40) 整趟停；OBJ 不进该闸 |
 | `ToolPostProcessApi` | ✓ 返回 **`ToolPostProcessResult`** | ✓ | FailedCount→50（D16 已做） |
-| `RetinarAbApi` | ✓ | ✓ | **D5 已冻**：`PartialOk` 仍 0；全失败 60 |
+| `RetinarAbApi` | ✓ | ✓ | **当前契约**：Android 与 iOS 均成功才 0；任一端失败 60 |
 | `PipelineRunner` | ✓（面板已用） | ✓ | — |
 | `PipelineCli` | ✓ `-source` / `-materialId` | ✓ | **D5 已验收**；扩 flag 见 B.CLI |
 
@@ -175,4 +175,4 @@ Assets/Plugin/Pipeline/
 
 结果形态：当前 `PipelineResult` + 字符串 Messages；`StepResult` 仍延后（CLI 要稳定按步失败时再加，见 smoke 文）。
 
-2026-09-14 补充：⑤类型纳入仍有 EditorPrefs 默认，MaterialProcessSettings 仍为人工/管线共用 SO，尚未完成配置隔离。ToolPostProcessResult 当前只有 FailedCount、Canceled、Report；空配置/无目标等有文字提示，但缺少统一 typed 跳过原因。用户倾向合法跳过并明确提示，前提是窄口结果边界足够；不足时先评估中间层排错层，不让 Runner 直接探查 Op，不解析 Report 控制流程。见 D26-6。
+2026-09-14 补充：⑤类型纳入仍有 EditorPrefs 默认，MaterialProcessSettings 仍为人工/管线共用 SO，尚未完成配置隔离。ToolPostProcessResult 现含 FailedCount、Canceled、Report 与 typed 的 NoOperationsConfigured；空配置可被服务器识别并记录提醒，⑤不阻断⑥。Runner 不探查 Op，也不解析 Report 控制流程。

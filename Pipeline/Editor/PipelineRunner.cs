@@ -7,7 +7,7 @@ using UnityEngine;
 // =====================================================================================
 
 /// <summary>
-/// 流程编排。设置自动不主动调用——依赖导入时 Unity AssetPostprocessor。
+/// 流程编排。导入基线由 Processor 在 Incoming 根内必写；可选 Importer 回调读编排 ProcessSettings。
 /// </summary>
 public static class PipelineRunner
 {
@@ -22,6 +22,12 @@ public static class PipelineRunner
         }
 
         bool quiet = options.Quiet;
+        if (!PipelineWorkspace.TryValidate(options, out string workspaceError))
+        {
+            result.Fail(PipelineErrorCodes.BadArgs, workspaceError);
+            LogResult(result);
+            return result;
+        }
 
         if (!ImportFromBindings(options, result))
         {
@@ -102,7 +108,8 @@ public static class PipelineRunner
             if (options.RunPostProcess &&
                 (options.PostProcessFolderPaths == null || options.PostProcessFolderPaths.Count == 0))
             {
-                List<string> artUnits = CollectArtUnitFolders(artPrefabPaths);
+                List<string> artUnits = PipelineWorkspace.CollectUnitFolders(
+                    artPrefabPaths, options.ArtRoot);
                 if (artUnits.Count > 0)
                 {
                     options.PostProcessFolderPaths = artUnits;
@@ -122,10 +129,17 @@ public static class PipelineRunner
             options.RunPostProcess = false;
         }
 
-        // ⑤ = 代跑 L1「按批量路径执行全部」（手动内核），不是导入期自动流。
+        // ⑤ = 同一执行核；纳入三类来自本趟 Options（步骤 SO），不读资源面板 Prefs。
         if (options.RunPostProcess)
         {
-            ToolPostProcessResult post = ToolPostProcessApi.RunMasterBatch(options.PostProcessFolderPaths);
+            ToolPostProcessResult post = ToolPostProcessApi.RunMasterBatch(
+                options.PostProcessFolderPaths,
+                includeTexture: options.PostProcessIncludeTexture,
+                includeModel: options.PostProcessIncludeModel,
+                includeMaterial: options.PostProcessIncludeMaterial,
+                textureSettings: TextureProcessSettings.GetOrCreatePipelineAsset(),
+                materialSettings: MaterialProcessSettings.GetOrCreatePipelineAsset(),
+                modelSettings: ModelProcessSettings.GetOrCreatePipelineAsset());
             ApplyPostProcessResult(result, post, "[Pipeline] ⑤ PostProcess");
 
             // 与 UnityGLTF 菜单导出解耦：⑤ 结束后立刻报告工程内 Mesh 是否全白。
@@ -149,6 +163,8 @@ public static class PipelineRunner
                 abOpt.Quiet = options.Quiet;
             }
 
+            abOpt.ArtRoot = options.ArtRoot;
+
             RetinarAbBuildResult ab = RetinarAbApi.Build(prefabPaths, abOpt);
             if (ab.BuiltBundleFiles != null)
             {
@@ -164,15 +180,16 @@ public static class PipelineRunner
                 result.Info("  AB fail: " + ab.FailLines[i]);
             }
 
-            if (!ab.PartialOk)
+            if (!ab.Ok)
             {
-                result.Fail(PipelineErrorCodes.AbFailed, "Build AB 全部失败");
+                result.Fail(PipelineErrorCodes.AbFailed, "Build AB 未全部成功（Android+iOS 均需成功）");
                 LogResult(result);
                 return result;
             }
 
-            // ⑥ 重导冲色：仍用通道 3（同一 RunMasterBatch 只跑模型），不走导入钩子打 Art。
+            // ⑥ 重导冲色：仍用同一内核只跑模型。SO 未纳入模型则不刷。
             if (options.RunPostProcess &&
+                options.PostProcessIncludeModel &&
                 options.PostProcessFolderPaths != null &&
                 options.PostProcessFolderPaths.Count > 0)
             {
@@ -187,7 +204,10 @@ public static class PipelineRunner
                         options.PostProcessFolderPaths,
                         includeTexture: false,
                         includeMaterial: false,
-                        includeModel: true);
+                        includeModel: true,
+                        textureSettings: TextureProcessSettings.GetOrCreatePipelineAsset(),
+                        materialSettings: MaterialProcessSettings.GetOrCreatePipelineAsset(),
+                        modelSettings: ModelProcessSettings.GetOrCreatePipelineAsset());
                     ApplyPostProcessResult(result, reWhite, "[Pipeline] ⑥后重刷白");
 
                     string afterWhite = ModelVertexColorDiagnose.DiagnosePaths(options.PostProcessFolderPaths);
@@ -210,9 +230,9 @@ public static class PipelineRunner
                             result.Info("  AB fail: " + ab2.FailLines[i]);
                         }
 
-                        if (!ab2.PartialOk)
+                        if (!ab2.Ok)
                         {
-                            result.Fail(PipelineErrorCodes.AbFailed, "重打 AB 全部失败");
+                            result.Fail(PipelineErrorCodes.AbFailed, "重打 AB 未全部成功（Android+iOS 均需成功）");
                             LogResult(result);
                             return result;
                         }
@@ -333,7 +353,8 @@ public static class PipelineRunner
         if (options.RunImport)
         {
             string importMsg;
-            if (!ToolImportApi.ImportSingleModel(source, id2, out assetPath, out importMsg))
+            if (!ToolImportApi.ImportSingleModel(
+                    source, id2, out assetPath, out importMsg, options.ImportRoot, options.ArtRoot))
             {
                 result.Fail(PipelineErrorCodes.ImportFailed, label + "失败: " + importMsg);
                 return false;
@@ -351,7 +372,8 @@ public static class PipelineRunner
         }
 
         string msg;
-        if (!ToolImportApi.ImportSingleModel(source, id2, out assetPath, out msg))
+        if (!ToolImportApi.ImportSingleModel(
+                source, id2, out assetPath, out msg, options.ImportRoot, options.ArtRoot))
         {
             result.Fail(PipelineErrorCodes.BadArgs, "[Pipeline] 无法解析工程内模型: " + msg);
             return false;
@@ -421,7 +443,9 @@ public static class PipelineRunner
 
             List<string> written = ToolPrefabApi.BuildPrefabs(
                 new[] { options.ModelPaths[i] },
-                id2);
+                id2,
+                options.PrefabRoot,
+                options.ImportRoot);
             if (written == null || written.Count == 0)
             {
                 result.Fail(
@@ -500,6 +524,7 @@ public static class PipelineRunner
 
             ToolFlattenRequest request = ToolFlattenRequest.ForPipeline(options.FlattenPolicy);
             request.ConvertZUpToYUp = binding != null && binding.ConvertZUpToYUp;
+            request.ArtRoot = options.ArtRoot;
 
             FlattenPlan plan = ToolFlattenApi.FromContext(ctx, request, prefabPaths[i]);
 
@@ -590,43 +615,6 @@ public static class PipelineRunner
     }
 
     /// <summary>
-    /// 从 Art Prefab 路径取出单元根（如 Assets/Art/某模型），供⑤扫 Model/ 与 Prefab 依赖。
-    /// </summary>
-    private static List<string> CollectArtUnitFolders(IList<string> artPrefabPaths)
-    {
-        var folders = new List<string>();
-        if (artPrefabPaths == null)
-        {
-            return folders;
-        }
-
-        string prefix = RetinarPaths.ArtRoot + "/";
-        for (int i = 0; i < artPrefabPaths.Count; i++)
-        {
-            string path = (artPrefabPaths[i] ?? string.Empty).Replace("\\", "/");
-            if (!path.StartsWith(prefix, System.StringComparison.OrdinalIgnoreCase))
-            {
-                continue;
-            }
-
-            string relative = path.Substring(prefix.Length);
-            int slash = relative.IndexOf('/');
-            if (slash <= 0)
-            {
-                continue;
-            }
-
-            string unit = RetinarPaths.ArtRoot + "/" + relative.Substring(0, slash);
-            if (!folders.Contains(unit))
-            {
-                folders.Add(unit);
-            }
-        }
-
-        return folders;
-    }
-
-    /// <summary>
     /// D16：报告进 Messages；FailedCount&gt;0 且当前仍 Ok 或仅 41/42 时 Fail(50)。
     /// 不覆盖 20/30/40 等硬停码。取消进度条不算硬失败。60 随后仍可覆盖 50。
     /// </summary>
@@ -642,7 +630,13 @@ public static class PipelineRunner
 
         result.Info(label + " 失败条=" + post.FailedCount +
                     (post.Canceled ? " 已取消" : string.Empty) +
+                    (post.NoOperationsConfigured ? " 未配置操作" : string.Empty) +
                     "\n" + post.Report);
+        if (post.NoOperationsConfigured)
+        {
+            result.Info(label + " 未配置任何主批量操作，已提醒并继续后续流程");
+        }
+
         if (post.HasHardFailure &&
             PipelineFlattenQuality.CanEscalateToPostProcess(result.ExitCode))
         {

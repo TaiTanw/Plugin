@@ -102,6 +102,7 @@ public static class FlattenBuildService
         options.ClearDestinationArtFolder = plan.ClearDestinationArtFolder;
         options.ConvertZUpToYUp = plan.ConvertZUpToYUp;
         options.AddBoxCollider = options.OperationPolicy.AddBoxCollider;
+        options.ArtRoot = plan.ArtRoot;
 
         if (plan.Branch == FlattenBranch.RelocateAtomic)
         {
@@ -133,6 +134,7 @@ public static class FlattenBuildService
         plan.OperationPolicy = request.OperationPolicy;
         plan.ClearDestinationArtFolder = request.ClearDestinationArtFolder;
         plan.ConvertZUpToYUp = request.ConvertZUpToYUp;
+        plan.ArtRoot = request.ArtRoot;
         plan.Branch = ShouldRelocateAtomic(ctx)
             ? FlattenBranch.RelocateAtomic
             : FlattenBranch.SplitDependencies;

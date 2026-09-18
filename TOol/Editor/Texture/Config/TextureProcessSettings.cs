@@ -9,6 +9,8 @@ using UnityEngine;
 public class TextureProcessSettings : ScriptableObject
 {
     public const string DefaultAssetPath = "Assets/Plugin/TOol/ConfigData/TextureProcessSettings.asset";
+    public const string PipelineAssetPath =
+        ProcessSettingsOwnership.PipelineConfigRoot + "/TextureProcessSettings.asset";
 
     [Header("源文件体积上限（压缩操作）")]
     [Tooltip("磁盘上源文件超过该体积（MB）才会触发「压缩超标的贴图源文件」。" +
@@ -56,19 +58,23 @@ public class TextureProcessSettings : ScriptableObject
     [HideInInspector]
     public List<string> masterBatchOperationIds = new List<string> { "shrink_source_file" };
 
-    [Header("导入期 Importer 参数（设置自动）")]
-    [Tooltip("总开关 +「贴图·设置自动」开启时：导入前关闭 TextureImporter 的 Read/Write。" +
+    [Header("导入期 Importer（可选回调；默认关）")]
+    [Tooltip("导入期是否按下列参数写 TextureImporter。默认关。可选钩子总闸在「全局导入设置（2）」。编排与人工各一份资产。")]
+    public bool applyImporterSettingsOnImport = false;
+
+    [Tooltip("applyImporterSettingsOnImport 开启时：导入前关闭 TextureImporter 的 Read/Write。" +
              "可减小内存；运行时若脚本要 GetPixels 需自行再打开。不影响磁盘源文件体积。")]
     public bool textureDisableReadWrite = true;
 
     [Header("不介入的目录（仅自动流）")]
-    [Tooltip("路径以此列表任一前缀开头时，仅「设置自动 / 后处理自动」（导入期钩子）跳过。默认排除 Assets/Art/。" +
-             "L1「执行全部」、子面板手动、中间层⑤都不读本列表。" +
-             "注意：本列表与 ModelProcessSettings.excludedPathPrefixes、BatchFbxImportSettings.deliveryAlertPathPrefixes " +
-             "是三份独立配置（默认都写 Assets/Art/），改一处不会自动同步；改交付根时请三处对照。")]
+    [Tooltip("路径以此列表任一前缀开头时，历史上仅「设置自动 / 后处理自动」跳过。默认排除 Assets/Art/。" +
+             "现网 OnPreprocess 与⑤总批量都不读本列表；仅残留在全局导入设置高级折叠。" +
+             "注意：与 ModelProcessSettings.excludedPathPrefixes、BatchFbxImportSettings.deliveryAlertPathPrefixes " +
+             "是三份独立配置，改一处不会自动同步。")]
     public List<string> excludedPathPrefixes = new List<string> { "Assets/Art/" };
 
     private static TextureProcessSettings assetInstance;
+    private static TextureProcessSettings pipelineInstance;
     private static TextureProcessSettings fallbackInstance;
     private static bool fallbackWarningLogged;
 
@@ -163,6 +169,46 @@ public class TextureProcessSettings : ScriptableObject
         return created;
     }
 
+    public static TextureProcessSettings GetOrCreatePipelineAsset()
+    {
+        if (pipelineInstance != null)
+        {
+            pipelineInstance.EnsureMasterBatchDefaults();
+            return pipelineInstance;
+        }
+
+        pipelineInstance = AssetDatabase.LoadAssetAtPath<TextureProcessSettings>(PipelineAssetPath);
+        if (pipelineInstance != null)
+        {
+            pipelineInstance.EnsureMasterBatchDefaults();
+            return pipelineInstance;
+        }
+
+        ProcessSettingsOwnership.EnsureAssetFolder(
+            Path.GetDirectoryName(PipelineAssetPath).Replace("\\", "/"));
+        var created = CreateInstance<TextureProcessSettings>();
+        created.applyImporterSettingsOnImport = false;
+        AssetDatabase.CreateAsset(created, PipelineAssetPath);
+        AssetDatabase.SaveAssets();
+        pipelineInstance = created;
+        created.EnsureMasterBatchDefaults();
+        Debug.Log("[TextureProcessSettings] 已创建编排配置资产: " + PipelineAssetPath);
+        return created;
+    }
+
+    /// <summary>导入回调：有编排资产则用编排，否则人工 Current。</summary>
+    public static TextureProcessSettings ForImportCallbacks()
+    {
+        TextureProcessSettings pipeline =
+            AssetDatabase.LoadAssetAtPath<TextureProcessSettings>(PipelineAssetPath);
+        if (pipeline != null)
+        {
+            return pipeline;
+        }
+
+        return Current;
+    }
+
     private static TextureProcessSettings FindExistingAsset()
     {
         if (assetInstance != null)
@@ -181,6 +227,11 @@ public class TextureProcessSettings : ScriptableObject
         foreach (string guid in AssetDatabase.FindAssets("t:TextureProcessSettings"))
         {
             string path = AssetDatabase.GUIDToAssetPath(guid);
+            if (ProcessSettingsOwnership.IsPipelineConfigPath(path))
+            {
+                continue;
+            }
+
             assetInstance = AssetDatabase.LoadAssetAtPath<TextureProcessSettings>(path);
             if (assetInstance != null)
             {

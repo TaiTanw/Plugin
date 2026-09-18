@@ -49,7 +49,7 @@ public class PipelineFlattenQualityTests
     }
 
     [Test]
-    public void LeftoverOverlaysPriorIdentityCode()
+    public void EarlierIdentityCode_IsPreservedWhenLeftoverArrives()
     {
         var result = new PipelineResult();
         result.Fail(PipelineErrorCodes.FlattenTextureIdentity, "prior identity");
@@ -58,7 +58,8 @@ public class PipelineFlattenQualityTests
 
         PipelineFlattenQuality.Apply(result, row, 2);
 
-        Assert.That(result.ExitCode, Is.EqualTo(PipelineErrorCodes.FlattenLeftoverFbm));
+        Assert.That(result.ExitCode, Is.EqualTo(PipelineErrorCodes.FlattenTextureIdentity));
+        Assert.That(string.Join("\n", result.Messages.ToArray()), Does.Contain("leftover .fbm"));
     }
 
     [Test]
@@ -83,6 +84,146 @@ public class PipelineFlattenQualityTests
         Assert.That(PipelineFlattenQuality.CanEscalateToPostProcess(PipelineErrorCodes.FlattenTextureIdentity), Is.True);
         Assert.That(PipelineFlattenQuality.CanEscalateToPostProcess(PipelineErrorCodes.FlattenFailed), Is.False);
         Assert.That(PipelineFlattenQuality.CanEscalateToPostProcess(PipelineErrorCodes.ImportFailed), Is.False);
+    }
+
+    [Test]
+    public void LaterPhaseFailures_DoNotOverwriteFirstFailureCode()
+    {
+        var result = new PipelineResult();
+
+        result.Fail(PipelineErrorCodes.FlattenLeftoverFbm, "first");
+        result.Fail(PipelineErrorCodes.PostProcessFailed, "later post-process");
+        result.Fail(PipelineErrorCodes.AbFailed, "later asset bundle");
+
+        Assert.That(result.ExitCode, Is.EqualTo(PipelineErrorCodes.FlattenLeftoverFbm));
+        Assert.That(result.Messages, Has.Count.EqualTo(3));
+    }
+}
+
+
+public sealed class PipelineStepSettingsTests
+{
+    [Test]
+    public void FromSettings_KeepsMandatoryImportEnabled()
+    {
+        PipelineStepSettings settings = UnityEngine.ScriptableObject.CreateInstance<PipelineStepSettings>();
+        try
+        {
+            PipelineOptions options = PipelineOptions.FromSettings(settings, "Assets/model.fbx");
+
+            Assert.That(options.RunImport, Is.True);
+        }
+        finally
+        {
+            UnityEngine.Object.DestroyImmediate(settings);
+        }
+    }
+
+    [Test]
+    public void ApplyTo_DoesNotOverrideDirectApiImportChoice()
+    {
+        PipelineStepSettings settings = UnityEngine.ScriptableObject.CreateInstance<PipelineStepSettings>();
+        try
+        {
+            var options = new PipelineOptions { RunImport = false };
+
+            settings.ApplyTo(options);
+
+            Assert.That(options.RunImport, Is.False);
+        }
+        finally
+        {
+            UnityEngine.Object.DestroyImmediate(settings);
+        }
+    }
+
+    [Test]
+    public void FromSettings_DefaultsPostProcessIncludesAllTypes()
+    {
+        PipelineStepSettings settings = UnityEngine.ScriptableObject.CreateInstance<PipelineStepSettings>();
+        try
+        {
+            PipelineOptions options = PipelineOptions.FromSettings(settings, "Assets/model.fbx");
+
+            Assert.That(options.PostProcessIncludeTexture, Is.True);
+            Assert.That(options.PostProcessIncludeMaterial, Is.True);
+            Assert.That(options.PostProcessIncludeModel, Is.True);
+            Assert.That(options.ImportRoot, Is.EqualTo(PipelineWorkspace.DefaultImportRoot));
+            Assert.That(options.PrefabRoot, Is.EqualTo(PipelineWorkspace.DefaultPrefabRoot));
+            Assert.That(options.ArtRoot, Is.EqualTo(PipelineWorkspace.DefaultArtRoot));
+        }
+        finally
+        {
+            UnityEngine.Object.DestroyImmediate(settings);
+        }
+    }
+
+    [Test]
+    public void ApplyTo_CopiesPostProcessIncludeFromStepSettings()
+    {
+        PipelineStepSettings settings = UnityEngine.ScriptableObject.CreateInstance<PipelineStepSettings>();
+        try
+        {
+            settings.postProcessIncludeTexture = false;
+            settings.postProcessIncludeMaterial = true;
+            settings.postProcessIncludeModel = false;
+
+            PipelineOptions options = PipelineOptions.FromSettings(settings, "Assets/model.fbx");
+
+            Assert.That(options.PostProcessIncludeTexture, Is.False);
+            Assert.That(options.PostProcessIncludeMaterial, Is.True);
+            Assert.That(options.PostProcessIncludeModel, Is.False);
+        }
+        finally
+        {
+            UnityEngine.Object.DestroyImmediate(settings);
+        }
+    }
+
+    [Test]
+    public void ApplyTo_CopiesWorkspaceRoots()
+    {
+        PipelineStepSettings settings = UnityEngine.ScriptableObject.CreateInstance<PipelineStepSettings>();
+        try
+        {
+            settings.importRootPath = "Assets/InA";
+            settings.prefabRootPath = "Assets/PfA";
+            settings.artRootPath = "Assets/OutA";
+
+            PipelineOptions options = PipelineOptions.FromSettings(settings, "Assets/model.fbx");
+
+            Assert.That(options.ImportRoot, Is.EqualTo("Assets/InA"));
+            Assert.That(options.PrefabRoot, Is.EqualTo("Assets/PfA"));
+            Assert.That(options.ArtRoot, Is.EqualTo("Assets/OutA"));
+            Assert.That(options.AbBuildOptions, Is.Not.Null);
+            Assert.That(options.AbBuildOptions.ArtRoot, Is.EqualTo("Assets/OutA"));
+        }
+        finally
+        {
+            UnityEngine.Object.DestroyImmediate(settings);
+        }
+    }
+
+    [Test]
+    public void CollectUnitFolders_UsesGivenArtRoot()
+    {
+        var folders = PipelineWorkspace.CollectUnitFolders(
+            new[] { "Assets/Delivery/Unit/Prefab/a.prefab", "Assets/Art/Other/x.prefab" },
+            "Assets/Delivery");
+
+        Assert.That(folders, Is.EquivalentTo(new[] { "Assets/Delivery/Unit" }));
+    }
+
+    [Test]
+    public void TryValidate_RejectsImportUnderArt()
+    {
+        var options = new PipelineOptions();
+        options.ImportRoot = "Assets/Art/Incoming";
+        options.PrefabRoot = "Assets/IncomingPrefab";
+        options.ArtRoot = "Assets/Art";
+
+        Assert.That(PipelineWorkspace.TryValidate(options, out string error), Is.False);
+        Assert.That(error, Does.Contain("导入根"));
     }
 }
 #endif

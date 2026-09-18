@@ -14,18 +14,23 @@ public static class ResourcePostProcessService
 {
     /// <summary>
     /// 执行总批量。folderPaths 为 null 时用 L1 Store 当前有效路径。
+    /// include* 为 null 时用资源面板 Prefs（仅人工入口）。编排必须传入显式值。
     /// 顺序：贴图 → 材质 → 模型。FailedCount 为三层 Summary.FailedCount 之和。
     /// </summary>
     public static ToolPostProcessResult RunMasterBatch(
         IList<string> folderPaths = null,
         bool? includeTexture = null,
         bool? includeModel = null,
-        bool? includeMaterial = null)
+        bool? includeMaterial = null,
+        TextureProcessSettings textureSettings = null,
+        MaterialProcessSettings materialSettings = null,
+        ModelProcessSettings modelSettings = null)
     {
         var result = new ToolPostProcessResult();
         bool runTex = includeTexture ?? ResourceProcessSwitches.MasterBatchIncludeTexture;
         bool runMat = includeMaterial ?? ResourceProcessSwitches.MasterBatchIncludeMaterial;
         bool runModel = includeModel ?? ResourceProcessSwitches.MasterBatchIncludeModel;
+        result.NoOperationsConfigured = !runTex && !runMat && !runModel;
 
         List<string> folders = folderPaths != null
             ? NormalizeFolders(folderPaths)
@@ -44,7 +49,7 @@ public static class ResourcePostProcessService
             }
             else
             {
-                report.AppendLine(RunTextureBatch(folders, result));
+                report.AppendLine(RunTextureBatch(folders, result, textureSettings));
             }
         }
         else
@@ -62,7 +67,7 @@ public static class ResourcePostProcessService
             }
             else
             {
-                report.AppendLine(RunMaterialBatch(folders, result));
+                report.AppendLine(RunMaterialBatch(folders, result, materialSettings));
             }
         }
         else
@@ -80,12 +85,19 @@ public static class ResourcePostProcessService
             }
             else
             {
-                report.AppendLine(RunModelBatch(folders, result));
+                report.AppendLine(RunModelBatch(folders, result, modelSettings));
             }
         }
         else
         {
             report.AppendLine("[总批量] 已跳过模型（未纳入）。");
+        }
+
+        if (result.NoOperationsConfigured)
+        {
+            const string warn = "[总批量] 未配置任何主批量操作，已跳过⑤并继续后续流程。";
+            Debug.LogWarning(warn);
+            report.AppendLine(warn);
         }
 
         result.Report = report.ToString().TrimEnd();
@@ -112,11 +124,17 @@ public static class ResourcePostProcessService
         return list;
     }
 
-    private static string RunTextureBatch(IList<string> folders, ToolPostProcessResult acc)
+    private static string RunTextureBatch(
+        IList<string> folders,
+        ToolPostProcessResult acc,
+        TextureProcessSettings settings)
     {
         List<string> targets = TextureTargetCollector.Collect(
             TextureTargetCollector.Scope.BatchByPath, null, folders);
-        TextureProcessSettings settings = TextureProcessSettings.GetOrCreateAsset();
+        if (settings == null)
+        {
+            settings = TextureProcessSettings.GetOrCreateAsset();
+        }
         List<ITextureAssetOperation> operations = TextureOperationRegistry.GetMasterBatchOperations(settings);
         if (operations.Count == 0)
         {
@@ -141,10 +159,16 @@ public static class ResourcePostProcessService
                (summary.Canceled ? "（已取消）" : string.Empty);
     }
 
-    private static string RunMaterialBatch(IList<string> folders, ToolPostProcessResult acc)
+    private static string RunMaterialBatch(
+        IList<string> folders,
+        ToolPostProcessResult acc,
+        MaterialProcessSettings settings)
     {
         List<string> targets = MaterialTargetCollector.CollectFromFolders(folders);
-        MaterialProcessSettings settings = MaterialProcessSettings.GetOrCreateAsset();
+        if (settings == null)
+        {
+            settings = MaterialProcessSettings.GetOrCreateAsset();
+        }
         List<IMaterialAssetOperation> operations =
             MaterialOperationRegistry.GetMasterBatchOperations(settings);
         if (operations.Count == 0)
@@ -170,11 +194,17 @@ public static class ResourcePostProcessService
                (summary.Canceled ? "（已取消）" : string.Empty);
     }
 
-    private static string RunModelBatch(IList<string> folders, ToolPostProcessResult acc)
+    private static string RunModelBatch(
+        IList<string> folders,
+        ToolPostProcessResult acc,
+        ModelProcessSettings settings)
     {
         List<string> targets = ModelTargetCollector.Collect(
             ModelTargetCollector.Scope.BatchByPath, null, folders);
-        ModelProcessSettings settings = ModelProcessSettings.GetOrCreateAsset();
+        if (settings == null)
+        {
+            settings = ModelProcessSettings.GetOrCreateAsset();
+        }
         List<IModelAssetOperation> operations = ModelOperationRegistry.GetMasterBatchOperations(settings);
         if (operations.Count == 0)
         {

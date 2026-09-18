@@ -2,13 +2,25 @@ using UnityEditor;
 using UnityEngine;
 
 // =====================================================================================
-// 贴图【设置自动】：导入前只改 TextureImporter 参数。
+// 贴图导入期 Importer。闸：Art 硬跳过 → 可选钩子总开关 → SO applyImporterSettingsOnImport。
+// 不读批量选择器、不读不介入目录、不读设置自动 Prefs。
 // =====================================================================================
 public class TextureImportSettingsProcessor : AssetPostprocessor
 {
     private void OnPreprocessTexture()
     {
-        if (!ResourceProcessSwitches.IsTextureSettingsEffective)
+        if (ModelImporterProfiles.IsArtDeliveryPath(assetPath))
+        {
+            return;
+        }
+
+        if (!ImportPipelineSettings.AreHooksEnabled())
+        {
+            return;
+        }
+
+        TextureProcessSettings settings = TextureProcessSettings.ForImportCallbacks();
+        if (settings == null || !settings.applyImporterSettingsOnImport)
         {
             return;
         }
@@ -18,17 +30,10 @@ public class TextureImportSettingsProcessor : AssetPostprocessor
             return;
         }
 
-        TextureProcessSettings settings = TextureProcessSettings.Current;
-        if (settings.IsExcludedPath(assetPath))
-        {
-            return;
-        }
-
         var importer = (TextureImporter)assetImporter;
         if (settings.textureDisableReadWrite)
         {
             importer.isReadable = false;
         }
-        // 成功时不打 Log：批量入库时每贴图一条会刷屏，易被当成警告。
     }
 }

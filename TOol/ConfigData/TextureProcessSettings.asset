@@ -25,6 +25,9 @@ MonoBehaviour:
   importAutoOperationIds: []
   masterBatchOperationIds:
   - shrink_source_file
+  - bake_luminance_to_alpha
+  - convert_tga_to_png
+  applyImporterSettingsOnImport: 0
   textureDisableReadWrite: 1
   excludedPathPrefixes:
   - Assets/Art/

@@ -11,7 +11,7 @@ using UnityEditor;
 // 现网分区：
 //   Incoming —— 只由本类 ApplyIncoming* 写，入口是 ModelImportSettingsProcessor。
 //   Art      —— 只由 ApplyArtDelivery 写，入口是 ④ Run(plan) 内 FlattenApplyImportAndExtract。
-// Art 路径在 Processor 里硬跳过（不只靠 SO 排除表），清空 excludedPathPrefixes 也不能复现打架。
+// Art 路径在 Processor 里硬跳过（不读不介入目录）。清空 excludedPathPrefixes 也不会让导入钩子改 Art。
 // =====================================================================================
 
 /// <summary>导入区与交付区 ModelImporter 的唯一赋值点。</summary>
@@ -49,7 +49,7 @@ public static class ModelImporterProfiles
         }
     }
 
-    /// <summary>导入区策略。仅「模型 · 设置自动」勾选时调用。</summary>
+    /// <summary>导入区策略。仅 settings.modelUseExternalMaterials 为 true 时由 Processor 调用。</summary>
     public static void ApplyIncomingPolicy(ModelImporter importer, ModelProcessSettings settings)
     {
         if (importer == null || settings == null || !settings.modelUseExternalMaterials)

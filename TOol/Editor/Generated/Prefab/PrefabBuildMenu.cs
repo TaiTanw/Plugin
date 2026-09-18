@@ -10,9 +10,9 @@ using UnityEngine;
 /// </summary>
 public static class PrefabBuildMenu
 {
-    private const string MenuPath = "Tools/自动化预设体（选中模型）";
+    private const string MenuPath = "Tools/手动操作栏/步骤/[③] Prefab/选中模型生成";
 
-    [MenuItem(MenuPath, false, 51)]
+    [MenuItem(MenuPath, false, 33)]
     private static void BuildFromSelection()
     {
         PrefabBuildService.BuildPrefabsFromSelection();

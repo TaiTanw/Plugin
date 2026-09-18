@@ -19,6 +19,12 @@ public sealed class RetinarAbBuildOptions
     /// <summary>是否把打好的 AB 拷到 Deliverables/…/03_assetbundles。</summary>
     public bool CopyAbToDeliverables = true;
 
+    /// <summary>
+    /// ⑥ UP 按此前缀切 Art 单元。空则回落 <see cref="RetinarPaths.ArtRoot"/>。
+    /// 编排写入；本类不 Load 管线 SO。
+    /// </summary>
+    public string ArtRoot;
+
     /// <summary>禁止确认弹窗（直通菜单可关）。</summary>
     public bool Quiet = true;
 
@@ -41,6 +47,17 @@ public sealed class RetinarAbBuildOptions
                 ? RetinarPaths.AssetBundleRoot
                 : AssetBundleRoot.Trim().Replace("\\", "/").TrimEnd('/');
             return string.IsNullOrEmpty(r) ? RetinarPaths.AssetBundleRoot : r;
+        }
+    }
+
+    public string NormalizedArtRoot
+    {
+        get
+        {
+            string r = string.IsNullOrWhiteSpace(ArtRoot)
+                ? RetinarPaths.ArtRoot
+                : ArtRoot.Trim().Replace("\\", "/").TrimEnd('/');
+            return string.IsNullOrEmpty(r) ? RetinarPaths.ArtRoot : r;
         }
     }
 

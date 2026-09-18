@@ -21,8 +21,6 @@ public static class FlattenOperationSettingsGui
 
         FlattenSettingsScope assetScope = FlattenOperationSettings.GetScope(settings);
         bool editable = assetScope == panelScope;
-        string assetPath = AssetDatabase.GetAssetPath(settings);
-        EditorGUILayout.LabelField("配置来源", assetPath);
 
         if (editable)
         {

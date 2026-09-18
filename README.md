@@ -1,10 +1,12 @@
 # Asset Plugin（资源工具集）
 
-Unity Editor 插件：工程外模型 → Incoming → Prefab → Art → 资源处理 → Android/iOS AssetBundle。  
-宿主：Unity 2022.3（Plugin2022，Built-in RP）。已发布标签 **v1.5.3** ≠ 当前 `main`。  
-远程：`http://swm-server.local:3000/Hanson/asset-bundle.git`
+Unity Editor 插件：工程外模型 → Incoming → Prefab → Art → 资源处理 → 双端 AssetBundle。  
+宿主：Unity 2022.3（Plugin2022，Built-in RP）。当前推荐标签 **v1.6.0**。  
+远程：Gitea `team`（协作）· GitHub `origin`（备份）
 
-④ 收口步骤 **1–14 已落地**（2026-09-16）。内核仍在 `TOol/Generated/Flatten`（未迁目录）。含 41/42 的代码**尚未提交**。
+**本批目的：** 把编排路径、导入钩子、菜单和⑥产物收成可日常使用的边界——管线自管三根路径，导入期只看全局总开关，手工菜单按步骤排，AB 用文件名区分平台。
+
+④ 收口步骤 **1–14 已落地**。内核仍在 `TOol/Generated/Flatten`（未迁目录）。
 
 ---
 
@@ -18,12 +20,12 @@ Unity Editor 插件：工程外模型 → Incoming → Prefab → Art → 资源
 
 | 格 | 做什么 | 写出 |
 |---|---|---|
-| **[1] 入库** | 工程外 `.fbx/.obj/.glb/.gltf` 拷进 Incoming（glTF 跟拷伴生；FBX 外置图跟拷） | `Assets/Incoming/<ID2>/` |
-| **[2] 总闸** | 导入期「设置自动 / 后处理自动」。**不是⑤** | — |
-| **[③] Prefab** | 生成 IncomingPrefab；**ID2** 在本框 | `Assets/IncomingPrefab/` |
-| **[④] 平铺** | 拷到本趟 `Assets/Art/<名>/`；旁路按钮打开人工平铺面板 | Art 单元 |
+| **[1] 入库** | 工程外 `.fbx/.obj/.glb/.gltf` 拷进导入根（工作区在步骤 SO） | `Assets/Incoming/<ID2>/`（默） |
+| **[2] 导入期** | 全局导入设置：OnPreprocess 总开关与分项。**不是⑤** | — |
+| **[③] Prefab** | 按 ID2 写 Prefab 根 | `Assets/IncomingPrefab/`（默） |
+| **[④] 平铺** | 写入交付根；分类/清夹在平铺 SO | `Assets/Art/<名>/`（默） |
 | **[⑤] 总批量** | 代跑资源处理「执行全部」（压图、刷顶点色、换 Shader） | 改 Art |
-| **[⑥] 导出** | 双端 AB / 可选 UnityPackage | `Deliverables/` |
+| **[⑥] 导出** | 双端 AB / 可选 UnityPackage | `AssetBundles/` · `Deliverables/` |
 
 连锁：关③则④⑤关；关④则⑤关。总面板跑管线时**强制入库**；CLI 跟步骤 SO。同一物理文件不能在一张绑定表里出现两次。
 
@@ -53,19 +55,17 @@ Unity Editor 插件：工程外模型 → Incoming → Prefab → Art → 资源
 
 看日志 `[Pipeline] exit=N`。进程码设计上相同。契约：[cli-getting-started](./docs/dev-wip/04_implementation/cli-getting-started.md)
 
-### 3. 人工④（不自动接⑤⑥）
+### 3. 人工步骤（不自动接整条管线）
 
-`Tools > Retinar > 批量汇总`：普通平铺（B）或原子迁移（B′）；或总面板 **[④]「打开平铺面板」**。  
-选中模型会先③。相对 URI glTF 选 B 会确认；取消/叉号不执行。缺伴生的 B′ 直接失败。人工 FBX **不再** SafeZone。
+`Tools > 手动操作栏`：按 [1][③][④][⑤][⑥] 排。④ 只有原子迁移 / 平铺两条，无专属平铺面板。⑥ 可导出选中 Prefab，或选文件夹批量打 AB。
 
 ### 4. 只做入库或只做资源处理
 
 | 菜单 | 等于 | 用途 |
 |---|---|---|
-| `Tools > 批量选择器` | 总面板 **[1]** 同一窗 | 收集入库，或「输出到编排」 |
-| `Tools > 资源处理总面板` | ⑤ 同一内核 | 对 Art「执行全部」；默认扫 `Assets/Art` |
-
-`Tools/资源处理/` 子菜单已撤。
+| `Tools > 手动操作栏 > 步骤 > [1]` | 总面板 **[1]** 同一窗 | 收集入库，或「输出到编排」（带本表 ID2） |
+| `Tools > 手动操作栏 > 步骤 > [⑤]` | ⑤ 同一内核 | 对 Art「执行全部」 |
+| `Tools > 全局导入设置（2）` | 总面板 **[2]** 同一窗 | Unity OnPreprocess 总开关与分项 |
 
 ---
 
@@ -74,10 +74,10 @@ Unity Editor 插件：工程外模型 → Incoming → Prefab → Art → 资源
 | 目录 | 定位 | 菜单 |
 |------|------|------|
 | [`Pipeline/`](./Pipeline/) | 步骤 SO、Runner、总面板、CLI、人工④调度 | `Tools > 自动化管线总面板` |
-| [`TOol/`](./TOol/) | ② 入库、③ Prefab、⑤ Op；物理承载④内核 | `批量选择器` / `资源处理总面板` |
-| [`RetinarBatchBuilder_Share/`](./RetinarBatchBuilder_Share/) | 插件 1：⑥ AB/输出格式；平铺菜单薄转发 | `Tools > Retinar > 批量汇总` / `打开交付文件夹` |
+| [`TOol/`](./TOol/) | [1] 入库、③ Prefab、⑤ Op；物理承载④内核；[2] 导入设置窗 | `手动操作栏` / `全局导入设置（2）` |
+| [`RetinarBatchBuilder_Share/`](./RetinarBatchBuilder_Share/) | 插件 1：⑥ AB（`name_android` / `name_ios`） | `手动操作栏` [⑥] / `打开交付文件夹` |
 
-**三条「自动」不要混：** 导入期 Processor（Art 模型硬跳过）≠ L1 总批量（故意打 Art）≠ 管线⑤（代调 L1）。结构：[overview](./docs/dev-wip/02_structure/overview.md)
+**三条「自动」不要混：** 导入期 OnPreprocess（总开关 + Art 硬跳过）≠ L1 总批量（故意打 Art）≠ 管线⑤（④之后代调 L1）。结构：[overview](./docs/dev-wip/02_structure/overview.md)
 
 **Art 单元：** `Assets/Art/<名>/`（Model / Texture / Material / Prefab…）；未知依赖进 `Unknown/`。
 

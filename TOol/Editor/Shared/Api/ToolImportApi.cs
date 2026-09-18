@@ -43,11 +43,15 @@ public static class ToolImportApi
     }
 
     /// <inheritdoc cref="ImportSingleModel(string,out string,out string)"/>
+    /// <param name="importRoot">非空则用此导入根（编排传入）；空则读批量选择器 SO。</param>
+    /// <param name="deliveryAlertRoot">非空则禁止写入该交付根；空且走批量 SO 时用其警报列表。</param>
     public static bool ImportSingleModel(
         string sourcePath,
         string incomingFolderName,
         out string assetModelPath,
-        out string message)
+        out string message,
+        string importRoot = null,
+        string deliveryAlertRoot = null)
     {
         assetModelPath = null;
         message = null;
@@ -99,35 +103,61 @@ public static class ToolImportApi
             return false;
         }
 
-        BatchFbxImportSettings settings = BatchFbxImportSettings.GetOrCreateAsset();
-        if (!settings.TryValidateImportRoot(out string rootError))
+        BatchFbxImportSettings settings = null;
+        string root;
+        if (!string.IsNullOrWhiteSpace(importRoot))
         {
-            message = rootError;
-            return false;
+            root = importRoot.Replace("\\", "/").TrimEnd('/');
+            if (string.IsNullOrEmpty(root) ||
+                !root.StartsWith("Assets/", StringComparison.OrdinalIgnoreCase))
+            {
+                message = "导入根必须是 Assets/ 下的路径: " + root;
+                return false;
+            }
+
+            if (!string.IsNullOrWhiteSpace(deliveryAlertRoot) &&
+                ResourceExcludeUtility.IsUnderRoot(root, deliveryAlertRoot))
+            {
+                message = "导入根落在交付区: " + root;
+                return false;
+            }
+        }
+        else
+        {
+            settings = BatchFbxImportSettings.GetOrCreateAsset();
+            if (!settings.TryValidateImportRoot(out string rootError))
+            {
+                message = rootError;
+                return false;
+            }
+
+            root = settings.NormalizedImportRoot;
         }
 
         bool fallback;
         string warning;
         string folderName = ResolveIncomingFolderName(fullDisk, incomingFolderName, out fallback, out warning);
-        string targetFolder = settings.NormalizedImportRoot + "/" + folderName;
+        string targetFolder = root + "/" + folderName;
         string fileName = Path.GetFileName(fullDisk);
         string targetAsset = targetFolder + "/" + fileName;
 
-        if (settings.IsDeliveryAlertPath(targetFolder) ||
-            settings.IsDeliveryAlertPath(targetFolder + "/"))
+        bool deliveryAlert = settings != null
+            ? (settings.IsDeliveryAlertPath(targetFolder) || settings.IsDeliveryAlertPath(targetFolder + "/"))
+            : ResourceExcludeUtility.IsUnderRoot(targetFolder, deliveryAlertRoot);
+        if (deliveryAlert)
         {
             message = "目标落在交付区警报路径: " + targetFolder;
             return false;
         }
 
         // 管线单文件：只清本趟 Incoming/<单元夹>/，再拷。不扫整棵 Incoming。源已在 Assets 时上面已 return。
-        if (!AssetUnitFolder.TryDeleteImmediateChildFolder(settings.NormalizedImportRoot, targetFolder))
+        if (!AssetUnitFolder.TryDeleteImmediateChildFolder(root, targetFolder))
         {
             message = "无法清空导入单元夹: " + targetFolder;
             return false;
         }
 
-        EnsureAssetFolder(settings.NormalizedImportRoot);
+        EnsureAssetFolder(root);
         EnsureAssetFolder(targetFolder);
 
         string destFull = AssetPathUtility.ToFullPath(targetAsset);

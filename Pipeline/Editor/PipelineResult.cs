@@ -20,7 +20,14 @@ public sealed class PipelineResult
 
     public void Fail(int code, string message)
     {
-        ExitCode = code;
+        // Keep the earliest failing phase as the process exit code. Some quality
+        // failures intentionally continue through later phases, whose diagnostics
+        // must remain visible without hiding the original root cause.
+        if (ExitCode == PipelineErrorCodes.Ok)
+        {
+            ExitCode = code;
+        }
+
         if (!string.IsNullOrEmpty(message))
         {
             Messages.Add(message);

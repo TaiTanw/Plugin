@@ -48,4 +48,7 @@ public sealed class RetinarFlattenOptions
 
     /// <summary>是否在最终 Prefab 根节点添加/更新 BoxCollider。</summary>
     public bool AddBoxCollider;
+
+    /// <summary>④ 写出根。空则 <see cref="FlattenBuildSettings.ArtRoot"/>。</summary>
+    public string ArtRoot;
 }
