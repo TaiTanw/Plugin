@@ -11,7 +11,8 @@ using UnityEngine;
 //   源 TGA（含 32 位版）Alpha 通道全是 255；透明度写在 RGB 亮度上（黑底 + 亮旋翼）。
 //   MTL 的 map_d 在 DCC 里按亮度溶解，但 Unity Standard 透明模式只读贴图 Alpha，
 //   于是黑底变成不透明黑块，旋翼透明显示异常。这是源文件约定与 Unity 着色器约定
-//   不一致，不是导入参数设错。本操作把约定对齐到 Unity 侧，不改材质 Render Mode。
+//   不一致，不是导入参数设错。本操作把约定对齐到 Unity 侧：写 Alpha，
+//   并把主贴图是这张图的 Opaque Standard 改成 Fade。
 //
 // 阈值与映射规则（读 TextureProcessSettings，可在贴图处理窗口的配置段调整）：
 //   1) luminanceAlphaCutoff：亮度低于此值 → Alpha=0 且 RGB 清零（砍半透明影子）
@@ -44,8 +45,8 @@ public class BakeLuminanceToAlphaOperation : ITextureAssetOperation
                    "阈值以上可重映射到 0~255。用于黑底旋翼模糊盘/光晕。" +
                    "Evaluate 不做像素探测：精准面板勾选后范围内适用文件全部算命中；" +
                    "执行时再按像素 Skip。不进入总面板 / 管线⑤ / 导入自动。" +
-                   "参数在高级设置「亮度写入 Alpha」。不要对普通漫反射或 ORM 使用；" +
-                   ".fbm 内嵌缓存会跳过。可重复执行以换阈值重烤。";
+                   "Cutoff 在高级设置。模型仍无反应时，在本 Op 下勾「跟材质改 Fade」（本机 Prefs）。" +
+                   "不要对普通漫反射或 ORM 使用；.fbm 内嵌缓存会跳过。可重复执行以换阈值重烤。";
         }
     }
 
@@ -142,6 +143,13 @@ public class BakeLuminanceToAlphaOperation : ITextureAssetOperation
             File.WriteAllBytes(fullPath, encoded);
             AssetDatabase.ImportAsset(context.AssetPath, ImportAssetOptions.ForceUpdate);
             EnableAlphaIsTransparency(context.AssetPath);
+            bool followFade = ResourceManualOperationStore.IsLuminanceFollowMaterialsToFade();
+            int fadeMaterials = 0;
+            if (followFade)
+            {
+                fadeMaterials = NormalizeDeliverableShaderOperation.ApplyFadeToMaterialsUsingMainTexture(
+                    context.AssetPath);
+            }
 
             return TextureOperationResult.Changed(
                 "Cutoff=" + cutoff +
@@ -149,7 +157,11 @@ public class BakeLuminanceToAlphaOperation : ITextureAssetOperation
                 " 像素，保留 " + stats.KeptPixels +
                 " 像素，remap=" + remap +
                 "，灰度RGB=" + grayscaleRgb +
-                "，已开启 Alpha Is Transparency。");
+                "，已开启 Alpha Is Transparency" +
+                (followFade
+                    ? "，材质 Fade " + fadeMaterials + " 个"
+                    : "，未跟材质（精准面板本 Op 下勾选）") +
+                "。");
         }
         finally
         {

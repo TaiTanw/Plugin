@@ -301,6 +301,75 @@ public class NormalizeDeliverableShaderOperation : IMaterialAssetOperation
         material.renderQueue = (int)RenderQueue.Geometry;
     }
 
+    /// <summary>
+    /// 主贴图已标 Alpha Is Transparency 时，把仍为 Opaque 的 Standard 改成 Fade。
+    /// 亮度烤透明会打开该 importer 标记；④从 OBJ 拷出的材质默认 Opaque，不改则旋翼仍是实心黑盘。
+    /// 已是 Cutout / Fade / Transparent 的不改。
+    /// </summary>
+    internal static bool TryApplyFadeIfMainTexMarksTransparency(Material material)
+    {
+        if (material == null || !material.HasProperty("_MainTex"))
+        {
+            return false;
+        }
+
+        Texture main = material.GetTexture("_MainTex");
+        if (main == null)
+        {
+            return false;
+        }
+
+        var importer = AssetImporter.GetAtPath(AssetDatabase.GetAssetPath(main)) as TextureImporter;
+        if (importer == null || !importer.alphaIsTransparency)
+        {
+            return false;
+        }
+
+        if (HasMode(material, 1f, 2f, 3f))
+        {
+            return false;
+        }
+
+        ApplyTargetSurface(material, new MaterialSurfaceSnapshot(MaterialSurfaceMode.Blend, 0.5f));
+        EditorUtility.SetDirty(material);
+        return true;
+    }
+
+    internal static int ApplyFadeToMaterialsUsingMainTexture(string textureAssetPath)
+    {
+        if (string.IsNullOrEmpty(textureAssetPath))
+        {
+            return 0;
+        }
+
+        Texture texture = AssetDatabase.LoadAssetAtPath<Texture>(textureAssetPath);
+        if (texture == null)
+        {
+            return 0;
+        }
+
+        int changed = 0;
+        string[] guids = AssetDatabase.FindAssets("t:Material");
+        for (int i = 0; i < guids.Length; i++)
+        {
+            Material material = AssetDatabase.LoadAssetAtPath<Material>(
+                AssetDatabase.GUIDToAssetPath(guids[i]));
+            if (material == null ||
+                !material.HasProperty("_MainTex") ||
+                material.GetTexture("_MainTex") != texture)
+            {
+                continue;
+            }
+
+            if (TryApplyFadeIfMainTexMarksTransparency(material))
+            {
+                changed++;
+            }
+        }
+
+        return changed;
+    }
+
     private static Texture GetTex(Material material, params string[] names)
     {
         for (int i = 0; i < names.Length; i++)

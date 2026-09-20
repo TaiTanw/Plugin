@@ -1,6 +1,6 @@
 # 当前结构
 
-现约入口：[开发者须知](../README.md)。操作者：[操作者须知](../../operator/README.md)。
+现约入口：[开发者须知](../README.md)。操作者：[操作者须知](../../operator/README.md)。风险：[risks.md](./risks.md)。
 
 ```text
 Assets/Plugin/                 Git 根

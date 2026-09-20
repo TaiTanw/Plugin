@@ -18,7 +18,8 @@
 7. **贴图 `AllowMasterBatch`（手写，不是自动探测「无分支」）**  
    `false`：禁止进 L1 / 管线⑤ masterBatch / 导入自动；仅 L2 精准可勾。  
    **Evaluate 对适用池无条件 NeedsWork 的 Op 必须为 false。**  
-   现网仅 `bake_luminance_to_alpha`。材质 / 模型接口无此字段。加 Op 见 [⑤ Op](./04_implementation/op-recognition-and-extend.md)。
+   现网仅 `bake_luminance_to_alpha`。材质 / 模型接口无此字段。加 Op 见 [⑤ Op](./04_implementation/op-recognition-and-extend.md)。  
+   跟材质 Fade：精准面板该 Op 下勾选，本机 EditorPrefs（`TOol.ManualOp.Texture.bake_luminance_to_alpha.FollowMaterialsToFade`），**默认关**，不进贴图 SO。调用材质 Op **内部** `ApplyTargetSurface`，不是 `RunMasterBatch`。④ 拷材质不跟此开关。见 [风险说明](./02_structure/risks.md)。
 8. L1 扫描不读管线 SO。管线无扫描入口。⑤ = `RunMasterBatch`（`triggeredByImport: false`），不读导入 exclude。
 9. **Quiet**：面板跟步骤 SO；CLI **强制** true（≠ 退出编辑器）。  
    **清空导入区 / 交付根**：同 SO 另两字段，不绑 Quiet；CLI 跟 SO。先清 Art，挂起导入、删完再一次 Refresh。
@@ -78,6 +79,7 @@ OBJ 缺 `.mtl`/贴图不进 40。空槽只观察。首个非 0 退出码保留�
 | 战略（短） | [01_requirements/strategy.md](./01_requirements/strategy.md) |
 | 三条「自动」 | [01_requirements/tech-and-ops.md](./01_requirements/tech-and-ops.md) |
 | 结构 | [02_structure/overview.md](./02_structure/overview.md) |
+| 风险（通道混用、Op 隐式调用；硬约束仍看本页） | [02_structure/risks.md](./02_structure/risks.md) |
 | 待办 | [03_open-items/backlog.md](./03_open-items/backlog.md) |
 | Runner / 窄口 / 退出码 | [04_implementation/pipeline-flow.md](./04_implementation/pipeline-flow.md) |
 | 相位入参 | [04_implementation/pipeline-phase-io.md](./04_implementation/pipeline-phase-io.md) |

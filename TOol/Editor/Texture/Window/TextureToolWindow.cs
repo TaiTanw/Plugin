@@ -268,6 +268,26 @@ public class TextureToolWindow : EditorWindow
 
             EditorGUILayout.LabelField("Id: " + operation.Id, EditorStyles.miniLabel);
             EditorGUILayout.LabelField(operation.Description, EditorStyles.wordWrappedMiniLabel);
+
+            if (operation.Id == "bake_luminance_to_alpha")
+            {
+                EditorGUI.indentLevel++;
+                bool follow = ResourceManualOperationStore.IsLuminanceFollowMaterialsToFade();
+                bool newFollow = EditorGUILayout.ToggleLeft(
+                    new GUIContent(
+                        "烤完仍无反应再勾跟材质",
+                        "OBJ 材质常是 Opaque，不读 Alpha。" +
+                        "勾选后：把主贴图是这张图的 Opaque Standard 改成 Fade。" +
+                        "不是跑材质总批量，只复用「规范化交付 Shader」里改表面的方法。" +
+                        "本机记住，默认关。"),
+                    follow);
+                if (newFollow != follow)
+                {
+                    ResourceManualOperationStore.SetLuminanceFollowMaterialsToFade(newFollow);
+                }
+
+                EditorGUI.indentLevel--;
+            }
         }
     }
 

@@ -894,6 +894,7 @@ public static partial class RetinarBatchModelBuilder
             }
         }
 
+        NormalizeDeliverableShaderOperation.TryApplyFadeIfMainTexMarksTransparency(material);
         EditorUtility.SetDirty(material);
         return material;
     }

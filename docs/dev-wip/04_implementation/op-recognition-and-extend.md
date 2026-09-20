@@ -9,7 +9,8 @@
 - `true`：可进 L1 / 管线⑤ / 导入自动（仍要过 Collector + Evaluate）。
 - `false`：只出现在 L2 精准面板。Registry 会从 master / import 列表剥掉。
 
-**Evaluate 对适用池无条件 `NeedsWork` 的 Op 必须为 false。** 不是自动探测「没有 if」。现网仅 `bake_luminance_to_alpha`（像素判断只在 Execute）。材质 / 模型接口无此字段。
+**Evaluate 对适用池无条件 `NeedsWork` 的 Op 必须为 false。** 不是自动探测「没有 if」。现网仅 `bake_luminance_to_alpha`（像素判断只在 Execute）。材质 / 模型接口无此字段。  
+该 Op 在精准面板下勾选跟材质（本机 Prefs）时会调用材质类内部方法，不是⑤对外口。见 [风险说明](../02_structure/risks.md)。
 
 命中列表 = 当前勾选且允许本通道的 Op 的 `NeedsWork`，不是 Collector 全池。
 

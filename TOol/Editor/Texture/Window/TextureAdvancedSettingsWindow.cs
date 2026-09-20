@@ -187,7 +187,7 @@ public class TextureAdvancedSettingsWindow : EditorWindow
                         }
 
                         EditorGUILayout.HelpBox(
-                            "此项只在「贴图处理」精准面板勾选执行，不能进总面板 / 管线⑤ / 导入自动。精准面板勾选后，范围内适用文件全部算命中。",
+                            "此项只在「贴图处理」精准面板勾选执行，不能进总面板 / 管线⑤ / 导入自动。精准面板勾选后，范围内适用文件全部算命中。跟材质 Fade 在精准面板该 Op 下勾选（本机 Prefs）。",
                             MessageType.Info);
                         continue;
                     }

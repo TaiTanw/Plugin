@@ -12,6 +12,8 @@ public static class ResourceManualOperationStore
     public const string DomainMaterial = "Material";
 
     private const string KeyPrefix = "TOol.ManualOp.";
+    private const string LuminanceFollowFadeKey =
+        KeyPrefix + "Texture.bake_luminance_to_alpha.FollowMaterialsToFade";
 
     public static bool IsSelected(string domain, string operationId)
     {
@@ -31,6 +33,17 @@ public static class ResourceManualOperationStore
         }
 
         EditorPrefs.SetBool(KeyPrefix + domain + "." + operationId, selected);
+    }
+
+    /// <summary>精准面板「亮度写入 Alpha」附加项。本机 Prefs，默认关，不进 SO。</summary>
+    public static bool IsLuminanceFollowMaterialsToFade()
+    {
+        return EditorPrefs.GetBool(LuminanceFollowFadeKey, false);
+    }
+
+    public static void SetLuminanceFollowMaterialsToFade(bool follow)
+    {
+        EditorPrefs.SetBool(LuminanceFollowFadeKey, follow);
     }
 
     public static List<ITextureAssetOperation> CollectSelectedTextureOperations()

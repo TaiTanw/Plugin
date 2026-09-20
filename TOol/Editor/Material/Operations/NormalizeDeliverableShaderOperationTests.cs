@@ -113,5 +113,17 @@ public class NormalizeDeliverableShaderOperationTests
             Assert.That(captured.Cutoff, Is.EqualTo(0.42f).Within(0.0001f));
         }
     }
+
+    [Test]
+    public void TryApplyFadeIfMainTexMarksTransparency_NullOrEmptyMainTex_ReturnsFalse()
+    {
+        Assert.That(
+            NormalizeDeliverableShaderOperation.TryApplyFadeIfMainTexMarksTransparency(null),
+            Is.False);
+        Assert.That(
+            NormalizeDeliverableShaderOperation.TryApplyFadeIfMainTexMarksTransparency(material),
+            Is.False);
+        Assert.That(material.GetFloat("_Mode"), Is.EqualTo(0f));
+    }
 }
 #endif
