@@ -6,7 +6,7 @@ using UnityEngine;
 
 // =====================================================================================
 // 批量模型导入：收集 / Conflict 警告 / 执行入库，或把筛选结果输出到编排面板。
-// 「执行导入」= 只做 1 入库（人工单步）。「输出到编排」= 不拷贝，填路径+ID2。
+// 「执行导入」= 只做 1 入库（人工单步）。「输出到编排」= 不拷贝，填路径+ID2+OBJ 轴向。
 // 后缀筛选只缩小本次列表，不改内核识别、不影响 CLI。
 // =====================================================================================
 public class BatchFbxImportWindow : EditorWindow
@@ -25,6 +25,8 @@ public class BatchFbxImportWindow : EditorWindow
     private string lastSummary;
     private bool isRunning;
     private bool foldConfig;
+    private readonly Dictionary<string, string> axisHints =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
     private const string PrefFoldConfig = "TOol.BatchImport.Fold.Config";
 
@@ -61,7 +63,7 @@ public class BatchFbxImportWindow : EditorWindow
 
             EditorGUILayout.HelpBox(
                 "识别 " + ToolImportApi.FormatSupportedExtensionsDisplay() + "。下方勾选只缩小本次列表。\n" +
-                "「执行导入」拷进本页导入根；「输出到编排」只交路径和 ID2，不拷贝。\n" +
+                "「执行导入」拷进本页导入根；「输出到编排」交路径、ID2 和 OBJ 轴向勾选，不拷贝。\n" +
                 "ID2 可改。目标已存在或落在交付区预警 = Conflict。",
                 MessageType.Info);
 
@@ -83,7 +85,7 @@ public class BatchFbxImportWindow : EditorWindow
     {
         EditorGUILayout.Space(4f);
         bool open = EditorGUILayout.Foldout(
-            foldConfig, "配置（导入根 / 交付区预警）", true, EditorStyles.foldoutHeader);
+            foldConfig, "手动端路径（导入根 / ③ Prefab 根 / ④ 交付根 / 预警）", true, EditorStyles.foldoutHeader);
         if (open != foldConfig)
         {
             foldConfig = open;
@@ -92,7 +94,7 @@ public class BatchFbxImportWindow : EditorWindow
 
         if (!foldConfig)
         {
-            if (!settings.TryValidateImportRoot(out string foldedError))
+            if (!settings.TryValidateManualPaths(out string foldedError))
             {
                 EditorGUILayout.HelpBox(foldedError, MessageType.Error);
             }
@@ -103,7 +105,8 @@ public class BatchFbxImportWindow : EditorWindow
         using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
         {
             EditorGUILayout.HelpBox(
-                "只服务本窗「执行导入」。预警表与贴图/模型不介入目录不是同一份。",
+                "只服务人工。「执行导入」用导入根；人工③与④选中模型先③用 Prefab 根；人工④写出用交付根。\n" +
+                "管线三根不读本页。导入期跳过 Art 仍钉死 Assets/Art。预警表与贴图/模型不介入目录不是同一份。",
                 MessageType.None);
 
             SettingsAssetPathGui.DrawPinned(settings);
@@ -116,7 +119,7 @@ public class BatchFbxImportWindow : EditorWindow
                 RefreshItemStates();
             }
 
-            if (!settings.TryValidateImportRoot(out string rootError))
+            if (!settings.TryValidateManualPaths(out string rootError))
             {
                 EditorGUILayout.HelpBox(rootError, MessageType.Error);
             }
@@ -225,7 +228,7 @@ public class BatchFbxImportWindow : EditorWindow
             listScroll = listScope.scrollPosition;
             if (items.Count == 0)
             {
-                EditorGUILayout.LabelField("尚无条目。拖入后显示源路径、可改 ID2 与冲突状态。");
+                EditorGUILayout.LabelField("尚无条目。拖入后显示源路径、可改 ID2；OBJ 可勾轴向。");
                 return;
             }
 
@@ -262,6 +265,19 @@ public class BatchFbxImportWindow : EditorWindow
                         {
                             BatchFbxImportService.ApplyIncomingId2(item, id2, settings);
                             BatchFbxImportService.RefreshConflictStates(items, settings);
+                        }
+
+                        if (BatchFbxImportService.IsObjPath(item.SourceFbxPath))
+                        {
+                            item.ConvertZUpToYUp = EditorGUILayout.ToggleLeft(
+                                "OBJ 轴向 −90°X", item.ConvertZUpToYUp);
+                            string hint = AxisHint(item.SourceFbxPath);
+                            if (!string.IsNullOrEmpty(hint))
+                            {
+                                EditorGUILayout.LabelField(
+                                    "导出器「" + hint + "」默认 Z-up",
+                                    EditorStyles.miniLabel);
+                            }
                         }
                     }
 
@@ -323,7 +339,7 @@ public class BatchFbxImportWindow : EditorWindow
         else if (!blocked && items.Count > 0)
         {
             EditorGUILayout.HelpBox(
-                "无 Conflict。「执行导入」只入库；「输出到编排」不拷贝。",
+                "无 Conflict。「执行导入」只入库；「输出到编排」不拷贝，OBJ 轴向勾选会带上。",
                 MessageType.Info);
         }
     }
@@ -338,6 +354,9 @@ public class BatchFbxImportWindow : EditorWindow
 
     private void RecollectFromRoots()
     {
+        Dictionary<string, string> preservedId2;
+        Dictionary<string, bool> preservedAxis;
+        SnapshotUserEdits(out preservedId2, out preservedAxis);
         items.Clear();
         if (collectRoots.Count == 0)
         {
@@ -349,6 +368,8 @@ public class BatchFbxImportWindow : EditorWindow
         MergeCollected(
             BatchFbxImportService.CollectFromDroppedPaths(collectRoots, settings, EnabledExtensionList()),
             "按勾选重扫");
+        RestoreUserEdits(preservedId2, preservedAxis);
+        RefreshItemStates();
     }
 
     private void RememberRoots(IEnumerable<string> paths)
@@ -423,17 +444,11 @@ public class BatchFbxImportWindow : EditorWindow
                 continue;
             }
 
-            string id2;
-            if (string.IsNullOrWhiteSpace(item.Id2))
+            PipelineSourceBinding binding = BatchFbxImportService.ToOrchestrationBinding(item);
+            if (binding != null)
             {
-                id2 = PipelineMaterialId.SuggestDefault(source);
+                bindings.Add(binding);
             }
-            else
-            {
-                id2 = BatchFbxImportService.SanitizeFolderName(item.Id2.Trim());
-            }
-
-            bindings.Add(new PipelineSourceBinding(source, id2));
         }
 
         if (bindings.Count == 0)
@@ -443,7 +458,7 @@ public class BatchFbxImportWindow : EditorWindow
         }
 
         PipelineSourceAccept.SendToOrchestration(bindings);
-        lastSummary = "已输出 " + bindings.Count + " 条到编排面板（未入库）。ID2 用本表所填；空行才回落建议。";
+        lastSummary = "已输出 " + bindings.Count + " 条到编排面板（未入库）。ID2 与 OBJ 轴向用本表所填；空 ID2 才回落建议。";
         Repaint();
     }
 
@@ -541,6 +556,74 @@ public class BatchFbxImportWindow : EditorWindow
         }
 
         return n;
+    }
+
+    private void SnapshotUserEdits(
+        out Dictionary<string, string> id2ByPath,
+        out Dictionary<string, bool> axisByPath)
+    {
+        id2ByPath = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        axisByPath = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+        for (int i = 0; i < items.Count; i++)
+        {
+            BatchFbxImportService.ImportItem item = items[i];
+            if (item == null || string.IsNullOrEmpty(item.SourceFbxPath))
+            {
+                continue;
+            }
+
+            id2ByPath[item.SourceFbxPath] = item.Id2 ?? string.Empty;
+            axisByPath[item.SourceFbxPath] = item.ConvertZUpToYUp;
+        }
+    }
+
+    private void RestoreUserEdits(
+        Dictionary<string, string> id2ByPath,
+        Dictionary<string, bool> axisByPath)
+    {
+        if (id2ByPath == null || axisByPath == null)
+        {
+            return;
+        }
+
+        for (int i = 0; i < items.Count; i++)
+        {
+            BatchFbxImportService.ImportItem item = items[i];
+            if (item == null || string.IsNullOrEmpty(item.SourceFbxPath))
+            {
+                continue;
+            }
+
+            string id2;
+            if (id2ByPath.TryGetValue(item.SourceFbxPath, out id2))
+            {
+                BatchFbxImportService.ApplyIncomingId2(item, id2, settings);
+            }
+
+            bool axis;
+            if (axisByPath.TryGetValue(item.SourceFbxPath, out axis))
+            {
+                item.ConvertZUpToYUp = BatchFbxImportService.IsObjPath(item.SourceFbxPath) && axis;
+            }
+        }
+    }
+
+    private string AxisHint(string path)
+    {
+        if (!BatchFbxImportService.IsObjPath(path))
+        {
+            return null;
+        }
+
+        string cached;
+        if (axisHints.TryGetValue(path, out cached))
+        {
+            return string.IsNullOrEmpty(cached) ? null : cached;
+        }
+
+        string note = PipelineObjAxisProbe.SniffZUpExporter(path);
+        axisHints[path] = note ?? string.Empty;
+        return note;
     }
 
     private void RefreshItemStates()

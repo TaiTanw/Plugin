@@ -17,8 +17,29 @@ public class FlattenSmokePathTests
         Assert.That(text, Does.Not.Contain("CreateNormalizedPrefab"));
         Assert.That(text, Does.Not.Contain("SafeZone"));
         Assert.That(text, Does.Contain("PipelineWorkspace.TryValidate"));
+        Assert.That(text, Does.Contain("TryCleanupAfterRun"));
+        Assert.That(text, Does.Contain("PipelineWorkspace.RunWipes"));
         Assert.That(text, Does.Not.Contain("RetinarPaths.ArtRoot"));
         Assert.That(text, Does.Not.Contain("BatchFbxImportSettings"));
+        string workspace = ReadPluginFile("Pipeline/Editor/PipelineWorkspace.cs");
+        int refreshCount = 0;
+        int index = 0;
+        while ((index = workspace.IndexOf("AssetDatabase.Refresh", index, System.StringComparison.Ordinal)) >= 0)
+        {
+            refreshCount++;
+            index += "AssetDatabase.Refresh".Length;
+        }
+
+        Assert.That(refreshCount, Is.EqualTo(1), "清空只允许在 RunWipes 结束时 Refresh 一次");
+    }
+
+    [Test]
+    public void PipelineCli_ForcesQuiet_DoesNotForceCleanup()
+    {
+        string text = ReadPluginFile("Pipeline/Editor/PipelineCli.cs");
+        Assert.That(text, Does.Contain("opt.Quiet = true"));
+        Assert.That(text, Does.Not.Contain("CleanupImportRootsAfterRun ="));
+        Assert.That(text, Does.Not.Contain("CleanupArtAfterRun ="));
     }
 
     [Test]

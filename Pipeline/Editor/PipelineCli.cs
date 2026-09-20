@@ -30,7 +30,7 @@ public static class PipelineCli
             }
 
             PipelineOptions opt = PipelineOptions.FromSettings(PipelineStepSettings.Current, source);
-            // batchmode 禁止 Dialog；Quiet ≠ Unity -quit。
+            // batchmode 禁止 Dialog；Quiet ≠ Unity -quit。本趟结束清空跟 SO，不在此强制。
             opt.Quiet = true;
             if (!string.IsNullOrWhiteSpace(materialId))
             {

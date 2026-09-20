@@ -137,6 +137,50 @@ public static class TextureOperationRunner
         return summary;
     }
 
+    /// <summary>
+    /// 命中列表：当前勾选 Op 至少有一个 Evaluate.NeedsWork 的路径（与执行同一判断）。
+    /// 无勾选则空列表。扫描/执行仍应对 Collector 类型池跑，以便核对 Skip。
+    /// </summary>
+    public static List<string> FilterNeedsWork(
+        IList<ITextureAssetOperation> operations,
+        IList<string> assetPaths,
+        TextureProcessSettings settings)
+    {
+        var result = new List<string>();
+        if (operations == null || assetPaths == null || operations.Count == 0)
+        {
+            return result;
+        }
+
+        var seen = new HashSet<string>();
+        for (int i = 0; i < assetPaths.Count; i++)
+        {
+            string assetPath = assetPaths[i];
+            if (string.IsNullOrEmpty(assetPath) || seen.Contains(assetPath))
+            {
+                continue;
+            }
+
+            for (int o = 0; o < operations.Count; o++)
+            {
+                ITextureAssetOperation operation = operations[o];
+                if (operation == null)
+                {
+                    continue;
+                }
+
+                if (operation.Evaluate(assetPath, settings).NeedsWork)
+                {
+                    seen.Add(assetPath);
+                    result.Add(assetPath);
+                    break;
+                }
+            }
+        }
+
+        return result;
+    }
+
     private static List<PendingWork> CollectPendingWork(
         IList<ITextureAssetOperation> operations,
         IList<string> assetPaths,

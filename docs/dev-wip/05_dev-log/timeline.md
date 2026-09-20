@@ -1,6 +1,6 @@
-# 开发日志（提交次第 + 工单对齐）
+# 开发日志
 
-返回 [总目录](../README.md) · 插件根 [README](../../../README.md) · 工单 [prd-docs#274](http://swm-server.local:3000/Admin/prd-docs/issues/274)
+现约：[开发者须知](../README.md)。工单 [prd-docs#274](http://swm-server.local:3000/Admin/prd-docs/issues/274)。本文只记提交次第，不覆盖现约。
 
 本文：[0](#0-how) · [1](#1-now) · [2](#2-issue-274) · [3](#3-commits) · [4](#4-tags) · [5](#5-cli) · [6](#6-pre-cli)
 
@@ -30,9 +30,9 @@
 
 **1. 现在（一句话）**
 
-2026-09-18：**v1.6.0** 编排边界收口（路径真源、导入钩子、菜单、AB 文件名）。④ 1–14 仍以 `23b3567` 为上一刀。内核未迁目录。
+2026-09-20：**v1.6.2** 逻辑优化（人工/管线配置拆分、⑤批量闸、跑后清空）。内核未迁目录。
 
-操作者流程：[插件根 README](../../../README.md)。D5 契约见 [cli-getting-started](../04_implementation/cli-getting-started.md)。下一刀见 [backlog 接下来的重点](../03_open-items/backlog.md)。AB 产物见 [d1-ab-only](../04_implementation/d1-ab-only.md)。工单 #274 **未回帖**。
+操作者：[操作者须知](../../operator/README.md)。CLI：[cli-getting-started](../04_implementation/cli-getting-started.md)。队列：[backlog](../03_open-items/backlog.md)。AB：[d1-ab-only](../04_implementation/d1-ab-only.md)。工单 #274 **未回帖**。
 
 ---
 
@@ -71,6 +71,7 @@
 
 | 日期 | 哈希 | 说明 |
 |---|---|---|
+| 2026-09-20 | **v1.6.2** | 逻辑优化：配置拆分、⑤批量闸、跑后清空、文档现约 |
 | 2026-09-18 | **v1.6.0** | 编排边界收口：路径真源、导入钩子、菜单、AB 文件名 |
 | 2026-09-16 | `23b3567` | ④ 步骤 1–14：41 leftover / 42 身份报错但不卡；操作者流程收到插件根 README；已推 GitHub/Gitea |
 | 2026-09-14 | （文档，未提交） | 需求整理：D13-R1 移动端关闭；缺伴生整趟停；④目录暂留；OBJ 不进 MissingUris；当时 B 质量闸仍待拍 |
@@ -120,7 +121,8 @@
 
 | 标签 | 提交 | 一句话 |
 |---|---|---|
-| **v1.6.0** | 本批 HEAD | 路径真源、导入钩子、菜单、AB `name_android/_ios` |
+| **v1.6.2** | 本批 HEAD | 配置拆分、批量闸、跑后清空 |
+| **v1.6.0** | `5ee7af1` | 路径真源、导入钩子、菜单、AB `name_android/_ios` |
 | **v1.5.3** | `8131b31` | glTF 整包 + B′；管线 D18 夹级覆盖；开发日志 |
 | **v1.5.0** | `d32cd6e` | 自动化管线稳定：②③⑥ + 可选④⑤；CLI 第一刀；AB Options |
 | v1.4.4 | `22a6a28` | 引用 remap；FBX/Prefab 分流；动画循环跟源 |

@@ -1,4 +1,7 @@
+using System;
 using System.Collections.Generic;
+using System.IO;
+using UnityEditor;
 
 // =====================================================================================
 // 编排工作区三根：Incoming / IncomingPrefab / Art。只服务管线步骤。
@@ -58,6 +61,259 @@ public static class PipelineWorkspace
         }
 
         return true;
+    }
+
+    /// <summary>
+    /// 挂起导入后执行清空。禁止在半截树里 Refresh（glTF 会按已删伴生重导刷屏）。
+    /// </summary>
+    public static void RunWipes(Action wipe)
+    {
+        if (wipe == null)
+        {
+            return;
+        }
+
+        AssetDatabase.SaveAssets();
+        AssetDatabase.ReleaseCachedFileHandles();
+        bool autoOff = false;
+        bool editing = false;
+        try
+        {
+            AssetDatabase.DisallowAutoRefresh();
+            autoOff = true;
+            AssetDatabase.StartAssetEditing();
+            editing = true;
+            wipe();
+        }
+        finally
+        {
+            if (editing)
+            {
+                AssetDatabase.StopAssetEditing();
+            }
+
+            if (autoOff)
+            {
+                AssetDatabase.AllowAutoRefresh();
+            }
+
+            AssetDatabase.Refresh();
+        }
+    }
+
+    /// <summary>
+    /// 删除 <paramref name="assetRoot"/> 下全部直接子项，根夹本身留下。
+    /// 拒绝 Assets、Plugin、非 Assets/ 路径。夹不存在视为已空。
+    /// 本方法不 Refresh；本趟清空走 <see cref="RunWipes"/>。
+    /// </summary>
+    public static bool TryClearRootContents(string assetRoot, out int deletedCount, out string error)
+    {
+        deletedCount = 0;
+        error = null;
+        if (string.IsNullOrWhiteSpace(assetRoot))
+        {
+            error = "根路径为空";
+            return false;
+        }
+
+        string root = Normalize(assetRoot, assetRoot);
+        if (root.IndexOf("..", StringComparison.Ordinal) >= 0 ||
+            !root.StartsWith("Assets/", StringComparison.OrdinalIgnoreCase) ||
+            root.Equals("Assets", StringComparison.OrdinalIgnoreCase))
+        {
+            error = "拒绝清空非 Assets/ 子夹: " + assetRoot;
+            return false;
+        }
+
+        if (IsUnder(root, "Assets/Plugin"))
+        {
+            error = "拒绝清空 Plugin: " + root;
+            return false;
+        }
+
+        string full = AssetPathUtility.ToFullPath(root);
+        if (string.IsNullOrEmpty(full) || !Directory.Exists(full))
+        {
+            return true;
+        }
+
+        string[] entries = Directory.GetFileSystemEntries(full);
+        bool allOk = true;
+        string firstFail = null;
+        for (int i = 0; i < entries.Length; i++)
+        {
+            string disk = entries[i].Replace("\\", "/");
+            if (disk.EndsWith(".meta", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            string name = Path.GetFileName(disk);
+            if (string.IsNullOrEmpty(name) || name == "." || name == "..")
+            {
+                continue;
+            }
+
+            string assetPath = root + "/" + name;
+            if (TryDeleteTree(assetPath, disk))
+            {
+                deletedCount++;
+                continue;
+            }
+
+            allOk = false;
+            if (firstFail == null)
+            {
+                firstFail = assetPath;
+            }
+        }
+
+        if (!allOk)
+        {
+            error = "未能删除: " + firstFail;
+            return false;
+        }
+
+        return true;
+    }
+
+    private static bool TryDeleteTree(string assetPath, string diskPath)
+    {
+        if (string.IsNullOrEmpty(diskPath))
+        {
+            return false;
+        }
+
+        diskPath = diskPath.Replace("\\", "/");
+        assetPath = (assetPath ?? string.Empty).Replace("\\", "/");
+
+        if (Directory.Exists(diskPath))
+        {
+            string[] children = Directory.GetFileSystemEntries(diskPath);
+            for (int i = 0; i < children.Length; i++)
+            {
+                string childDisk = children[i].Replace("\\", "/");
+                if (childDisk.EndsWith(".meta", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                string childName = Path.GetFileName(childDisk);
+                if (string.IsNullOrEmpty(childName) || childName == "." || childName == "..")
+                {
+                    continue;
+                }
+
+                TryDeleteTree(assetPath + "/" + childName, childDisk);
+            }
+        }
+
+        if (!File.Exists(diskPath) && !Directory.Exists(diskPath))
+        {
+            TryDeleteSidecarMeta(diskPath);
+            return true;
+        }
+
+        if (!string.IsNullOrEmpty(assetPath) && AssetDatabase.DeleteAsset(assetPath))
+        {
+            return true;
+        }
+
+        return TryDeleteOnDisk(diskPath);
+    }
+
+    private static bool TryDeleteOnDisk(string diskPath)
+    {
+        ClearReadOnlyRecursive(diskPath);
+        FileUtil.DeleteFileOrDirectory(diskPath);
+        TryDeleteSidecarMeta(diskPath);
+        if (!File.Exists(diskPath) && !Directory.Exists(diskPath))
+        {
+            return true;
+        }
+
+        try
+        {
+            ClearReadOnlyRecursive(diskPath);
+            if (Directory.Exists(diskPath))
+            {
+                Directory.Delete(diskPath, true);
+            }
+            else if (File.Exists(diskPath))
+            {
+                File.Delete(diskPath);
+            }
+
+            TryDeleteSidecarMeta(diskPath);
+        }
+        catch (Exception)
+        {
+            return !File.Exists(diskPath) && !Directory.Exists(diskPath);
+        }
+
+        return !File.Exists(diskPath) && !Directory.Exists(diskPath);
+    }
+
+    private static void TryDeleteSidecarMeta(string diskPath)
+    {
+        string meta = diskPath + ".meta";
+        if (!File.Exists(meta))
+        {
+            return;
+        }
+
+        try
+        {
+            File.SetAttributes(meta, FileAttributes.Normal);
+        }
+        catch (Exception)
+        {
+        }
+
+        FileUtil.DeleteFileOrDirectory(meta);
+        if (File.Exists(meta))
+        {
+            try
+            {
+                File.Delete(meta);
+            }
+            catch (Exception)
+            {
+            }
+        }
+    }
+
+    private static void ClearReadOnlyRecursive(string path)
+    {
+        if (string.IsNullOrEmpty(path))
+        {
+            return;
+        }
+
+        try
+        {
+            if (File.Exists(path))
+            {
+                File.SetAttributes(path, FileAttributes.Normal);
+                return;
+            }
+
+            if (!Directory.Exists(path))
+            {
+                return;
+            }
+
+            string[] children = Directory.GetFileSystemEntries(path);
+            for (int i = 0; i < children.Length; i++)
+            {
+                ClearReadOnlyRecursive(children[i]);
+            }
+
+            File.SetAttributes(path, FileAttributes.Normal);
+        }
+        catch (Exception)
+        {
+        }
     }
 
     public static bool IsUnder(string path, string root)

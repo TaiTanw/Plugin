@@ -210,6 +210,47 @@ public static class MaterialOperationRunner
         return summary;
     }
 
+    /// <summary>命中列表：当前勾选 Op 至少一个 Evaluate.NeedsWork。</summary>
+    public static List<string> FilterNeedsWork(
+        IList<IMaterialAssetOperation> operations,
+        IList<string> assetPaths,
+        MaterialProcessSettings settings)
+    {
+        var result = new List<string>();
+        if (operations == null || assetPaths == null || operations.Count == 0)
+        {
+            return result;
+        }
+
+        var seen = new HashSet<string>();
+        for (int i = 0; i < assetPaths.Count; i++)
+        {
+            string assetPath = assetPaths[i];
+            if (string.IsNullOrEmpty(assetPath) || seen.Contains(assetPath))
+            {
+                continue;
+            }
+
+            for (int o = 0; o < operations.Count; o++)
+            {
+                IMaterialAssetOperation operation = operations[o];
+                if (operation == null)
+                {
+                    continue;
+                }
+
+                if (operation.Evaluate(assetPath, settings).NeedsWork)
+                {
+                    seen.Add(assetPath);
+                    result.Add(assetPath);
+                    break;
+                }
+            }
+        }
+
+        return result;
+    }
+
     private struct PendingWork
     {
         public readonly IMaterialAssetOperation Operation;

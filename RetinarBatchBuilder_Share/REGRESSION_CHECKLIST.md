@@ -1,6 +1,6 @@
 # 当前回归检查表
 
-核对日期：2026-09-14。对应当前 main；[结构与入口](../docs/dev-wip/02_structure/overview.md) · [当前待办](../docs/dev-wip/03_open-items/backlog.md) · [黑盒审计样例](../docs/dev-wip/04_implementation/flatten-core-audit.md)。
+核对日期：2026-09-14。现约：[开发者须知](../docs/dev-wip/README.md) · [待办](../docs/dev-wip/03_open-items/backlog.md)。
 
 这是人工/测试回归清单，不表示每项已有自动阻断。按本次修改范围选相应检查，发布或大范围拆分时覆盖完整样例；未经实测不得勾选。旧版门禁、全套交付报告要求已不适用。
 

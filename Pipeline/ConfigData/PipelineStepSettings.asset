@@ -23,3 +23,5 @@ MonoBehaviour:
   postProcessIncludeModel: 1
   runAb: 1
   quiet: 1
+  cleanupImportRootsAfterRun: 0
+  cleanupArtAfterRun: 0

@@ -12,10 +12,10 @@ using UnityEngine;
 /// </summary>
 public static class PrefabIncomingPaths
 {
-    /// <summary>专用根目录（来自 PrefabBuildSettings）。</summary>
+    /// <summary>人工 Prefab 根（选择器 SO）；编排③传入 override，不读此处。</summary>
     public static string PrefabRoot
     {
-        get { return PrefabBuildSettings.DefaultPrefabRoot.Replace("\\", "/").TrimEnd('/'); }
+        get { return BatchFbxImportSettings.Current.NormalizedPrefabRoot; }
     }
 
     /// <summary>

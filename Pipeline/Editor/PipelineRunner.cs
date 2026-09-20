@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.IO;
+using UnityEditor;
 using UnityEngine;
 
 // =====================================================================================
@@ -245,8 +246,52 @@ public static class PipelineRunner
             }
         }
 
+        TryCleanupAfterRun(options, result);
         LogResult(result);
         return result;
+    }
+
+    private static void TryCleanupAfterRun(PipelineOptions options, PipelineResult result)
+    {
+        if (options == null || result == null)
+        {
+            return;
+        }
+
+        bool wipeImport = options.CleanupImportRootsAfterRun;
+        bool wipeArt = options.CleanupArtAfterRun;
+        if (!wipeImport && !wipeArt)
+        {
+            return;
+        }
+
+        PipelineWorkspace.RunWipes(() =>
+        {
+            // 先清 Art：④ 常把贴图仍指 Incoming。先清导入区再 Refresh，会把残留 glTF 按已删伴生重导。
+            if (wipeArt)
+            {
+                ClearWorkspaceRoot(options.ArtRoot, "交付根", result);
+            }
+
+            if (wipeImport)
+            {
+                ClearWorkspaceRoot(options.ImportRoot, "导入根", result);
+                ClearWorkspaceRoot(options.PrefabRoot, "Prefab 根", result);
+            }
+        });
+    }
+
+    private static void ClearWorkspaceRoot(string root, string label, PipelineResult result)
+    {
+        int deleted;
+        string error;
+        if (PipelineWorkspace.TryClearRootContents(root, out deleted, out error))
+        {
+            result.Info("[Pipeline] 本趟结束清空" + label + " " + root + " × " + deleted);
+            return;
+        }
+
+        result.Info("[Pipeline] 本趟结束清空" + label + "失败 " + root + " " + error);
     }
 
     /// <summary>

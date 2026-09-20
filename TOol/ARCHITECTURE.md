@@ -5,8 +5,7 @@
 适用：Unity 2020.3 / 2022.3 Editor；与 `RetinarBatchBuilder_Share`（插件 1）配合使用。
 
 本文说明目录层级、类职责、自动化两层语义，以及和打包工具的边界。便于扩展新 Operation / 新资源类型时对照。  
-当前④入口为 `ToolFlattenApi.Run(plan)`；人工不建立 ctx。步骤 13 已撤公开分步转发；七步本体仍只由 `FlattenBuildService.Run` 调用，未移动物理目录。详见 [步骤单页](../docs/dev-wip/03_open-items/d24-flatten-steps.md)。
-扩展名识别与加 Op / 加后缀 / 加大类、以及「总可处理文件 → Evaluate → Execute」数据流：[docs/dev-wip/04_implementation/op-recognition-and-extend.md](../docs/dev-wip/04_implementation/op-recognition-and-extend.md)
+当前④入口为 `ToolFlattenApi.Run(plan)`；人工不建立 ctx。现约：[开发者须知](../docs/dev-wip/README.md)。加 Op / `AllowMasterBatch`：[op-recognition-and-extend](../docs/dev-wip/04_implementation/op-recognition-and-extend.md)。
 
 ### 配置归属（EditorPrefs 与 SO，必读）
 
@@ -289,10 +288,10 @@ TOol/
 | `TextureOperationRunner`                                | **Evaluate** 筛工作项、进度条、Execute；**`Scan` dry-run**；有改动只 **SaveAssets，禁止 Refresh** |
 | `ShrinkTextureSourceOperation`                          | **压缩超标源文件**（`shrink_source_file`）。Evaluate 跳过 `.fbm`/已达标。二的幂走对折阶梯。 |
 | `ConvertTgaToPngOperation`                              | TGA → PNG                                             |
-| `BakeLuminanceToAlphaOperation`                         | 亮度写入 Alpha（玻璃/裁切类需求）                                  |
+| `BakeLuminanceToAlphaOperation`                         | 亮度写入 Alpha。`AllowMasterBatch=false`：仅 L2。Evaluate 对适用文件一律 NeedsWork |
 
 
-**新增贴图操作：** 在 `Operations/` 实现 `ITextureAssetOperation` + 无参构造 → 自动出现在子面板；若要导入自动跑，把 `Id` 填进 Settings 的 `importAutoOperationIds`。
+**新增贴图操作：** 实现 `ITextureAssetOperation`。无条件全池 NeedsWork → `AllowMasterBatch=false`。要进⑤/L1/导入自动须为 true 并把 `Id` 勾进对应 SO 列表。
 
 ### 6.4 Import
 

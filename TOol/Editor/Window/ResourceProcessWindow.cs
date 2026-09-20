@@ -40,8 +40,8 @@ public class ResourceProcessWindow : EditorWindow
 
             EditorGUILayout.LabelField("资源处理总面板", EditorStyles.boldLabel);
             EditorGUILayout.HelpBox(
-                "人工处理：批量路径 + 纳入 + 执行全部。Op 勾选与参数在高级设置（TOol SO）。\n" +
-                "无导入期总闸 / 设置自动 / 后处理自动。管线⑤用编排自己的设置，不读本页。",
+                "人工处理：批量路径 + 纳入 + 执行全部。Op 勾选与参数在高级设置（TOol/ConfigData SO）。\n" +
+                "本页扫描/执行不读管线 SO。管线⑤用编排自己的设置，且无扫描入口。",
                 MessageType.Info);
 
             DrawMasterPathSection();
@@ -375,8 +375,9 @@ public class ResourceProcessWindow : EditorWindow
         }
 
         AssetOperationScanSummary summary = TextureOperationRunner.Scan(operations, targets, settings, true);
-        return "[贴图扫描] 目标 " + targets.Count + "，需处理 " + summary.NeedsWorkCount +
+        return "[贴图扫描] 类型池 " + targets.Count + "，需处理 " + summary.NeedsWorkCount +
                "，跳过 " + summary.SkippedCount +
+               "（TOol SO，不含管线 SO）" +
                (summary.Canceled ? "（已取消）" : string.Empty);
     }
 
@@ -427,8 +428,9 @@ public class ResourceProcessWindow : EditorWindow
         }
 
         AssetOperationScanSummary summary = ModelOperationRunner.Scan(operations, targets, settings, true);
-        return "[模型扫描] 目标 " + targets.Count + "，需处理 " + summary.NeedsWorkCount +
+        return "[模型扫描] 类型池 " + targets.Count + "，需处理 " + summary.NeedsWorkCount +
                "，跳过 " + summary.SkippedCount +
+               "（TOol SO，不含管线 SO）" +
                (summary.Canceled ? "（已取消）" : string.Empty);
     }
 

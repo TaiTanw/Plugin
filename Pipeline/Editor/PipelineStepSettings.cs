@@ -53,6 +53,12 @@ public class PipelineStepSettings : ScriptableObject
     [Tooltip("禁止确认弹窗。")]
     public bool quiet = true;
 
+    [Tooltip("本趟跑完后清空导入根与 Prefab 根下全部文件（两根一起；根夹留下）。与 Quiet 无关。")]
+    public bool cleanupImportRootsAfterRun;
+
+    [Tooltip("本趟跑完后清空交付根下全部文件（根夹留下）。与 Quiet 无关。")]
+    public bool cleanupArtAfterRun;
+
     private static PipelineStepSettings assetInstance;
     private static PipelineStepSettings fallbackInstance;
     private static bool fallbackWarningLogged;
@@ -117,6 +123,8 @@ public class PipelineStepSettings : ScriptableObject
         options.PostProcessIncludeModel = postProcessIncludeModel;
         options.RunAb = runAb;
         options.Quiet = quiet;
+        options.CleanupImportRootsAfterRun = cleanupImportRootsAfterRun;
+        options.CleanupArtAfterRun = cleanupArtAfterRun;
         options.ImportRoot = PipelineWorkspace.Normalize(
             importRootPath, PipelineWorkspace.DefaultImportRoot);
         options.PrefabRoot = PipelineWorkspace.Normalize(

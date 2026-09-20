@@ -38,6 +38,12 @@ public interface ITextureAssetOperation
     int Order { get; }
 
     /// <summary>
+    /// false：禁止进入 L1 总面板 / 管线⑤ 的 masterBatch，以及导入自动。
+    /// 仅 L2 精准面板可勾选执行。无条件全池 NeedsWork 的 Op 必须为 false。
+    /// </summary>
+    bool AllowMasterBatch { get; }
+
+    /// <summary>
     /// 统一评估：是否适用、是否需要改。扫描 dry-run 与 Runner 收集待处理项都走这里。
     /// 预筛应尽量便宜；需要读像素/解码的探测也写在本方法内（由实现决定深度）。
     /// </summary>

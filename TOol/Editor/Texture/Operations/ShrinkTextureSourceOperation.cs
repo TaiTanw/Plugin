@@ -60,6 +60,11 @@ public class ShrinkTextureSourceOperation : ITextureAssetOperation
         get { return 100; }
     }
 
+    public bool AllowMasterBatch
+    {
+        get { return true; }
+    }
+
     public AssetOperationEvaluation Evaluate(string assetPath, TextureProcessSettings settings)
     {
         // 便宜：扩展名、.fbm、文件长度；不解码。

@@ -3,7 +3,7 @@ using UnityEditor;
 
 // =====================================================================================
 // L2 精准面板：手动执行时包含哪些 Operation（本机 EditorPrefs）。
-// 主面板批量不读本 Store，改读 Settings.masterBatchOperationIds（L3 / SO）。
+// L1 总面板读 TOol/ConfigData.masterBatchOperationIds；管线⑤读 Pipeline/ConfigData 同名字段。互不读取。
 // =====================================================================================
 public static class ResourceManualOperationStore
 {

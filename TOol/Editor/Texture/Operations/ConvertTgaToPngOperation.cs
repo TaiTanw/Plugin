@@ -50,6 +50,11 @@ public class ConvertTgaToPngOperation : ITextureAssetOperation
         get { return 200; }
     }
 
+    public bool AllowMasterBatch
+    {
+        get { return true; }
+    }
+
     public AssetOperationEvaluation Evaluate(string assetPath, TextureProcessSettings settings)
     {
         if (string.IsNullOrEmpty(assetPath) ||

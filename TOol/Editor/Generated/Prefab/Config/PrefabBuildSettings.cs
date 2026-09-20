@@ -7,11 +7,11 @@ using UnityEngine;
 // =====================================================================================
 
 /// <summary>
-/// 预设体制作配置（人工默认根）。编排③读 PipelineStepSettings.prefabRootPath。
+/// 预设体制作：Unpack 开关；人工 Prefab 根回落常量。人工根以选择器 SO 为准；编排③读步骤 SO。
 /// </summary>
 public static class PrefabBuildSettings
 {
-    /// <summary>人工 / 未传 override 时的 Prefab 根。</summary>
+    /// <summary>人工 / 选择器 SO 缺字段时的 Prefab 根回落。编排③读 PipelineStepSettings.prefabRootPath。</summary>
     public const string DefaultPrefabRoot = "Assets/IncomingPrefab";
 
     /// <summary>

@@ -18,8 +18,8 @@ using UnityEngine;
 //   2) luminanceAlphaRemapAboveCutoff：阈值以上亮度重映射到 0~255（软边从阈值起算）
 //   3) luminanceAlphaWriteGrayscaleRgb：可选把 RGB 改成灰度，抑制彩色半透明边缘
 //
-// 不要勾进 importAutoOperationIds：
-//   对普通漫反射 / ORM / 法线误跑会毁掉贴图。只允许在窗口里对明确选中的资产手动执行。
+// 不要勾进 importAutoOperationIds / masterBatch（AllowMasterBatch=false）：
+//   对普通漫反射 / ORM / 法线误跑会毁掉贴图。只允许在精准面板对明确范围手动执行。
 // =====================================================================================
 public class BakeLuminanceToAlphaOperation : ITextureAssetOperation
 {
@@ -42,7 +42,9 @@ public class BakeLuminanceToAlphaOperation : ITextureAssetOperation
         {
             return "按配置把 RGB 亮度写入 Alpha：低于 Cutoff 的像素直接透明并清 RGB；" +
                    "阈值以上可重映射到 0~255。用于黑底旋翼模糊盘/光晕。" +
-                   "参数在窗口「配置」段的「亮度写入 Alpha」里调。不要对普通漫反射或 ORM 使用；" +
+                   "Evaluate 不做像素探测：精准面板勾选后范围内适用文件全部算命中；" +
+                   "执行时再按像素 Skip。不进入总面板 / 管线⑤ / 导入自动。" +
+                   "参数在高级设置「亮度写入 Alpha」。不要对普通漫反射或 ORM 使用；" +
                    ".fbm 内嵌缓存会跳过。可重复执行以换阈值重烤。";
         }
     }
@@ -50,6 +52,11 @@ public class BakeLuminanceToAlphaOperation : ITextureAssetOperation
     public int Order
     {
         get { return 150; }
+    }
+
+    public bool AllowMasterBatch
+    {
+        get { return false; }
     }
 
     public AssetOperationEvaluation Evaluate(string assetPath, TextureProcessSettings settings)

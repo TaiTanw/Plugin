@@ -12,6 +12,7 @@ public class ModelToolWindow : EditorWindow
     private ModelProcessSettings settings;
     private ModelTargetCollector.Scope scope = ModelTargetCollector.Scope.Selection;
     private DefaultAsset targetFolder;
+    private List<string> collectedPool = new List<string>();
     private List<string> cachedTargets = new List<string>();
     private bool targetsDirty = true;
     private ModelOperationRunSummary lastSummary;
@@ -57,11 +58,12 @@ public class ModelToolWindow : EditorWindow
             mainScroll = scroll.scrollPosition;
             EditorGUILayout.HelpBox(
                 "精准处理：选范围 → 勾选手动操作 → 扫描/执行（勾选为本机 EditorPrefs）。\n" +
-                "主面板批量路径/操作集合在总面板与「高级设置」。总批量可打 Art。",
+                "命中列表 = 当前勾选 Op 判定为需处理的文件。扫描/执行仍对范围内类型池核对 Skip。\n" +
+                "总面板批量读 TOol SO，不读管线 SO。",
                 MessageType.Info);
 
-            List<string> targets = DrawTargets();
-            DrawOperations(targets);
+            DrawTargets();
+            DrawOperations();
             DrawResult();
 
             EditorGUILayout.Space(10f);
@@ -79,7 +81,7 @@ public class ModelToolWindow : EditorWindow
             : string.Empty;
         EditorGUILayout.Space(6f);
         EditorGUILayout.LabelField(
-            "处理范围（命中 " + cachedTargets.Count + "）" + pathHint,
+            "处理范围（需处理 " + cachedTargets.Count + "）" + pathHint,
             EditorStyles.boldLabel);
         using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
         {
@@ -115,10 +117,15 @@ public class ModelToolWindow : EditorWindow
             {
                 cachedTargets = ModelTargetCollector.Collect(
                     scope, targetFolder, ResourceBatchFolderStore.GetMasterFolders());
+                collectedPool = cachedTargets;
+                cachedTargets = ModelOperationRunner.FilterNeedsWork(
+                    ResourceManualOperationStore.CollectSelectedModelOperations(),
+                    collectedPool,
+                    settings);
                 targetsDirty = false;
             }
 
-            EditorGUILayout.LabelField("命中 " + cachedTargets.Count + " 个模型");
+            EditorGUILayout.LabelField("命中 " + cachedTargets.Count + " 个需处理模型（类型池 " + collectedPool.Count + "）");
             if (cachedTargets.Count > 0)
             {
                 float listHeight = Mathf.Min(100f, 18f * cachedTargets.Count + 4f);
@@ -136,7 +143,7 @@ public class ModelToolWindow : EditorWindow
         return cachedTargets;
     }
 
-    private void DrawOperations(List<string> targets)
+    private void DrawOperations()
     {
         EditorGUILayout.Space(6f);
         EditorGUILayout.LabelField("可执行操作（本机勾选）", EditorStyles.boldLabel);
@@ -156,14 +163,15 @@ public class ModelToolWindow : EditorWindow
                     {
                         ResourceManualOperationStore.SetSelected(
                             ResourceManualOperationStore.DomainModel, operation.Id, newSelected);
+                        targetsDirty = true;
                     }
 
-                    using (new EditorGUI.DisabledScope(targets == null || targets.Count == 0))
+                    using (new EditorGUI.DisabledScope(collectedPool == null || collectedPool.Count == 0))
                     {
                         if (GUILayout.Button("仅执行此操作"))
                         {
                             lastSummary = ModelOperationRunner.Run(
-                                new List<IModelAssetOperation> { operation }, targets, settings, false);
+                                new List<IModelAssetOperation> { operation }, collectedPool, settings, false);
                         }
                     }
                 }
@@ -179,13 +187,13 @@ public class ModelToolWindow : EditorWindow
                 }
             }
 
-            using (new EditorGUI.DisabledScope(targets == null || targets.Count == 0 || selectedCount == 0))
+            using (new EditorGUI.DisabledScope(collectedPool == null || collectedPool.Count == 0 || selectedCount == 0))
             {
                 if (GUILayout.Button("仅扫描勾选的手动操作（不改文件）", GUILayout.Height(26f)))
                 {
                     ModelOperationRunner.Scan(
                         ResourceManualOperationStore.CollectSelectedModelOperations(),
-                        targets,
+                        collectedPool,
                         settings,
                         true);
                 }
@@ -194,7 +202,7 @@ public class ModelToolWindow : EditorWindow
                 {
                     lastSummary = ModelOperationRunner.Run(
                         ResourceManualOperationStore.CollectSelectedModelOperations(),
-                        targets,
+                        collectedPool,
                         settings,
                         false);
                     targetsDirty = true;

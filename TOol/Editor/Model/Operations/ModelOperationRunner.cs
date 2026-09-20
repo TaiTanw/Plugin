@@ -144,6 +144,47 @@ public static class ModelOperationRunner
         return summary;
     }
 
+    /// <summary>命中列表：当前勾选 Op 至少一个 Evaluate.NeedsWork（手动扫描与执行仍用类型池核对 Skip）。</summary>
+    public static List<string> FilterNeedsWork(
+        IList<IModelAssetOperation> operations,
+        IList<string> assetPaths,
+        ModelProcessSettings settings)
+    {
+        var result = new List<string>();
+        if (operations == null || assetPaths == null || operations.Count == 0)
+        {
+            return result;
+        }
+
+        var seen = new HashSet<string>();
+        for (int i = 0; i < assetPaths.Count; i++)
+        {
+            string assetPath = assetPaths[i];
+            if (string.IsNullOrEmpty(assetPath) || seen.Contains(assetPath))
+            {
+                continue;
+            }
+
+            for (int o = 0; o < operations.Count; o++)
+            {
+                IModelAssetOperation operation = operations[o];
+                if (operation == null)
+                {
+                    continue;
+                }
+
+                if (operation.Evaluate(assetPath, settings, null).NeedsWork)
+                {
+                    seen.Add(assetPath);
+                    result.Add(assetPath);
+                    break;
+                }
+            }
+        }
+
+        return result;
+    }
+
     private static List<PendingWork> CollectPendingWork(
         IList<IModelAssetOperation> operations,
         IList<string> assetPaths,

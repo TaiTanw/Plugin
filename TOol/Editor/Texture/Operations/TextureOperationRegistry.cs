@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using UnityEditor;
 using UnityEngine;
 
 // =====================================================================================
@@ -78,6 +79,11 @@ public static class TextureOperationRegistry
                 continue;
             }
 
+            if (!operation.AllowMasterBatch)
+            {
+                continue;
+            }
+
             if (!result.Contains(operation))
             {
                 result.Add(operation);
@@ -102,6 +108,23 @@ public static class TextureOperationRegistry
             return result;
         }
 
+        bool stripped = false;
+        for (int i = settings.masterBatchOperationIds.Count - 1; i >= 0; i--)
+        {
+            string id = settings.masterBatchOperationIds[i];
+            ITextureAssetOperation listed = string.IsNullOrEmpty(id) ? null : FindById(id);
+            if (listed != null && !listed.AllowMasterBatch)
+            {
+                settings.masterBatchOperationIds.RemoveAt(i);
+                stripped = true;
+            }
+        }
+
+        if (stripped)
+        {
+            EditorUtility.SetDirty(settings);
+        }
+
         foreach (string id in settings.masterBatchOperationIds)
         {
             if (string.IsNullOrEmpty(id))
@@ -113,6 +136,11 @@ public static class TextureOperationRegistry
             if (operation == null)
             {
                 Debug.LogWarning("[TextureOperationRegistry] 主批量操作 Id 找不到实现: " + id);
+                continue;
+            }
+
+            if (!operation.AllowMasterBatch)
+            {
                 continue;
             }
 

@@ -35,6 +35,8 @@ public static class BatchFbxImportService
         public bool UsedFullPathFallback;
         /// <summary>同基名多 FBX 时已追加无扩展文件名做夹名消歧。</summary>
         public bool UsedFbxNameDisambiguation;
+        /// <summary>仅 .obj 有意义。输出到编排时写入绑定行；不自动判定。</summary>
+        public bool ConvertZUpToYUp;
     }
 
     public sealed class BatchResult
@@ -190,6 +192,7 @@ public static class BatchFbxImportService
     {
         var paths = new List<string>();
         var id2ByPath = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var axisByPath = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
         if (existing != null)
         {
             foreach (ImportItem item in existing)
@@ -201,6 +204,7 @@ public static class BatchFbxImportService
 
                 paths.Add(item.SourceFbxPath);
                 id2ByPath[item.SourceFbxPath] = item.Id2 ?? string.Empty;
+                axisByPath[item.SourceFbxPath] = item.ConvertZUpToYUp;
             }
         }
 
@@ -208,6 +212,12 @@ public static class BatchFbxImportService
         for (int i = 0; i < rebuilt.Count; i++)
         {
             ImportItem item = rebuilt[i];
+            bool axis;
+            if (axisByPath.TryGetValue(item.SourceFbxPath, out axis))
+            {
+                item.ConvertZUpToYUp = IsObjPath(item.SourceFbxPath) && axis;
+            }
+
             string preserved;
             if (!id2ByPath.TryGetValue(item.SourceFbxPath, out preserved))
             {
@@ -231,6 +241,37 @@ public static class BatchFbxImportService
 
         RefreshConflictStates(rebuilt, settings);
         return rebuilt;
+    }
+
+    /// <summary>输出到编排：路径 + ID2 + OBJ 轴向。非 .obj 强制不带轴向。</summary>
+    public static PipelineSourceBinding ToOrchestrationBinding(ImportItem item)
+    {
+        if (item == null || string.IsNullOrEmpty(item.SourceFbxPath))
+        {
+            return null;
+        }
+
+        string source = item.SourceFbxPath.Replace("\\", "/").Trim();
+        string id2;
+        if (string.IsNullOrWhiteSpace(item.Id2))
+        {
+            id2 = PipelineMaterialId.SuggestDefault(source);
+        }
+        else
+        {
+            id2 = SanitizeFolderName(item.Id2.Trim());
+        }
+
+        return new PipelineSourceBinding(
+            source,
+            id2,
+            IsObjPath(source) && item.ConvertZUpToYUp);
+    }
+
+    public static bool IsObjPath(string path)
+    {
+        return !string.IsNullOrEmpty(path) &&
+               path.EndsWith(".obj", StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>把 ID2 写进夹名与目标路径。不重跑三层建议（除非 ID2 为空）。</summary>

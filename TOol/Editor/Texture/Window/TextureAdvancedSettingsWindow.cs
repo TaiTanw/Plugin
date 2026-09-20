@@ -81,8 +81,8 @@ public class TextureAdvancedSettingsWindow : EditorWindow
             scroll = scrollScope.scrollPosition;
             EditorGUILayout.HelpBox(
                 pipelineScope
-                    ? "本页为编排⑤设置（Pipeline/ConfigData，进版本库）。「批量包含」只影响管线⑤。导入期字段在「全局导入设置（2）」。"
-                    : "本页为人工设置（TOol/ConfigData）。「批量包含」只影响资源处理总面板执行/扫描。",
+                    ? "本页为编排⑤设置（Pipeline/ConfigData，进版本库）。「批量包含」只影响管线⑤执行（无扫描）。导入期字段在「全局导入设置（2）」。"
+                    : "本页为人工设置（TOol/ConfigData）。「批量包含」只影响资源处理总面板执行/扫描，不读管线 SO。",
                 MessageType.Info);
 
             ResourceRecognitionGui.DrawTexture();
@@ -168,6 +168,29 @@ public class TextureAdvancedSettingsWindow : EditorWindow
                 {
                     EditorGUILayout.LabelField(operation.DisplayName + "  [" + operation.Id + "]", EditorStyles.boldLabel);
                     EditorGUILayout.LabelField(operation.Description, EditorStyles.wordWrappedMiniLabel);
+
+                    if (!operation.AllowMasterBatch)
+                    {
+                        if (settings.masterBatchOperationIds.Remove(operation.Id))
+                        {
+                            EditorUtility.SetDirty(settings);
+                        }
+
+                        if (settings.importAutoOperationIds.Remove(operation.Id))
+                        {
+                            EditorUtility.SetDirty(settings);
+                        }
+
+                        using (new EditorGUI.DisabledScope(true))
+                        {
+                            EditorGUILayout.ToggleLeft("批量包含（本份 SO）", false);
+                        }
+
+                        EditorGUILayout.HelpBox(
+                            "此项只在「贴图处理」精准面板勾选执行，不能进总面板 / 管线⑤ / 导入自动。精准面板勾选后，范围内适用文件全部算命中。",
+                            MessageType.Info);
+                        continue;
+                    }
 
                     bool master = settings.masterBatchOperationIds.Contains(operation.Id);
                     bool newMaster = EditorGUILayout.ToggleLeft("批量包含（本份 SO）", master);

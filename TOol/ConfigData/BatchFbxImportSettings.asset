@@ -13,5 +13,7 @@ MonoBehaviour:
   m_Name: BatchFbxImportSettings
   m_EditorClassIdentifier: 
   importRootPath: Assets/Incoming
+  prefabRootPath: Assets/IncomingPrefab
+  artRootPath: Assets/Art
   deliveryAlertPathPrefixes:
   - Assets/Art/

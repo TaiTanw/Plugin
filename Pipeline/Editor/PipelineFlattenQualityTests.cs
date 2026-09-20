@@ -1,5 +1,6 @@
 #if UNITY_INCLUDE_TESTS
 using NUnit.Framework;
+using UnityEditor;
 
 public class PipelineFlattenQualityTests
 {
@@ -148,6 +149,8 @@ public sealed class PipelineStepSettingsTests
             Assert.That(options.PostProcessIncludeTexture, Is.True);
             Assert.That(options.PostProcessIncludeMaterial, Is.True);
             Assert.That(options.PostProcessIncludeModel, Is.True);
+            Assert.That(options.CleanupImportRootsAfterRun, Is.False);
+            Assert.That(options.CleanupArtAfterRun, Is.False);
             Assert.That(options.ImportRoot, Is.EqualTo(PipelineWorkspace.DefaultImportRoot));
             Assert.That(options.PrefabRoot, Is.EqualTo(PipelineWorkspace.DefaultPrefabRoot));
             Assert.That(options.ArtRoot, Is.EqualTo(PipelineWorkspace.DefaultArtRoot));
@@ -205,6 +208,26 @@ public sealed class PipelineStepSettingsTests
     }
 
     [Test]
+    public void ApplyTo_CopiesCleanupFlags()
+    {
+        PipelineStepSettings settings = UnityEngine.ScriptableObject.CreateInstance<PipelineStepSettings>();
+        try
+        {
+            settings.cleanupImportRootsAfterRun = true;
+            settings.cleanupArtAfterRun = true;
+
+            PipelineOptions options = PipelineOptions.FromSettings(settings, "Assets/model.fbx");
+
+            Assert.That(options.CleanupImportRootsAfterRun, Is.True);
+            Assert.That(options.CleanupArtAfterRun, Is.True);
+        }
+        finally
+        {
+            UnityEngine.Object.DestroyImmediate(settings);
+        }
+    }
+
+    [Test]
     public void CollectUnitFolders_UsesGivenArtRoot()
     {
         var folders = PipelineWorkspace.CollectUnitFolders(
@@ -224,6 +247,59 @@ public sealed class PipelineStepSettingsTests
 
         Assert.That(PipelineWorkspace.TryValidate(options, out string error), Is.False);
         Assert.That(error, Does.Contain("导入根"));
+    }
+
+    [Test]
+    public void TryClearRootContents_RejectsPluginAndAssets()
+    {
+        Assert.That(
+            PipelineWorkspace.TryClearRootContents("Assets/Plugin", out _, out string pluginError),
+            Is.False);
+        Assert.That(pluginError, Does.Contain("Plugin"));
+
+        Assert.That(
+            PipelineWorkspace.TryClearRootContents("Assets", out _, out string assetsError),
+            Is.False);
+        Assert.That(assetsError, Does.Contain("Assets"));
+    }
+
+    [Test]
+    public void TryClearRootContents_DeletesChildrenKeepsRoot()
+    {
+        const string root = "Assets/_PipelineWorkspaceClearTest";
+        const string child = root + "/unit";
+        try
+        {
+            if (!AssetDatabase.IsValidFolder(root))
+            {
+                AssetDatabase.CreateFolder("Assets", "_PipelineWorkspaceClearTest");
+            }
+
+            if (!AssetDatabase.IsValidFolder(child))
+            {
+                AssetDatabase.CreateFolder(root, "unit");
+            }
+
+            AssetDatabase.Refresh();
+
+            int deleted;
+            string error;
+            Assert.That(PipelineWorkspace.TryClearRootContents(root, out deleted, out error), Is.True);
+            AssetDatabase.Refresh();
+            Assert.That(error, Is.Null);
+            Assert.That(deleted, Is.GreaterThan(0));
+            Assert.That(AssetDatabase.IsValidFolder(root), Is.True);
+            Assert.That(AssetDatabase.IsValidFolder(child), Is.False);
+        }
+        finally
+        {
+            if (AssetDatabase.IsValidFolder(root))
+            {
+                AssetDatabase.DeleteAsset(root);
+            }
+
+            AssetDatabase.Refresh();
+        }
     }
 }
 #endif

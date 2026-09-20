@@ -19,6 +19,7 @@ public class MaterialToolWindow : EditorWindow
     private MaterialTargetCollector.Scope scope = MaterialTargetCollector.Scope.Selection;
     private DefaultAsset targetFolder;
 
+    private List<string> collectedPool = new List<string>();
     private List<string> cachedTargets = new List<string>();
     private bool targetsDirty = true;
 
@@ -87,11 +88,12 @@ public class MaterialToolWindow : EditorWindow
             mainScroll = scroll.scrollPosition;
             EditorGUILayout.HelpBox(
                 "精准处理：选范围 → 勾选操作 → 扫描/执行。\n" +
-                "范围与勾选为本机 EditorPrefs；目标 Shader / 主批量 Op 集合在「高级设置」（SO）。",
+                "命中列表 = 当前勾选 Op 判定为需处理的文件。扫描/执行仍对范围内 .mat 池核对 Skip。\n" +
+                "范围与勾选为本机 EditorPrefs；目标 Shader / 主批量 Op 在「高级设置」（TOol SO，不读管线）。",
                 MessageType.Info);
 
-            List<string> targets = DrawTargetSection();
-            DrawOperationSection(targets);
+            DrawTargetSection();
+            DrawOperationSection();
             DrawResultSection();
 
             EditorGUILayout.Space(10f);
@@ -109,7 +111,7 @@ public class MaterialToolWindow : EditorWindow
             : string.Empty;
         foldTargets = EditorGUILayout.Foldout(
             foldTargets,
-            "处理范围（命中 " + cachedTargets.Count + "）" + pathHint,
+            "处理范围（需处理 " + cachedTargets.Count + "）" + pathHint,
             true,
             EditorStyles.foldoutHeader);
         if (!foldTargets)
@@ -147,7 +149,7 @@ public class MaterialToolWindow : EditorWindow
 
             using (new EditorGUILayout.HorizontalScope())
             {
-                EditorGUILayout.LabelField("命中材质数量", cachedTargets.Count.ToString());
+                EditorGUILayout.LabelField("需处理材质", cachedTargets.Count.ToString());
                 if (GUILayout.Button("重新扫描", GUILayout.Width(90f)))
                 {
                     targetsDirty = true;
@@ -169,9 +171,17 @@ public class MaterialToolWindow : EditorWindow
                     }
                 }
             }
-            else
+            else if (collectedPool.Count == 0)
             {
                 EditorGUILayout.HelpBox("当前范围下没有命中 .mat。", MessageType.None);
+            }
+            else if (CountManuallySelected(MaterialOperationRegistry.All) == 0)
+            {
+                EditorGUILayout.HelpBox("未勾选操作，命中列表为空。", MessageType.None);
+            }
+            else
+            {
+                EditorGUILayout.HelpBox("当前勾选操作没有需要处理的材质。", MessageType.None);
             }
         }
 
@@ -186,12 +196,16 @@ public class MaterialToolWindow : EditorWindow
         }
 
         string folderPath = targetFolder == null ? null : AssetDatabase.GetAssetPath(targetFolder);
-        cachedTargets = MaterialTargetCollector.Collect(
+        collectedPool = MaterialTargetCollector.Collect(
             scope, folderPath, ResourceBatchFolderStore.GetMasterFolders());
+        cachedTargets = MaterialOperationRunner.FilterNeedsWork(
+            CollectManuallySelected(MaterialOperationRegistry.All),
+            collectedPool,
+            settings);
         targetsDirty = false;
     }
 
-    private void DrawOperationSection(List<string> targets)
+    private void DrawOperationSection()
     {
         IList<IMaterialAssetOperation> operations = MaterialOperationRegistry.All;
         int selectedCount = CountManuallySelected(operations);
@@ -215,17 +229,17 @@ public class MaterialToolWindow : EditorWindow
 
             for (int i = 0; i < operations.Count; i++)
             {
-                DrawOperationRow(operations[i], targets);
+                DrawOperationRow(operations[i]);
             }
 
             EditorGUILayout.Space(4f);
-            using (new EditorGUI.DisabledScope(targets.Count == 0 || selectedCount == 0))
+            using (new EditorGUI.DisabledScope(collectedPool.Count == 0 || selectedCount == 0))
             {
                 if (GUILayout.Button("仅扫描勾选的操作（不改文件）", GUILayout.Height(26f)))
                 {
                     lastScan = MaterialOperationRunner.Scan(
                         CollectManuallySelected(operations),
-                        targets,
+                        collectedPool,
                         settings,
                         true);
                     foldResult = true;
@@ -234,15 +248,15 @@ public class MaterialToolWindow : EditorWindow
                 if (GUILayout.Button("执行勾选的操作", GUILayout.Height(28f)))
                 {
                     lastSummary = MaterialOperationRunner.Run(
-                        CollectManuallySelected(operations), targets, settings);
+                        CollectManuallySelected(operations), collectedPool, settings);
                     targetsDirty = true;
                     foldResult = true;
                 }
             }
 
-            if (targets.Count == 0)
+            if (collectedPool.Count == 0)
             {
-                EditorGUILayout.HelpBox("没有命中材质，无法执行。", MessageType.Warning);
+                EditorGUILayout.HelpBox("范围内没有 .mat，无法扫描/执行。", MessageType.Warning);
             }
             else if (selectedCount == 0)
             {
@@ -251,7 +265,7 @@ public class MaterialToolWindow : EditorWindow
         }
     }
 
-    private void DrawOperationRow(IMaterialAssetOperation operation, List<string> targets)
+    private void DrawOperationRow(IMaterialAssetOperation operation)
     {
         using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
         {
@@ -264,14 +278,15 @@ public class MaterialToolWindow : EditorWindow
                 {
                     ResourceManualOperationStore.SetSelected(
                         ResourceManualOperationStore.DomainMaterial, operation.Id, newSelected);
+                    targetsDirty = true;
                 }
 
-                using (new EditorGUI.DisabledScope(targets.Count == 0))
+                using (new EditorGUI.DisabledScope(collectedPool.Count == 0))
                 {
                     if (GUILayout.Button("只执行这一个", GUILayout.Width(110f)))
                     {
                         lastSummary = MaterialOperationRunner.Run(
-                            new List<IMaterialAssetOperation> { operation }, targets, settings);
+                            new List<IMaterialAssetOperation> { operation }, collectedPool, settings);
                         targetsDirty = true;
                         foldResult = true;
                     }

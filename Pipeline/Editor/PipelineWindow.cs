@@ -344,11 +344,6 @@ public class PipelineWindow : EditorWindow
                     ModelAdvancedSettingsWindow.ShowPipelineWindow);
             }
 
-            if (GUILayout.Button("资源处理总面板", GUILayout.Height(22f)))
-            {
-                ResourceProcessWindow.ShowWindow();
-            }
-
             if (EditorGUI.EndChangeCheck())
             {
                 EditorUtility.SetDirty(settings);
@@ -379,7 +374,15 @@ public class PipelineWindow : EditorWindow
             EditorGUI.BeginChangeCheck();
             settings.runAb = EditorGUILayout.ToggleLeft("[⑥] 导出 · 打 AB", settings.runAb);
             settings.quiet = EditorGUILayout.ToggleLeft("Quiet（无确认框）", settings.quiet);
-            EditorGUILayout.HelpBox("产物路径在导出 SO。开④时打的是交付根 Prefab。", MessageType.None);
+            settings.cleanupImportRootsAfterRun = EditorGUILayout.ToggleLeft(
+                "本趟结束后清空导入区（Incoming + IncomingPrefab）",
+                settings.cleanupImportRootsAfterRun);
+            settings.cleanupArtAfterRun = EditorGUILayout.ToggleLeft(
+                "本趟结束后清空交付根（Art）",
+                settings.cleanupArtAfterRun);
+            EditorGUILayout.HelpBox(
+                "产物路径在导出 SO。开④时打的是交付根 Prefab。清空只删勾选根下的文件，根夹留下；中途硬失败不清。不弹确认框，与 Quiet 无关。先清 Art，删完再刷新，避免半截 glTF 重导。",
+                MessageType.None);
             DrawExportSettingsSummary();
 
             if (EditorGUI.EndChangeCheck())

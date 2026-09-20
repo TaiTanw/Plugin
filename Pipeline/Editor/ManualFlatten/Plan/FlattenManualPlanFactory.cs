@@ -73,6 +73,7 @@ public static class FlattenManualPlanFactory
         plan.OperationPolicy = policy;
         plan.ClearDestinationArtFolder = policy.ClearDestinationArtFolder;
         plan.ConvertZUpToYUp = false;
+        plan.ArtRoot = BatchFbxImportSettings.Current.NormalizedArtRoot;
 
         if (branch == FlattenBranch.RelocateAtomic && facts != null)
         {

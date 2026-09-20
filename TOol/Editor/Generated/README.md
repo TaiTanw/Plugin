@@ -1,6 +1,6 @@
 # TOol / Editor / Generated
 
-当前物理存放③生成与④平铺能力。操作者入口：[插件根 README](../../../README.md)。
+当前物理存放③生成与④平铺能力。操作者：[操作者须知](../../../docs/operator/README.md)。现约：[开发者须知](../../../docs/dev-wip/README.md)。
 
 | 模块 | 产物与职责 |
 |---|---|

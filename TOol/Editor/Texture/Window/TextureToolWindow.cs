@@ -17,6 +17,7 @@ public class TextureToolWindow : EditorWindow
     private TextureTargetCollector.Scope scope = TextureTargetCollector.Scope.Selection;
     private DefaultAsset targetFolder;
 
+    private List<string> collectedPool = new List<string>();
     private List<string> cachedTargets = new List<string>();
     private bool targetsDirty = true;
 
@@ -74,11 +75,12 @@ public class TextureToolWindow : EditorWindow
 
             EditorGUILayout.HelpBox(
                 "精准处理：选范围 → 勾选操作 → 扫描/执行（勾选为本机 EditorPrefs）。\n" +
-                "主面板批量路径/操作集合在总面板与「高级设置」。总批量可打 Art。",
+                "命中列表 = 当前勾选 Op 判定为需处理的文件。扫描/执行仍对范围内类型池核对 Skip。\n" +
+                "总面板批量读 TOol SO，不读管线 SO。",
                 MessageType.Info);
 
-            List<string> targets = DrawTargetSection();
-            DrawOperationSection(targets);
+            DrawTargetSection();
+            DrawOperationSection();
             DrawResultSection();
 
             EditorGUILayout.Space(10f);
@@ -96,7 +98,7 @@ public class TextureToolWindow : EditorWindow
             : string.Empty;
         foldTargets = DrawFoldoutHeader(
             foldTargets,
-            "处理范围（命中 " + cachedTargets.Count + "）" + pathHint);
+            "处理范围（需处理 " + cachedTargets.Count + "）" + pathHint);
         if (!foldTargets)
         {
             RefreshTargetsIfNeeded();
@@ -130,7 +132,7 @@ public class TextureToolWindow : EditorWindow
 
             using (new EditorGUILayout.HorizontalScope())
             {
-                EditorGUILayout.LabelField("命中贴图数量", cachedTargets.Count.ToString());
+                EditorGUILayout.LabelField("需处理贴图", cachedTargets.Count.ToString());
                 if (GUILayout.Button("重新扫描", GUILayout.Width(90f)))
                 {
                     targetsDirty = true;
@@ -151,9 +153,17 @@ public class TextureToolWindow : EditorWindow
                     }
                 }
             }
+            else if (collectedPool.Count == 0)
+            {
+                EditorGUILayout.HelpBox("当前范围下没有可贴图处理的资产。", MessageType.None);
+            }
+            else if (CountManuallySelected(TextureOperationRegistry.All) == 0)
+            {
+                EditorGUILayout.HelpBox("未勾选操作，命中列表为空。勾选后按 Evaluate 收口。", MessageType.None);
+            }
             else
             {
-                EditorGUILayout.HelpBox("当前范围下没有命中可贴图处理的资产。", MessageType.None);
+                EditorGUILayout.HelpBox("当前勾选操作没有需要处理的文件。", MessageType.None);
             }
         }
 
@@ -168,12 +178,16 @@ public class TextureToolWindow : EditorWindow
         }
 
         string folderPath = targetFolder == null ? null : AssetDatabase.GetAssetPath(targetFolder);
-        cachedTargets = TextureTargetCollector.Collect(
+        collectedPool = TextureTargetCollector.Collect(
             scope, folderPath, ResourceBatchFolderStore.GetMasterFolders());
+        cachedTargets = TextureOperationRunner.FilterNeedsWork(
+            CollectManuallySelectedOperations(TextureOperationRegistry.All),
+            collectedPool,
+            settings);
         targetsDirty = false;
     }
 
-    private void DrawOperationSection(List<string> targets)
+    private void DrawOperationSection()
     {
         IList<ITextureAssetOperation> operations = TextureOperationRegistry.All;
         int selectedCount = CountManuallySelected(operations);
@@ -195,30 +209,30 @@ public class TextureToolWindow : EditorWindow
 
             foreach (ITextureAssetOperation operation in operations)
             {
-                DrawOperationRow(operation, targets);
+                DrawOperationRow(operation);
             }
 
             EditorGUILayout.Space(4f);
-            using (new EditorGUI.DisabledScope(targets.Count == 0 || selectedCount == 0))
+            using (new EditorGUI.DisabledScope(collectedPool.Count == 0 || selectedCount == 0))
             {
                 if (GUILayout.Button("仅扫描勾选的操作（不改文件）", GUILayout.Height(26f)))
                 {
                     TextureOperationRunner.Scan(
                         CollectManuallySelectedOperations(operations),
-                        targets,
+                        collectedPool,
                         TextureProcessSettings.GetOrCreateAsset(),
                         true);
                 }
 
                 if (GUILayout.Button("执行勾选的操作", GUILayout.Height(28f)))
                 {
-                    RunOperations(CollectManuallySelectedOperations(operations), targets);
+                    RunOperations(CollectManuallySelectedOperations(operations), collectedPool);
                 }
             }
 
-            if (targets.Count == 0)
+            if (collectedPool.Count == 0)
             {
-                EditorGUILayout.HelpBox("没有命中贴图，无法执行。请先配置处理范围。", MessageType.Warning);
+                EditorGUILayout.HelpBox("范围内没有可贴图处理的资产，无法扫描/执行。", MessageType.Warning);
             }
             else if (selectedCount == 0)
             {
@@ -227,7 +241,7 @@ public class TextureToolWindow : EditorWindow
         }
     }
 
-    private void DrawOperationRow(ITextureAssetOperation operation, List<string> targets)
+    private void DrawOperationRow(ITextureAssetOperation operation)
     {
         using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
         {
@@ -240,13 +254,14 @@ public class TextureToolWindow : EditorWindow
                 {
                     ResourceManualOperationStore.SetSelected(
                         ResourceManualOperationStore.DomainTexture, operation.Id, newSelected);
+                    targetsDirty = true;
                 }
 
-                using (new EditorGUI.DisabledScope(targets.Count == 0))
+                using (new EditorGUI.DisabledScope(collectedPool.Count == 0))
                 {
                     if (GUILayout.Button("只执行这一个", GUILayout.Width(110f)))
                     {
-                        RunOperations(new List<ITextureAssetOperation> { operation }, targets);
+                        RunOperations(new List<ITextureAssetOperation> { operation }, collectedPool);
                     }
                 }
             }

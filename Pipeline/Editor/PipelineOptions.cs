@@ -46,6 +46,12 @@ public sealed class PipelineOptions
     /// <summary>禁止 DisplayDialog（编排默认 true）。</summary>
     public bool Quiet = true;
 
+    /// <summary>本趟跑完后清空 ImportRoot + PrefabRoot 下文件。默认关；CLI 跟 SO，不强制。</summary>
+    public bool CleanupImportRootsAfterRun;
+
+    /// <summary>本趟跑完后清空 ArtRoot 下文件。默认关；CLI 跟 SO，不强制。</summary>
+    public bool CleanupArtAfterRun;
+
     /// <summary>[1] 导入根。来自步骤 SO；空则 <see cref="PipelineWorkspace.DefaultImportRoot"/>。</summary>
     public string ImportRoot = PipelineWorkspace.DefaultImportRoot;
 
