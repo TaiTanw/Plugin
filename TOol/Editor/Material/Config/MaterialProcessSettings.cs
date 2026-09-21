@@ -22,11 +22,11 @@ public class MaterialProcessSettings : ScriptableObject
     public string targetShaderName = "Standard";
 
     [Header("视为已合规的 Shader 名（精确匹配）")]
-    [Tooltip("已在列表中则跳过。默认含 Standard。")]
+    [Tooltip("额外白名单。⑤ 主规则是：本单元 Art 内 Shader、或 Unity 内置，不靠此表。")]
     public List<string> allowedShaderNames = new List<string> { "Standard" };
 
     [Header("视为需烘焙的源 Shader 名子串（任一命中则烤）")]
-    [Tooltip("例如 UnityGLTF / PBRGraph。为空则：凡不在白名单的都烤。")]
+    [Tooltip("仅文档/旧配置保留。开闸已改为：非 Art 单元且非内置则烤（如 Packages/PBRGraph）。")]
     public List<string> sourceShaderNameSubstrings = new List<string>
     {
         "UnityGLTF",

@@ -108,9 +108,9 @@ public class MaterialAdvancedSettingsWindow : EditorWindow
             SettingsAssetPathGui.DrawPinned(settings);
 
             EditorGUILayout.HelpBox(
-                "targetShaderName：不合规材质烤到的目标（默认 Standard）。\n" +
-                "allowedShaderNames：已合规则跳过。\n" +
-                "sourceShaderNameSubstrings：源名子串命中则烤（如 PBRGraph）。",
+                "⑤ 先看 Shader 资产位置：本单元 Art 内（④ 拷入）或 Unity 内置则跳过；" +
+                "其余（Packages/UnityGLTF 等）烤到 targetShaderName（默认 Standard）。\n" +
+                "allowedShaderNames：额外白名单。sourceShaderNameSubstrings 不再单独开闸。",
                 MessageType.None);
 
             if (settingsSerialized == null || settingsSerialized.targetObject != settings)

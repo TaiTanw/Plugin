@@ -1,7 +1,7 @@
 # 开发者须知
 
 操作者流程不在本层：[操作者须知](../operator/README.md) · 总目：[docs/](../README.md)  
-宿主 Unity 2022.3 Built-in。插件 Git：`Assets/Plugin`。推荐标签 **v1.6.2**。
+宿主 Unity 2022.3 Built-in。插件 Git：`Assets/Plugin`。推荐标签 **v1.6.5**。
 
 下文是现约。历史切片在文末归档，不覆盖本页。
 
@@ -24,6 +24,7 @@
 9. **Quiet**：面板跟步骤 SO；CLI **强制** true（≠ 退出编辑器）。  
    **清空导入区 / 交付根**：同 SO 另两字段，不绑 Quiet；CLI 跟 SO。先清 Art，挂起导入、删完再一次 Refresh。
 10. OBJ 轴向是 Binding 上的人工勾选，不进 ctx，不自动勾。④ Finish 才转。
+11. **Pack：** 不当一批。预处理进 `导入根/<packID2>/` 后只按 **根** Prefab 拆行。④ 会 Unpack 嵌套，子 Prefab 不单独开 Art 单元。选择器模型表不加 `.unitypackage`。④ 不用 packID2 当 Art 夹名。
 
 ---
 

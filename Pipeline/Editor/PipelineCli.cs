@@ -105,7 +105,7 @@ public static class PipelineCli
 
         if (string.IsNullOrWhiteSpace(source))
         {
-            error = "缺少必填参数 -source <path>（工程外 .glb/.fbx 或 Assets/…）";
+            error = "缺少必填参数 -source <path>（工程外模型 / .unitypackage 或 Assets/…）";
             return false;
         }
 

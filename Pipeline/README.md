@@ -29,4 +29,5 @@ Pipeline/
 | ⑤ | `ToolPostProcessApi.RunMasterBatch` |
 | ⑥ | `RetinarAbApi.Build` |
 
-同一物理路径不能在一张表出现两次。面板/CLI 一定入库。Quiet：面板跟 SO，CLI 强制 true。清空：跟 SO，不绑 Quiet。
+面板/CLI 一定入库。Quiet：面板跟 SO，CLI 强制 true。清空：跟 SO，不绑 Quiet。  
+Pack（v1.6.5）：`ToolImportApi` 预处理后按信封内根 Prefab 展开多行。面板唯一入口是 [1] 预览「浏览…」一个 `.unitypackage`。灰框多选与选择器不收 pack。

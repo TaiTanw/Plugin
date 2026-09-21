@@ -19,6 +19,7 @@
 | `AssetPathUtility.cs` | 路径工具 |
 | `ScriptableObjectSettingsGui.cs` | SO 设置 GUI 片段 |
 | `AssetOperationEvaluation.cs` / `AssetOperationScanSummary.cs` | Evaluate / 仅扫描摘要 |
+| `UnityPackage/` | pack 预处理：Assets 外解 tar、删脚本/dll、落到调用方信封根。编排勿直调，走 `ToolImportApi`（F2） |
 
 **目标分类（逐步搬迁，勿一次大挪，保留 .meta）：**
 

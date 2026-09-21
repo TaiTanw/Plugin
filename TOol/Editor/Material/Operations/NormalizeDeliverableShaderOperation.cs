@@ -3,8 +3,9 @@ using UnityEngine;
 using UnityEngine.Rendering;
 
 // =====================================================================================
-// 交付 Shader 规范化：不合规 .mat（如 UnityGLTF PBRGraph）→ 目标 Shader（默认 Standard）
-// + 基础属性槽映射，并保留材质自身的 Opaque / Cutout / Blend 语义。
+// 交付 Shader 规范化。⑤ 不读 ctx、不认后缀。
+// 跳过：Unity 内置，或 Shader 资产已在该 .mat 所在 Art 单元（④ 拷进来的 Glass 等）。
+// 其余（Packages/UnityGLTF 等）烤到目标 Shader（默认 Standard）。
 // =====================================================================================
 
 /// <summary>把交付材质烤到 APP 可解析的 Shader。</summary>
@@ -39,8 +40,8 @@ public class NormalizeDeliverableShaderOperation : IMaterialAssetOperation
     {
         get
         {
-            return "将 UnityGLTF/PBRGraph 等不合规材质烘焙到目标 Shader（默认 Standard），" +
-                   "映射基础槽并保留透明/裁切语义。用于消除 APP 洋红与透明材质失真。";
+            return "本单元 Art 内 Shader 与 Unity 内置跳过；其余（Packages/UnityGLTF 等）烤到目标 Shader（默认 Standard），" +
+                   "映射基础槽并保留透明/裁切语义。";
         }
     }
 
@@ -70,9 +71,9 @@ public class NormalizeDeliverableShaderOperation : IMaterialAssetOperation
 
         settings.EnsureMasterBatchDefaults();
         Shader shader = material.shader;
-        if (shader == null)
+        if (shader == null || IsMissingShader(shader))
         {
-            return AssetOperationEvaluation.NeedsWorkResult("Shader 为空");
+            return AssetOperationEvaluation.NeedsWorkResult("Shader 为空或丢失");
         }
 
         string targetName = settings.targetShaderName;
@@ -82,20 +83,23 @@ public class NormalizeDeliverableShaderOperation : IMaterialAssetOperation
             return AssetOperationEvaluation.Skip("已是目标 Shader: " + targetName);
         }
 
-        if (settings.IsAllowedShader(shader) &&
-            (string.IsNullOrEmpty(targetName) ||
-             string.Equals(shader.name, targetName, System.StringComparison.Ordinal)))
+        if (IsUnityBuiltInShader(shader))
+        {
+            return AssetOperationEvaluation.Skip("Unity 内置: " + shader.name);
+        }
+
+        if (IsShaderInMaterialArtUnit(shader, assetPath))
+        {
+            return AssetOperationEvaluation.Skip("本单元 Art Shader: " + shader.name);
+        }
+
+        if (settings.IsAllowedShader(shader))
         {
             return AssetOperationEvaluation.Skip("已在白名单: " + shader.name);
         }
 
-        if (settings.MatchesSourceSubstring(shader) || !settings.IsAllowedShader(shader))
-        {
-            return AssetOperationEvaluation.NeedsWorkResult(
-                "需烘焙: " + shader.name + " → " + targetName);
-        }
-
-        return AssetOperationEvaluation.Skip("无需处理: " + shader.name);
+        return AssetOperationEvaluation.NeedsWorkResult(
+            "需烘焙: " + shader.name + " → " + targetName);
     }
 
     public bool CanProcess(string assetPath, MaterialProcessSettings settings)
@@ -524,6 +528,73 @@ public class NormalizeDeliverableShaderOperation : IMaterialAssetOperation
         {
             material.SetInt(propertyName, value);
         }
+    }
+
+    static bool IsMissingShader(Shader shader)
+    {
+        return shader != null &&
+               string.Equals(shader.name, "Hidden/InternalErrorShader", System.StringComparison.Ordinal);
+    }
+
+    /// <summary>Built-in 工程自带：Standard、Sprites/Default 等，路径在 unity_builtin_extra。</summary>
+    internal static bool IsUnityBuiltInShader(Shader shader)
+    {
+        if (shader == null || IsMissingShader(shader))
+        {
+            return false;
+        }
+
+        string path = AssetDatabase.GetAssetPath(shader);
+        if (string.IsNullOrEmpty(path))
+        {
+            return true;
+        }
+
+        path = path.Replace("\\", "/");
+        return path.Equals("Resources/unity_builtin_extra", System.StringComparison.OrdinalIgnoreCase) ||
+               path.Equals("Library/unity default resources", System.StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>④ 已把自定义 Shader 拷进本单元 Art/Shader/。Packages/、Incoming、其它 Assets 不算。</summary>
+    internal static bool IsShaderInMaterialArtUnit(Shader shader, string materialAssetPath)
+    {
+        if (shader == null)
+        {
+            return false;
+        }
+
+        string shaderPath = AssetDatabase.GetAssetPath(shader);
+        if (string.IsNullOrEmpty(shaderPath) || string.IsNullOrEmpty(materialAssetPath))
+        {
+            return false;
+        }
+
+        shaderPath = shaderPath.Replace("\\", "/");
+        if (!shaderPath.StartsWith("Assets/", System.StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        string unitRoot = TryArtUnitRootFromMaterialPath(materialAssetPath);
+        if (string.IsNullOrEmpty(unitRoot))
+        {
+            return false;
+        }
+
+        return shaderPath.StartsWith(unitRoot + "/", System.StringComparison.OrdinalIgnoreCase);
+    }
+
+    static string TryArtUnitRootFromMaterialPath(string materialAssetPath)
+    {
+        string path = (materialAssetPath ?? string.Empty).Replace("\\", "/");
+        string marker = "/" + MaterialFlattenProcessor.ProcessorId + "/";
+        int index = path.LastIndexOf(marker, System.StringComparison.OrdinalIgnoreCase);
+        if (index <= 0)
+        {
+            return null;
+        }
+
+        return path.Substring(0, index);
     }
 }
 

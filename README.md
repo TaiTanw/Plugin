@@ -1,7 +1,7 @@
 # Asset Plugin（资源工具集）
 
 Unity Editor 插件：工程外模型 → Incoming → Prefab → Art → 资源处理 → 双端 AssetBundle。  
-宿主：Unity 2022.3（Plugin2022，Built-in RP）。当前推荐标签 **v1.6.2**。  
+宿主：Unity 2022.3（Plugin2022，Built-in RP）。当前推荐标签 **v1.6.5**。  
 远程：Gitea `team`（协作）· GitHub `origin`（备份）
 
 日常：[操作者须知](./docs/operator/README.md)  

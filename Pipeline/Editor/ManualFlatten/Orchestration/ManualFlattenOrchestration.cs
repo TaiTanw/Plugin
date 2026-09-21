@@ -53,16 +53,27 @@ public static class ManualFlattenOrchestration
             ? FlattenBranch.RelocateAtomic
             : FlattenBranch.SplitDependencies;
 
-        List<string> selectedPaths = CollectSelectedPaths();
+        List<string> rawPaths = CollectRawSelectedAssetPaths();
+        List<string> expandErrors;
+        List<string> selectedPaths = ManualFlattenSources.Expand(rawPaths, out expandErrors);
+        for (int e = 0; e < expandErrors.Count; e++)
+        {
+            AddError(result, expandErrors[e], null);
+        }
+
         result.Requested = selectedPaths.Count;
         if (selectedPaths.Count == 0)
         {
-            AddError(
-                result,
-                branch == FlattenBranch.RelocateAtomic
-                    ? "请选择 .gltf 或只依赖一个外部 URI glTF 包的 Prefab。"
-                    : "请选择 Prefab 或 .fbx/.obj/.glb/.gltf 模型。",
-                null);
+            if (expandErrors.Count == 0)
+            {
+                AddError(
+                    result,
+                    branch == FlattenBranch.RelocateAtomic
+                        ? "请选择 .gltf、只依赖一个外部 URI glTF 包的 Prefab，或解包后的根文件夹。"
+                        : "请选择 Prefab、.fbx/.obj/.glb/.gltf，或解包后的根文件夹。",
+                    null);
+            }
+
             return result;
         }
 
@@ -207,7 +218,7 @@ public static class ManualFlattenOrchestration
         return true;
     }
 
-    static List<string> CollectSelectedPaths()
+    static List<string> CollectRawSelectedAssetPaths()
     {
         var result = new List<string>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -215,12 +226,12 @@ public static class ManualFlattenOrchestration
         for (int i = 0; selected != null && i < selected.Length; i++)
         {
             string path = AssetDatabase.GetAssetPath(selected[i]).Replace("\\", "/");
-            string extension = Path.GetExtension(path).ToLowerInvariant();
-            if ((extension == ".prefab" || FlattenSidecarFacts.IsKernelModelExtension(extension)) &&
-                seen.Add(path))
+            if (string.IsNullOrEmpty(path) || !seen.Add(path))
             {
-                result.Add(path);
+                continue;
             }
+
+            result.Add(path);
         }
 
         return result;

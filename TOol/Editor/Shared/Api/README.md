@@ -4,9 +4,9 @@
 
 | 类 | 步骤 | 说明 |
 |---|---|---|
-| `ToolImportApi` | 1 入库 | **单文件** `ImportSingleModel(source, incomingFolderName?, …)`；夹名非空=ID2。`.gltf` 跟拷 URI 伴生；`.obj` 跟拷 `.mtl` 与贴图。批量仍 `ExecuteBatch` |
+| `ToolImportApi` | 1 入库 | **单文件** `ImportSingleModel`；夹名非空=ID2。`.unitypackage` 解到 `导入根/<ID2>/`（须编排传入导入根）。模型表仍是 `.fbx/.glb/.gltf/.obj`。`.gltf` 跟拷 URI 伴生；`.obj` 跟拷 `.mtl` 与贴图。批量仍 `ExecuteBatch` |
 | `ToolFlattenApi` | ④ | `FromContext(ctx, request, prefab)` → `Run(plan)`；人工自己组 plan，不建 ctx。步骤 13 已撤公开分步口；旧 `FlattenPaths` 在步骤 12 删除 |
-| `ToolPrefabApi` | ③ | → `Generated/Prefab` |
+| `ToolPrefabApi` | ③ | 模型 → `Generated/Prefab`；**已是 Prefab 则原样交**（不按 packID2 改名） |
 | `ToolPostProcessApi` | ⑤ | → L1 子流程（总批量）；返回 `ToolPostProcessResult`（FailedCount + Report） |
 
 ⑤显式范围覆盖L1路径，null才回落；类型纳入未覆盖时仍读EditorPrefs。Op参数来自各资源SO，Material仍人工/管线共用。ToolPostProcessResult只有FailedCount/Canceled/Report，未统一typed跳过原因；编排不解析报告或读取Op内部。

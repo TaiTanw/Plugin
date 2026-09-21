@@ -328,6 +328,7 @@ public static class PipelineRunner
 
         result.Info("[Pipeline] Bindings × " + rows.Count);
 
+        var expandedRows = new List<PipelineSourceBinding>();
         for (int i = 0; i < rows.Count; i++)
         {
             PipelineSourceBinding row = rows[i];
@@ -337,8 +338,62 @@ public static class PipelineRunner
                 return false;
             }
 
+            if (ToolImportApi.IsUnityPackagePath(row.SourcePath))
+            {
+                if (!TryExpandPackEnvelope(options, row, assetPath, i, result, expandedRows))
+                {
+                    return false;
+                }
+
+                continue;
+            }
+
+            expandedRows.Add(row);
             options.ModelPaths.Add(assetPath);
             AttachOneContext(options, assetPath, result);
+        }
+
+        if (expandedRows.Count == 0)
+        {
+            result.Fail(PipelineErrorCodes.ImportFailed, "[Pipeline] 1 入库后没有可跑行");
+            return false;
+        }
+
+        options.SourceBindings = expandedRows;
+        options.SourcePath = expandedRows[0].SourcePath;
+        options.MaterialId = expandedRows[0].MaterialId;
+        return true;
+    }
+
+    static bool TryExpandPackEnvelope(
+        PipelineOptions options,
+        PipelineSourceBinding packRow,
+        string envelopePath,
+        int index,
+        PipelineResult result,
+        List<PipelineSourceBinding> expandedRows)
+    {
+        string label = "[Pipeline] 1 入库 [" + (index + 1) + "] ";
+        List<string> roots = UnityPackageRootPrefabs.Collect(envelopePath);
+        if (roots == null || roots.Count == 0)
+        {
+            result.Fail(
+                PipelineErrorCodes.ImportFailed,
+                label + "信封内无根 Prefab: " + envelopePath);
+            return false;
+        }
+
+        result.Info(label + "pack 展开根 Prefab × " + roots.Count + " 信封=" + envelopePath);
+        for (int r = 0; r < roots.Count; r++)
+        {
+            string prefab = roots[r];
+            string stem = Path.GetFileNameWithoutExtension(prefab);
+            string id = BatchFbxImportService.SanitizeFolderName(stem);
+            expandedRows.Add(new PipelineSourceBinding(
+                prefab, id, packRow != null && packRow.ConvertZUpToYUp));
+            options.ModelPaths.Add(prefab);
+            AttachOneContext(options, prefab, result);
+            result.Info("  根 Prefab: " + prefab + " ID2=" + id);
         }
 
         return true;

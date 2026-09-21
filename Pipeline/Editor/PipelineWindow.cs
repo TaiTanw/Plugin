@@ -81,7 +81,8 @@ public class PipelineWindow : EditorWindow
 
             EditorGUILayout.LabelField("自动化管线", EditorStyles.boldLabel);
             EditorGUILayout.HelpBox(
-                "选源后运行。识别 " + ToolImportApi.FormatSupportedExtensionsDisplay() + "。",
+                "选源后运行。模型 " + ToolImportApi.FormatSupportedExtensionsDisplay() +
+                "。unitypackage 用「浏览…」（表上只一条 pack）。拖入与选择器不收 pack。",
                 MessageType.Info);
 
             DrawStepImport();
@@ -123,9 +124,9 @@ public class PipelineWindow : EditorWindow
         if (GUILayout.Button("浏览…", GUILayout.Width(64f)))
         {
             string picked = EditorUtility.OpenFilePanel(
-                "选择模型",
+                "选择模型或 unitypackage",
                 string.IsNullOrEmpty(sourcePath) ? "" : Path.GetDirectoryName(sourcePath),
-                "fbx,glb,gltf,obj");
+                PipelinePreviewSources.OpenFileFilter);
             if (!string.IsNullOrEmpty(picked))
             {
                 SetSourcePath(picked);
@@ -191,6 +192,13 @@ public class PipelineWindow : EditorWindow
     private void DrawRunPipelineButton()
     {
         EditorGUILayout.Space(10f);
+        if (PipelinePreviewSources.TableHasPack(sourceBindings))
+        {
+            EditorGUILayout.HelpBox(
+                "pack 的 ID2 只当信封夹名。运行后按根 Prefab 拆行（子 Prefab 不单独一批）。",
+                MessageType.Info);
+        }
+
         using (new EditorGUI.DisabledScope(string.IsNullOrWhiteSpace(sourcePath)))
         {
             string runLabel = sourceBindings.Count > 1
@@ -602,18 +610,10 @@ public class PipelineWindow : EditorWindow
     private void ApplyBindings(IList<PipelineSourceBinding> bindings)
     {
         sourceBindings.Clear();
-        if (bindings != null)
+        List<PipelineSourceBinding> table = PipelinePreviewSources.NormalizeTable(bindings);
+        for (int i = 0; i < table.Count; i++)
         {
-            for (int i = 0; i < bindings.Count; i++)
-            {
-                PipelineSourceBinding src = bindings[i];
-                if (src == null || string.IsNullOrWhiteSpace(src.SourcePath))
-                {
-                    continue;
-                }
-
-                sourceBindings.Add(src.CloneWith(null));
-            }
+            sourceBindings.Add(table[i]);
         }
 
         RefreshAxisHints();

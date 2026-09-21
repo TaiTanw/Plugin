@@ -47,11 +47,31 @@ public static class PrefabBuildService
 
         var usedBaseNames = new HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
         bool multiWithMaterialId = !string.IsNullOrEmpty(materialId) && sourceModelPaths.Count > 1;
+        bool wroteNew = false;
 
         for (int i = 0; i < sourceModelPaths.Count; i++)
         {
             string source = (sourceModelPaths[i] ?? string.Empty).Replace("\\", "/");
-            if (string.IsNullOrEmpty(source) || !IsSupportedModelPath(source))
+            if (string.IsNullOrEmpty(source))
+            {
+                Debug.LogWarning("[TOol][Prefab] 跳过空路径");
+                continue;
+            }
+
+            if (IsPrefabAssetPath(source))
+            {
+                if (AssetDatabase.LoadAssetAtPath<GameObject>(source) == null)
+                {
+                    Debug.LogWarning("[TOol][Prefab] 无法加载 Prefab: " + source);
+                    continue;
+                }
+
+                written.Add(source);
+                Debug.Log("[TOol][Prefab] 原样交 " + source);
+                continue;
+            }
+
+            if (!IsSupportedModelPath(source))
             {
                 Debug.LogWarning("[TOol][Prefab] 跳过非模型路径: " + source);
                 continue;
@@ -82,6 +102,7 @@ public static class PrefabBuildService
             if (TryBuildOnePrefab(source, target))
             {
                 written.Add(target);
+                wroteNew = true;
             }
             else
             {
@@ -89,7 +110,7 @@ public static class PrefabBuildService
             }
         }
 
-        if (written.Count > 0)
+        if (wroteNew)
         {
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
@@ -192,6 +213,12 @@ public static class PrefabBuildService
                     go, PrefabUnpackMode.Completely, InteractionMode.AutomatedAction);
             }
         }
+    }
+
+    private static bool IsPrefabAssetPath(string assetPath)
+    {
+        return !string.IsNullOrEmpty(assetPath) &&
+               assetPath.EndsWith(".prefab", System.StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool IsSupportedModelPath(string assetPath)

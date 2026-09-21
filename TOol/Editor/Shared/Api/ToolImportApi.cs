@@ -33,9 +33,16 @@ public static class ToolImportApi
         return string.Join(" / ", SupportedModelExtensions);
     }
 
+    /// <summary>编排认 pack 用。不要把 <c>.unitypackage</c> 塞进 <see cref="GetSupportedModelExtensions"/>。</summary>
+    public static bool IsUnityPackagePath(string path)
+    {
+        return UnityPackagePreprocess.IsUnityPackagePath(path);
+    }
+
     /// <summary>
     /// 单文件导入：工程外则先清本趟 Incoming 单元夹再拷入并 ImportAsset；已在 Assets 则原样返回（不清夹）。
     /// Incoming 夹名：<paramref name="incomingFolderName"/> 非空则用它（ID2）；否则向上三层。
+    /// <c>.unitypackage</c> 走预处理信封，不进模型后缀表。
     /// </summary>
     public static bool ImportSingleModel(string sourcePath, out string assetModelPath, out string message)
     {
@@ -63,6 +70,17 @@ public static class ToolImportApi
         }
 
         string normalized = sourcePath.Replace("\\", "/").Trim();
+        if (IsUnityPackagePath(normalized))
+        {
+            return ImportUnityPackage(
+                normalized,
+                incomingFolderName,
+                out assetModelPath,
+                out message,
+                importRoot,
+                deliveryAlertRoot);
+        }
+
         if (IsSupportedModelPath(normalized) == false &&
             IsSupportedModelPath(normalized.ToLowerInvariant()) == false)
         {
@@ -205,6 +223,108 @@ public static class ToolImportApi
         message = "已导入: " + targetAsset +
                   (string.IsNullOrEmpty(warning) ? string.Empty : "（" + warning + "）") +
                   (fallback ? " [夹名回退]" : string.Empty);
+        return true;
+    }
+
+    /// <summary>
+    /// pack：清 <c>导入根/&lt;ID2&gt;/</c>，解到该信封，只 Refresh 一次。必须由编排传入 importRoot，不读人工选择器 SO。
+    /// </summary>
+    static bool ImportUnityPackage(
+        string sourcePath,
+        string incomingFolderName,
+        out string assetEnvelopePath,
+        out string message,
+        string importRoot,
+        string deliveryAlertRoot)
+    {
+        assetEnvelopePath = null;
+        message = null;
+
+        if (string.IsNullOrWhiteSpace(importRoot))
+        {
+            message = "unitypackage 必须由编排传入导入根";
+            return false;
+        }
+
+        string root = importRoot.Replace("\\", "/").TrimEnd('/');
+        if (string.IsNullOrEmpty(root) ||
+            !root.StartsWith("Assets/", StringComparison.OrdinalIgnoreCase))
+        {
+            message = "导入根必须是 Assets/ 下的路径: " + root;
+            return false;
+        }
+
+        if (!string.IsNullOrWhiteSpace(deliveryAlertRoot) &&
+            ResourceExcludeUtility.IsUnderRoot(root, deliveryAlertRoot))
+        {
+            message = "导入根落在交付区: " + root;
+            return false;
+        }
+
+        string fullDisk = sourcePath;
+        try
+        {
+            if (!sourcePath.StartsWith("Assets/", StringComparison.OrdinalIgnoreCase))
+            {
+                fullDisk = Path.GetFullPath(sourcePath).Replace("\\", "/");
+            }
+            else
+            {
+                string fromAssets = AssetPathUtility.ToFullPath(sourcePath);
+                if (!string.IsNullOrEmpty(fromAssets))
+                {
+                    fullDisk = fromAssets;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            message = "无法解析 unitypackage 路径: " + ex.Message;
+            return false;
+        }
+
+        if (!File.Exists(fullDisk))
+        {
+            message = "源文件不存在: " + fullDisk;
+            return false;
+        }
+
+        string folderName = !string.IsNullOrWhiteSpace(incomingFolderName)
+            ? BatchFbxImportService.SanitizeFolderName(incomingFolderName.Trim())
+            : BatchFbxImportService.SanitizeFolderName(Path.GetFileNameWithoutExtension(fullDisk));
+        string targetFolder = root + "/" + folderName;
+        if (ResourceExcludeUtility.IsUnderRoot(targetFolder, deliveryAlertRoot))
+        {
+            message = "目标落在交付区警报路径: " + targetFolder;
+            return false;
+        }
+
+        if (!AssetUnitFolder.TryDeleteImmediateChildFolder(root, targetFolder))
+        {
+            message = "无法清空导入单元夹: " + targetFolder;
+            return false;
+        }
+
+        string destFull = AssetPathUtility.ToFullPath(targetFolder);
+        if (string.IsNullOrEmpty(destFull))
+        {
+            message = "无法解析目标磁盘路径: " + targetFolder;
+            return false;
+        }
+
+        UnityPackageExtractResult extract;
+        if (!UnityPackagePreprocess.TryExtractToFolder(fullDisk, destFull, out extract) || !extract.Ok)
+        {
+            message = extract != null ? extract.Error : "unitypackage 解包失败";
+            return false;
+        }
+
+        AssetDatabase.Refresh();
+        assetEnvelopePath = targetFolder;
+        message = "已解包到信封: " + targetFolder +
+                  " 写入 " + extract.WrittenFiles +
+                  " 丢弃脚本/dll " + extract.DroppedDangerous +
+                  " 丢弃场景 " + extract.DroppedScenes;
         return true;
     }
 
