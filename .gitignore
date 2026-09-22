@@ -2,3 +2,7 @@
 .env
 .env.*
 !.env.example
+
+# 本地临时解析脚本
+_tmp_parse_*.py
+_tmp_parse_*.py.meta
