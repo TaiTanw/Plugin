@@ -18,4 +18,4 @@ Run(plan)
 | E | `ImporterKind == ModelImporter` | 步骤 SO |
 | 清夹 / 轴向 | `ToolFlattenRequest` | ctx |
 
-`MissingUris` → 编排 40。Finish 后 leftover `.fbm` → 41、身份 → 42，不停⑤⑥。OBJ 缺件不进 40。Finish 不写 AB 标签。
+`MissingUris` → 编排 40。Finish 后 leftover `.fbm` → 41、身份 → 42，不停⑤⑥。OBJ 缺件不进 40。Finish 不写 AB 标签。模型重绑按本单元依赖路径定绑，规则在④能力。

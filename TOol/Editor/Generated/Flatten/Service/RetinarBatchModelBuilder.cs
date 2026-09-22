@@ -70,16 +70,35 @@ public static partial class RetinarBatchModelBuilder
         SaveAndReimportPreservingMeshVertexColors(importer);
     }
 
-    /// <summary>0 清单元夹 + A 写 Art Prefab。管线④与菜单共用。</summary>
-    public static bool TryBeginPackagedFlatten(string sourcePath, RetinarFlattenOptions flattenOptions, out RetinarFlattenWork work)
+    /// <summary>Begin：剥/拒 Missing 后再清本次 Art 单元并写 Prefab。</summary>
+    public static bool TryBeginPackagedFlatten(
+        string sourcePath,
+        RetinarFlattenOptions flattenOptions,
+        out RetinarFlattenWork work)
+    {
+        string unused;
+        return TryBeginPackagedFlatten(sourcePath, flattenOptions, out work, out unused);
+    }
+
+    /// <summary>
+    /// 先在内存剥/拒 Missing Script，通过后再清本次 Art 单元并写入 Prefab。
+    /// 管线④与菜单共用。
+    /// </summary>
+    public static bool TryBeginPackagedFlatten(
+        string sourcePath,
+        RetinarFlattenOptions flattenOptions,
+        out RetinarFlattenWork work,
+        out string error)
     {
         work = null;
+        error = null;
         flattenOptions = flattenOptions ?? RetinarFlattenOptions.Default;
         s_artRoot = FlattenArtPaths.ResolveOverride(flattenOptions.ArtRoot);
         if (string.IsNullOrEmpty(sourcePath) ||
             !string.Equals(Path.GetExtension(sourcePath), ".prefab", System.StringComparison.OrdinalIgnoreCase))
         {
-            Debug.LogWarning("[Retinar] TryBeginPackagedFlatten 只接受 Prefab: " + sourcePath);
+            error = "[Retinar] TryBeginPackagedFlatten 只接受 Prefab: " + sourcePath;
+            Debug.LogWarning(error);
             return false;
         }
 
@@ -89,8 +108,8 @@ public static partial class RetinarBatchModelBuilder
             GameObject probe = AssetDatabase.LoadAssetAtPath<GameObject>(sourcePath);
             if (probe == null || probe.GetComponentsInChildren<Renderer>(true).Length == 0)
             {
-                Debug.LogWarning(
-                    "Selected prefab has no FBX/OBJ/GLB model dependency and no renderers: " + sourcePath);
+                error = "Selected prefab has no FBX/OBJ/GLB model dependency and no renderers: " + sourcePath;
+                Debug.LogWarning(error);
                 return false;
             }
 
@@ -105,23 +124,57 @@ public static partial class RetinarBatchModelBuilder
         // B′ 保持相对 URI 整树规则；仅普通平铺建立迁移前贴图身份。
         FlattenTextureIdentity textureIdentity = flattenOptions.SkipDependencySplit
             ? null : FlattenTextureIdentity.Capture(sourcePath, assetFolder);
-        if (!TryClearArtUnitFolderIfRequested(assetFolder, sourcePath, flattenOptions))
-        {
-            return false;
-        }
 
         string prefabFolder = FlattenLayout.PrefabFolder(assetFolder);
-        EnsureStandardAssetFolders(assetFolder);
-        FlattenReferenceAudit.LogSourcePrefabMissingReferences(sourcePath, assetName);
+        string normalizedSource = sourcePath.Replace("\\", "/");
+        bool inPlace = normalizedSource.StartsWith(
+            prefabFolder + "/", System.StringComparison.OrdinalIgnoreCase);
+        string prefabPath = inPlace
+            ? normalizedSource
+            : prefabFolder + "/" + assetName + ".prefab";
 
-        string prefabPath = PreparePackagePrefab(sourcePath, prefabFolder, assetName);
-        if (string.IsNullOrEmpty(prefabPath) ||
-            !prefabPath.Replace("\\", "/").StartsWith(
-                prefabFolder + "/", System.StringComparison.OrdinalIgnoreCase))
+        GameObject instance = PrefabUtility.LoadPrefabContents(sourcePath);
+        try
         {
-            Debug.LogError(
-                "[Retinar] Begin 拒绝继续：未生成目标 Art Prefab。源=" + sourcePath +
-                " 目标夹=" + prefabFolder);
+            UnpackNestedPrefabInstances(instance);
+            if (!ApplyMissingScriptPolicy(
+                    instance, sourcePath, flattenOptions.StripMissingScripts, out error))
+            {
+                if (string.IsNullOrEmpty(error))
+                {
+                    error = FlattenReferenceAudit.FormatMissingScriptRefusal(sourcePath, null);
+                }
+
+                Debug.LogError(error);
+                return false;
+            }
+
+            if (!TryClearArtUnitFolderIfRequested(assetFolder, sourcePath, flattenOptions))
+            {
+                error = "无法清空本次 Art 单元夹: " + assetFolder;
+                return false;
+            }
+
+            EnsureStandardAssetFolders(assetFolder);
+            GameObject saved = PrefabUtility.SaveAsPrefabAsset(instance, prefabPath);
+            if (saved == null)
+            {
+                error = "Failed to create package prefab copy: " + prefabPath;
+                Debug.LogWarning(error);
+                return false;
+            }
+        }
+        finally
+        {
+            PrefabUtility.UnloadPrefabContents(instance);
+        }
+
+        if (string.IsNullOrEmpty(prefabPath) ||
+            !prefabPath.StartsWith(prefabFolder + "/", System.StringComparison.OrdinalIgnoreCase))
+        {
+            error = "[Retinar] Begin 拒绝继续：未生成目标 Art Prefab。源=" + sourcePath +
+                    " 目标夹=" + prefabFolder;
+            Debug.LogError(error);
             return false;
         }
 
@@ -154,10 +207,11 @@ public static partial class RetinarBatchModelBuilder
             work.PrefabPath, work.AssetFolder, work.Options.OperationPolicy, work.TextureIdentity);
         work.TextureIdentity?.RegisterCopies(work.CopiedDependencies);
         CopyObjMaterialLibrariesBesideCopiedModels(work.CopiedDependencies);
-        FlattenModelCompanionFolders(work.AssetFolder, work.Options.OperationPolicy);
+        FlattenModelCompanionFolders(work.AssetFolder, work.Options.OperationPolicy, work.TextureIdentity);
         FlattenCopyRunner.LogUnknownIfAny(work.AssetFolder, work.AssetName);
         AssetDatabase.SaveAssets();
         AssetDatabase.Refresh();
+        work.TextureIdentity?.TrustMatchingUnitTextures();
         return work.CopiedDependencies != null;
     }
 
@@ -341,7 +395,8 @@ public static partial class RetinarBatchModelBuilder
             return true;
         }
 
-        if (!AssetUnitFolder.TryDeleteImmediateChildFolder(ArtRoot, folder))
+        // Begin 此时仍持有 LoadPrefabContents，禁止 Refresh。
+        if (!AssetUnitFolder.TryDeleteImmediateChildFolder(ArtRoot, folder, false))
         {
             Debug.LogError("[Retinar] 无法清空 Art 单元夹: " + folder);
             return false;
@@ -350,56 +405,38 @@ public static partial class RetinarBatchModelBuilder
         return true;
     }
 
-    /// <summary>
-    /// 拿到本次要处理的预设体路径。选中的预设体已经在目标 Prefab 目录里时原地处理，
-    /// 不再复制一份——否则重跑一次就会在同一个 Prefab 目录里多出一个只是改了名的副本。
-    /// </summary>
-    private static string PreparePackagePrefab(string sourcePath, string prefabFolder, string assetName)
+    private static bool ApplyMissingScriptPolicy(
+        GameObject instance,
+        string sourcePath,
+        bool stripMissingScripts,
+        out string error)
     {
-        string normalized = sourcePath.Replace("\\", "/");
-        if (normalized.StartsWith(prefabFolder + "/", System.StringComparison.OrdinalIgnoreCase))
+        error = null;
+        List<string> scripts = FlattenReferenceAudit.ListMissingScripts(instance);
+        FlattenReferenceAudit.LogObjectSlotMisses(instance, sourcePath);
+        if (scripts.Count == 0)
         {
-            UnpackNestedPrefabInstancesInPlace(normalized);
-            return normalized;
+            return true;
         }
 
-        return CreatePackagePrefabCopy(sourcePath, prefabFolder + "/" + assetName + ".prefab");
-    }
+        if (!stripMissingScripts)
+        {
+            error = FlattenReferenceAudit.FormatMissingScriptRefusal(sourcePath, scripts);
+            return false;
+        }
 
-    private static void UnpackNestedPrefabInstancesInPlace(string prefabPath)
-    {
-        GameObject instance = PrefabUtility.LoadPrefabContents(prefabPath);
-        try
+        int stripped = FlattenReferenceAudit.StripMissingScripts(instance);
+        Debug.LogWarning(
+            "[Retinar] 已剥 Missing Script × " + stripped +
+            "，写入 Art 副本（源 Prefab 不改）。源=" + sourcePath);
+        List<string> remain = FlattenReferenceAudit.ListMissingScripts(instance);
+        if (remain.Count > 0)
         {
-            UnpackNestedPrefabInstances(instance);
-            PrefabUtility.SaveAsPrefabAsset(instance, prefabPath);
+            error = FlattenReferenceAudit.FormatMissingScriptRefusal(sourcePath, remain);
+            return false;
         }
-        finally
-        {
-            PrefabUtility.UnloadPrefabContents(instance);
-        }
-    }
 
-    private static string CreatePackagePrefabCopy(string sourcePath, string requestedDestinationPath)
-    {
-        requestedDestinationPath = requestedDestinationPath.Replace("\\", "/");
-        GameObject instance = PrefabUtility.LoadPrefabContents(sourcePath);
-        try
-        {
-            UnpackNestedPrefabInstances(instance);
-            GameObject saved = PrefabUtility.SaveAsPrefabAsset(instance, requestedDestinationPath);
-            if (saved == null)
-            {
-                Debug.LogWarning("Failed to create package prefab copy: " + requestedDestinationPath);
-                return null;
-            }
-
-            return requestedDestinationPath;
-        }
-        finally
-        {
-            PrefabUtility.UnloadPrefabContents(instance);
-        }
+        return true;
     }
 
     private static void UnpackNestedPrefabInstances(GameObject root)
@@ -454,20 +491,14 @@ public static partial class RetinarBatchModelBuilder
                 continue;
             }
 
-            string targetFolder = FlattenCopyRunner.ResolveRelativeFolder(path, operationPolicy);
-            if (string.IsNullOrEmpty(targetFolder))
+            string requestedTargetPath = FlattenCopyRunner.ResolveDestAssetPath(assetFolder, path, operationPolicy);
+            if (string.IsNullOrEmpty(requestedTargetPath))
             {
                 continue;
             }
 
-            FlattenLayout.EnsureFolder(assetFolder + "/" + targetFolder);
-            string requestedTargetPath = assetFolder + "/" + targetFolder + "/" + Path.GetFileName(path);
-            if (IsTextureAsset(path))
-            {
-                SyncNewerSourceTextureToWorkingCopy(path, requestedTargetPath);
-            }
-
-            string copiedPath = CopyAssetToExactPath(path, requestedTargetPath);
+            FlattenLayout.EnsureFolder(Path.GetDirectoryName(requestedTargetPath).Replace("\\", "/"));
+            string copiedPath = CopyAssetToExactPath(path, requestedTargetPath, identity);
             if (copiedPath != path)
             {
                 copied[path] = copiedPath;
@@ -591,7 +622,7 @@ public static partial class RetinarBatchModelBuilder
     // MoveAssetToExactPath 已迁移到 RetinarBatchModelBuilder.AssetResolution.cs，
     // 并修复了失败时静默放弃（只 LogWarning，不重试、不上报）的问题。
 
-    private static string CopyAssetToExactPath(string sourcePath, string requestedDestinationPath)
+    private static string CopyAssetToExactPath(string sourcePath, string requestedDestinationPath, FlattenTextureIdentity identity = null)
     {
         sourcePath = sourcePath.Replace("\\", "/");
         requestedDestinationPath = requestedDestinationPath.Replace("\\", "/");
@@ -601,57 +632,27 @@ public static partial class RetinarBatchModelBuilder
             return sourcePath;
         }
 
+        // 同名已占坑则不覆盖（Texture/ 与 .fbm 抢同一文件名时先到先得）。
         if (AssetDatabase.LoadAssetAtPath<Object>(requestedDestinationPath) != null)
         {
             return requestedDestinationPath;
         }
 
+        var importBefore = identity?.SnapshotModelImport(sourcePath, requestedDestinationPath);
         if (!AssetDatabase.CopyAsset(sourcePath, requestedDestinationPath))
         {
             Debug.LogWarning("Failed to copy asset: " + sourcePath + " -> " + requestedDestinationPath);
             return sourcePath;
         }
 
+        if (importBefore != null)
+        {
+            // 新生成 .fbm 可能已落盘但尚未注册，先同步导入再记录其 GUID。
+            AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
+            identity.RegisterModelImport(sourcePath, requestedDestinationPath, importBefore);
+        }
+
         return requestedDestinationPath;
-    }
-
-    private static void SyncNewerSourceTextureToWorkingCopy(string sourcePath, string targetPath)
-    {
-        sourcePath = sourcePath.Replace("\\", "/");
-        targetPath = targetPath.Replace("\\", "/");
-        if (sourcePath.Equals(targetPath, System.StringComparison.OrdinalIgnoreCase) ||
-            AssetDatabase.LoadAssetAtPath<Texture>(targetPath) == null)
-        {
-            return;
-        }
-
-        string sourceFullPath = AssetPathToFullPath(sourcePath);
-        string targetFullPath = AssetPathToFullPath(targetPath);
-        if (!File.Exists(sourceFullPath) || !File.Exists(targetFullPath) ||
-            File.GetLastWriteTimeUtc(sourceFullPath) <= File.GetLastWriteTimeUtc(targetFullPath))
-        {
-            return;
-        }
-
-        var sourceInfo = new FileInfo(sourceFullPath);
-        var targetInfo = new FileInfo(targetFullPath);
-        if (sourceInfo.Length == targetInfo.Length && File.ReadAllBytes(sourceFullPath).SequenceEqual(File.ReadAllBytes(targetFullPath)))
-        {
-            return;
-        }
-
-        // 两遍流程：Art/Texture 可能已手动压小；导入区 .fbm 再导入后时间戳更新，
-        // 不能仅凭“源更新”把更大的内嵌原图盖回已压缩副本。
-        if (sourceInfo.Length > targetInfo.Length)
-        {
-            Debug.Log("[Retinar] SyncNewer 跳过（保留更小的 Art 贴图）: " + targetPath +
-                "  Art=" + FormatBytes(targetInfo.Length) + "  源=" + FormatBytes(sourceInfo.Length) +
-                "  源路径=" + sourcePath);
-            return;
-        }
-
-        File.Copy(sourceFullPath, targetFullPath, true);
-        AssetDatabase.ImportAsset(targetPath, ImportAssetOptions.ForceUpdate);
     }
 
     private static void RemapCopiedPrefabModelReferences(string prefabPath, Dictionary<string, string> copiedDependencies, FlattenTextureIdentity identity = null)
@@ -1164,7 +1165,8 @@ public static partial class RetinarBatchModelBuilder
 
     private static void FlattenModelCompanionFolders(
         string assetFolder,
-        FlattenOperationPolicy operationPolicy)
+        FlattenOperationPolicy operationPolicy,
+        FlattenTextureIdentity identity = null)
     {
         string modelFolder = FlattenLayout.ModelFolder(assetFolder);
         if (!AssetDatabase.IsValidFolder(modelFolder))
@@ -1182,6 +1184,25 @@ public static partial class RetinarBatchModelBuilder
         // 抽取到 Model/<FBX名>.fbm/ 下面，这些文件立刻落盘、但还没进 AssetDatabase，
         // 直接搬移会失败（详见 MoveAssetToExactPath 里的说明）。
         AssetDatabase.Refresh();
+
+        string textureFolder = FlattenLayout.TextureFolder(assetFolder);
+        var destBefore = new Dictionary<string, Dictionary<string, string>>(System.StringComparer.OrdinalIgnoreCase);
+        if (identity != null)
+        {
+            string[] modelGuids = AssetDatabase.FindAssets("t:Model", new[] { modelFolder });
+            for (int i = 0; i < modelGuids.Length; i++)
+            {
+                string modelPath = AssetDatabase.GUIDToAssetPath(modelGuids[i]).Replace("\\", "/");
+                if (!IsModelAsset(modelPath) ||
+                    !modelPath.EndsWith(".fbx", System.StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                destBefore[modelPath] = identity.SnapshotExtractFolder(
+                    FlattenTextureIdentity.DestFbmFolder(modelPath, textureFolder));
+            }
+        }
 
         foreach (string filePath in Directory.GetFiles(modelFullPath, "*.*", SearchOption.AllDirectories))
         {
@@ -1205,23 +1226,33 @@ public static partial class RetinarBatchModelBuilder
                 continue;
             }
 
-            string targetFolder = FlattenCopyRunner.ResolveRelativeFolder(assetPath, operationPolicy);
-            if (string.IsNullOrEmpty(targetFolder))
+            string targetPath = FlattenCopyRunner.ResolveDestAssetPath(assetFolder, assetPath, operationPolicy);
+            if (string.IsNullOrEmpty(targetPath))
             {
                 continue;
             }
 
-            FlattenLayout.EnsureFolder(assetFolder + "/" + targetFolder);
-            string targetPath = assetFolder + "/" + targetFolder + "/" + Path.GetFileName(assetPath);
+            FlattenLayout.EnsureFolder(Path.GetDirectoryName(targetPath).Replace("\\", "/"));
             MoveAssetToExactPath(assetPath, targetPath);
         }
 
         AssetDatabase.SaveAssets();
         AssetDatabase.Refresh();
         DeleteEmptySubfolders(modelFolder);
+
+        if (identity != null)
+        {
+            foreach (KeyValuePair<string, Dictionary<string, string>> pair in destBefore)
+            {
+                identity.RegisterExtracted(
+                    pair.Key,
+                    FlattenTextureIdentity.DestFbmFolder(pair.Key, textureFolder),
+                    pair.Value);
+            }
+        }
     }
 
-    // GetModelCompanionTargetFolder 已由 FlattenCopyRunner.ResolveRelativeFolder 取代。
+    // GetModelCompanionTargetFolder 已由 FlattenCopyRunner.ResolveDestAssetPath 取代。
     // IsTextAsset 已迁移到 RetinarBatchModelBuilder.AssetResolution.cs
 
     private static void DeleteEmptySubfolders(string rootAssetFolder)

@@ -1,7 +1,7 @@
 # 开发者须知
 
 操作者流程不在本层：[操作者须知](../operator/README.md) · 总目：[docs/](../README.md)  
-宿主 Unity 2022.3 Built-in。插件 Git：`Assets/Plugin`。推荐标签 **v1.6.5**。
+宿主 Unity 2022.3 Built-in。插件 Git：`Assets/Plugin`。推荐标签 **v1.6.8**。
 
 下文是现约。历史切片在文末归档，不覆盖本页。
 
@@ -24,7 +24,7 @@
 9. **Quiet**：面板跟步骤 SO；CLI **强制** true（≠ 退出编辑器）。  
    **清空导入区 / 交付根**：同 SO 另两字段，不绑 Quiet；CLI 跟 SO。先清 Art，挂起导入、删完再一次 Refresh。
 10. OBJ 轴向是 Binding 上的人工勾选，不进 ctx，不自动勾。④ Finish 才转。
-11. **Pack：** 不当一批。预处理进 `导入根/<packID2>/` 后只按 **根** Prefab 拆行。④ 会 Unpack 嵌套，子 Prefab 不单独开 Art 单元。选择器模型表不加 `.unitypackage`。④ 不用 packID2 当 Art 夹名。
+11. **Pack：** 不当一批。预处理进 `导入根/<packID2>/` 后只按 **根** Prefab 拆行。④ 会 Unpack 嵌套，子 Prefab 不单独开 Art 单元。选择器模型表不加 `.unitypackage`。④ 不用 packID2 当 Art 夹名。管线④ **固定**剥 Missing Script 再存 Art 副本（Incoming 不改）；人工 SO 默认可关，关则 Begin 失败并列出。内核只读 policy 布尔，不 Load 管线 SO、不认 pack。
 
 ---
 
@@ -86,6 +86,7 @@ OBJ 缺 `.mtl`/贴图不进 40。空槽只观察。首个非 0 退出码保留�
 | 相位入参 | [04_implementation/pipeline-phase-io.md](./04_implementation/pipeline-phase-io.md) |
 | ctx vs Binding | [04_implementation/pipeline-job-context.md](./04_implementation/pipeline-job-context.md) |
 | ④ B/B′ 能力 | [04_implementation/pipeline-flatten-capabilities.md](./04_implementation/pipeline-flatten-capabilities.md) |
+| ④ 身份闸 42 收尾（本样已关，刀序未提交） | [04_implementation/flatten-42-worklog.md](./04_implementation/flatten-42-worklog.md) |
 | ⑤ 加 Op | [04_implementation/op-recognition-and-extend.md](./04_implementation/op-recognition-and-extend.md) |
 | ⑥ 文件名 | [04_implementation/d1-ab-only.md](./04_implementation/d1-ab-only.md) |
 | CLI | [04_implementation/cli-getting-started.md](./04_implementation/cli-getting-started.md) |
@@ -100,4 +101,4 @@ OBJ 缺 `.mtl`/贴图不进 40。空槽只观察。首个非 0 退出码保留�
 
 [D24 步骤 1–14](./03_open-items/d24-flatten-steps.md) · [D24 边界稿](./03_open-items/d24-boundary-plan.md) · [④ 审计快照](./04_implementation/flatten-core-audit.md) · [D23 切片](./04_implementation/d23-slice-report.md) · [D13 洋红](./03_open-items/d13-glb-magenta.md) · [D6 file: 依赖](./04_implementation/d6-unitygltf-docker.md)
 
-当前队列里 **41 / 42 / Extract 调试暂放**（缺真样）。不拆 3518 行目录、不重写⑥、本仓不接 License/Docker。
+**41 / 42**：测试1112 本样已关（清空重导 `exit=0`）。刀序、停放项、未提交文件见 [flatten-42-worklog](./04_implementation/flatten-42-worklog.md)。咬住失败码的真样仍在 [backlog](./03_open-items/backlog.md)。不拆 3518 行目录、不重写⑥、本仓不接 License/Docker。

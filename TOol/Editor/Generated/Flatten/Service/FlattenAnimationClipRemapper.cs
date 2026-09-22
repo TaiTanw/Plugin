@@ -354,15 +354,13 @@ public static class FlattenAnimationClipRemapper
             return source;
         }
 
-        string relative = FlattenCopyRunner.ResolveRelativeFolder(sourcePath, operationPolicy);
-        if (string.IsNullOrEmpty(relative))
+        string destPath = FlattenCopyRunner.ResolveDestAssetPath(assetFolder, sourcePath, operationPolicy);
+        if (string.IsNullOrEmpty(destPath))
         {
             return source;
         }
 
-        string destFolder = assetFolder + "/" + relative;
-        FlattenLayout.EnsureFolder(destFolder);
-        string destPath = destFolder + "/" + Path.GetFileName(sourcePath);
+        FlattenLayout.EnsureFolder(Path.GetDirectoryName(destPath).Replace("\\", "/"));
         if (AssetDatabase.LoadMainAssetAtPath(destPath) == null)
         {
             if (!AssetDatabase.CopyAsset(sourcePath, destPath))

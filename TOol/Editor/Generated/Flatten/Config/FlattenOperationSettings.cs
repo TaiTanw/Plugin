@@ -31,6 +31,7 @@ public sealed class FlattenOperationPolicy
     public readonly FlattenSettingsScope SourceScope;
     public readonly bool ClearDestinationArtFolder;
     public readonly bool AddBoxCollider;
+    public readonly bool StripMissingScripts;
     public readonly FlattenCategorySettings Categories;
 
     public FlattenOperationPolicy(
@@ -38,12 +39,14 @@ public sealed class FlattenOperationPolicy
         FlattenSettingsScope sourceScope,
         bool clearDestinationArtFolder,
         bool addBoxCollider,
-        FlattenCategorySettings categories)
+        FlattenCategorySettings categories,
+        bool stripMissingScripts = false)
     {
         SourceAssetPath = sourceAssetPath ?? string.Empty;
         SourceScope = sourceScope;
         ClearDestinationArtFolder = clearDestinationArtFolder;
         AddBoxCollider = addBoxCollider;
+        StripMissingScripts = stripMissingScripts;
         Categories = categories ?? FlattenCategorySettings.CreateDefaults();
     }
 
@@ -54,7 +57,8 @@ public sealed class FlattenOperationPolicy
             scope,
             scope == FlattenSettingsScope.Pipeline,
             false,
-            FlattenCategorySettings.CreateDefaults());
+            FlattenCategorySettings.CreateDefaults(),
+            scope == FlattenSettingsScope.Pipeline);
     }
 
     public string ToLogString()
@@ -78,6 +82,7 @@ public sealed class FlattenOperationPolicy
                " source=" + (string.IsNullOrEmpty(SourceAssetPath) ? "<defaults>" : SourceAssetPath) +
                " clearArt=" + ClearDestinationArtFolder +
                " addCollider=" + AddBoxCollider +
+               " stripMissing=" + StripMissingScripts +
                " categories=" + string.Join(";", categoryParts.ToArray());
     }
 }
@@ -101,6 +106,10 @@ public sealed class FlattenOperationSettings : ScriptableObject
     private bool addBoxCollider;
 
     [SerializeField]
+    [Tooltip("剥 Missing Script 再写入 Art 副本。人工默认可关（关则④失败并列出）；管线 CreatePolicy 固定为开。")]
+    private bool stripMissingScripts;
+
+    [SerializeField]
     private List<FlattenCategoryRuleSetting> categoryRules = new List<FlattenCategoryRuleSetting>();
 
     public bool ClearDestinationArtFolder
@@ -115,15 +124,24 @@ public sealed class FlattenOperationSettings : ScriptableObject
         set { addBoxCollider = value; }
     }
 
+    public bool StripMissingScripts
+    {
+        get { return stripMissingScripts; }
+        set { stripMissingScripts = value; }
+    }
+
     public FlattenOperationPolicy CreatePolicy()
     {
         string path = AssetDatabase.GetAssetPath(this).Replace("\\", "/");
+        FlattenSettingsScope scope = GetScope(this);
+        bool strip = scope == FlattenSettingsScope.Pipeline || stripMissingScripts;
         return new FlattenOperationPolicy(
             path,
-            GetScope(this),
+            scope,
             clearDestinationArtFolder,
             addBoxCollider,
-            FlattenCategorySettings.FromOperationSettings(this));
+            FlattenCategorySettings.FromOperationSettings(this),
+            strip);
     }
 
     public bool IsCategoryEnabled(string processorId, bool defaultValue = true)

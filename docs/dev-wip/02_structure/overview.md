@@ -57,4 +57,4 @@ Collector 定类型池 → 勾选 Op 的 `Evaluate` → 只 Execute `NeedsWork`�
 - 稳定行 ID 停放；`materialId` 会重名
 - 材质 SO 未拆人工/管线；L1 路径仍 Prefs
 - Runner 仍有 D19 诊断/补偿，不是纯转发
-- 41 / 42 闸在，缺咬住退出码的真样 → backlog 调试暂放
+- 测试1112 同单元贴图身份已关（`exit=0`）。backlog 三行失败真样（单元外 `.fbm`→41、内嵌才 Extract、跨单元短名→42）仍调试暂放

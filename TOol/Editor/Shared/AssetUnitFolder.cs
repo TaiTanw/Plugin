@@ -15,8 +15,12 @@ public static class AssetUnitFolder
 {
     /// <summary>
     /// 删除 <paramref name="childFolderAssetPath"/>。夹不存在视为成功。
+    /// <paramref name="refreshDatabase"/> 在 <c>LoadPrefabContents</c> 持有期间必须为 false。
     /// </summary>
-    public static bool TryDeleteImmediateChildFolder(string allowedParent, string childFolderAssetPath)
+    public static bool TryDeleteImmediateChildFolder(
+        string allowedParent,
+        string childFolderAssetPath,
+        bool refreshDatabase = true)
     {
         if (string.IsNullOrEmpty(allowedParent) || string.IsNullOrEmpty(childFolderAssetPath))
         {
@@ -46,7 +50,7 @@ public static class AssetUnitFolder
         {
             if (AssetDatabase.DeleteAsset(child))
             {
-                AssetDatabase.Refresh();
+                MaybeRefresh(refreshDatabase);
                 return true;
             }
 
@@ -55,7 +59,7 @@ public static class AssetUnitFolder
 
         if (string.IsNullOrEmpty(full) || !Directory.Exists(full))
         {
-            AssetDatabase.Refresh();
+            MaybeRefresh(refreshDatabase);
             return !AssetDatabase.IsValidFolder(child);
         }
 
@@ -73,13 +77,21 @@ public static class AssetUnitFolder
                 FileUtil.DeleteFileOrDirectory(meta);
             }
 
-            AssetDatabase.Refresh();
+            MaybeRefresh(refreshDatabase);
             return true;
         }
         catch (Exception ex)
         {
             Debug.LogWarning("[AssetUnitFolder] 删除异常: " + child + " " + ex.Message);
             return false;
+        }
+    }
+
+    static void MaybeRefresh(bool refreshDatabase)
+    {
+        if (refreshDatabase)
+        {
+            AssetDatabase.Refresh();
         }
     }
 

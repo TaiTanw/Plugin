@@ -1,10 +1,13 @@
+using System;
 using System.Collections.Generic;
+using System.IO;
 using UnityEditor;
 using UnityEngine;
 
 // =====================================================================================
 // 平铺拷贝分类：替代 GetPreparedPrefabDependencyFolder。
 // Packages/ 与非 Assets 资源不拷；无人认领的 Assets 文件进 Unknown/（提示不阻断）。
+// 实际落点见 ResolveDestAssetPath：.fbm 父夹永远套一层，禁止按文件名压平。
 // =====================================================================================
 
 /// <summary>按注册表把依赖路径解析成 Art/&lt;名&gt;/ 下的相对目录。</summary>
@@ -54,6 +57,122 @@ public static class FlattenCopyRunner
         }
 
         return UnknownFlattenProcessor.ProcessorId;
+    }
+
+    /// <summary>
+    /// 分类夹下的实际落点：.fbm 父夹永远再套一层；非 .fbm 仅在分类夹根文件已被占用、
+    /// 且来源父夹名不是分类叶名时套一层，避免 Texture/ 重跑把同文件再套进 Texture/Texture/。
+    /// </summary>
+    public static string ResolveDestAssetPath(
+        string assetFolder,
+        string sourcePath,
+        FlattenOperationPolicy operationPolicy)
+    {
+        return ResolveDestAssetPath(
+            assetFolder,
+            sourcePath,
+            operationPolicy == null ? null : operationPolicy.Categories);
+    }
+
+    public static string ResolveDestAssetPath(
+        string assetFolder,
+        string sourcePath,
+        FlattenCategorySettings settings)
+    {
+        string relativeFolder = ResolveRelativeFolder(sourcePath, settings);
+        if (string.IsNullOrEmpty(relativeFolder) || string.IsNullOrEmpty(assetFolder))
+        {
+            return null;
+        }
+
+        string normalizedSource = (sourcePath ?? string.Empty).Replace("\\", "/");
+        string fileName = Path.GetFileName(normalizedSource);
+        if (string.IsNullOrEmpty(fileName))
+        {
+            return null;
+        }
+
+        string unit = assetFolder.Replace("\\", "/").TrimEnd('/');
+        string flatDest = CombineAssetPath(CombineAssetPath(unit, relativeFolder), fileName);
+        bool occupied = AssetDatabase.LoadMainAssetAtPath(flatDest) != null;
+        string relativeDest = AppendSourceDisambiguation(relativeFolder, normalizedSource, occupied);
+        return string.IsNullOrEmpty(relativeDest) ? null : CombineAssetPath(unit, relativeDest);
+    }
+
+    public static string AppendSourceDisambiguation(
+        string relativeFolder,
+        string sourcePath,
+        bool flatDestOccupied)
+    {
+        string folder = (relativeFolder ?? string.Empty).Replace("\\", "/").Trim('/');
+        string path = (sourcePath ?? string.Empty).Replace("\\", "/");
+        string fileName = Path.GetFileName(path);
+        if (string.IsNullOrEmpty(folder) || string.IsNullOrEmpty(fileName))
+        {
+            return null;
+        }
+
+        string parent = ImmediateParentName(path);
+        if (IsEmbeddedMediaFolderName(parent))
+        {
+            return folder + "/" + parent + "/" + fileName;
+        }
+
+        string leaf = LastSegment(folder);
+        if (flatDestOccupied &&
+            IsSafeNestedFolderName(parent) &&
+            !parent.Equals(leaf, StringComparison.OrdinalIgnoreCase))
+        {
+            return folder + "/" + parent + "/" + fileName;
+        }
+
+        return folder + "/" + fileName;
+    }
+
+    static string CombineAssetPath(string left, string right)
+    {
+        string a = (left ?? string.Empty).Replace("\\", "/").TrimEnd('/');
+        string b = (right ?? string.Empty).Replace("\\", "/").Trim('/');
+        if (string.IsNullOrEmpty(a))
+        {
+            return b;
+        }
+
+        return string.IsNullOrEmpty(b) ? a : a + "/" + b;
+    }
+
+    static string ImmediateParentName(string assetPath)
+    {
+        string directory = Path.GetDirectoryName((assetPath ?? string.Empty).Replace("\\", "/"));
+        if (string.IsNullOrEmpty(directory))
+        {
+            return string.Empty;
+        }
+
+        return LastSegment(directory.Replace("\\", "/"));
+    }
+
+    static string LastSegment(string path)
+    {
+        string normalized = (path ?? string.Empty).Replace("\\", "/").Trim('/');
+        int slash = normalized.LastIndexOf('/');
+        return slash < 0 ? normalized : normalized.Substring(slash + 1);
+    }
+
+    static bool IsEmbeddedMediaFolderName(string name)
+    {
+        return !string.IsNullOrEmpty(name) &&
+               name.EndsWith(".fbm", StringComparison.OrdinalIgnoreCase);
+    }
+
+    static bool IsSafeNestedFolderName(string name)
+    {
+        if (string.IsNullOrEmpty(name) || name == "." || name == "..")
+        {
+            return false;
+        }
+
+        return name.IndexOf('/') < 0 && name.IndexOf('\\') < 0 && name.IndexOf(':') < 0;
     }
 
     public static void LogUnknownIfAny(string assetFolder, string assetName)

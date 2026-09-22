@@ -1,8 +1,10 @@
 #if UNITY_INCLUDE_TESTS
 using System.IO;
+using System.Text.RegularExpressions;
 using NUnit.Framework;
 using UnityEditor;
 using UnityEngine;
+using UnityEngine.TestTools;
 
 public class FlattenManualPlanFactoryTests
 {
@@ -158,6 +160,7 @@ public class FlattenManualPlanFactoryTests
             FlattenOperationPolicy.CreateDefaults(FlattenSettingsScope.Manual),
             null,
             false);
+        LogAssert.Expect(LogType.Warning, new Regex("Begin|no renderers|Renderer"));
         FlattenRowResult row = ToolFlattenApi.Run(plan);
         Assert.That(row.FailedStep, Is.EqualTo(FlattenStep.Begin));
     }

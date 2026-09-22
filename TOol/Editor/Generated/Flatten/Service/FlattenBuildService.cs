@@ -38,9 +38,16 @@ public static class FlattenBuildService
         RetinarFlattenOptions options = CreateOptionsFromPlan(plan);
         RetinarBatchModelBuilder.ResetExtractTexturesInvokeCount();
         RetinarFlattenWork work;
-        if (!RetinarBatchModelBuilder.TryBeginPackagedFlatten(sourcePrefabPath, options, out work))
+        string beginError;
+        if (!RetinarBatchModelBuilder.TryBeginPackagedFlatten(
+                sourcePrefabPath, options, out work, out beginError))
         {
-            return FlattenRowResult.Failed(FlattenStep.Begin, "平铺 Begin 失败: " + sourcePrefabPath, sourcePrefabPath);
+            return FlattenRowResult.Failed(
+                FlattenStep.Begin,
+                string.IsNullOrEmpty(beginError)
+                    ? ("平铺 Begin 失败: " + sourcePrefabPath)
+                    : beginError,
+                sourcePrefabPath);
         }
 
         if (plan.Branch == FlattenBranch.RelocateAtomic)
@@ -102,6 +109,7 @@ public static class FlattenBuildService
         options.ClearDestinationArtFolder = plan.ClearDestinationArtFolder;
         options.ConvertZUpToYUp = plan.ConvertZUpToYUp;
         options.AddBoxCollider = options.OperationPolicy.AddBoxCollider;
+        options.StripMissingScripts = options.OperationPolicy.StripMissingScripts;
         options.ArtRoot = plan.ArtRoot;
 
         if (plan.Branch == FlattenBranch.RelocateAtomic)
@@ -167,7 +175,12 @@ public static class FlattenBuildService
     /// </summary>
     static bool ShouldApplyArtModelImporter(PipelineJobContext ctx)
     {
-        return ctx == null || ctx.ImporterKind == PipelineImporterKind.ModelImporter;
+        // Prefab 自身是 Unknown；E 仍须逐个检查包内实际的 ModelImporter。
+        // glTF 的 B′ 相对树继续沿用原来的跳过规则。
+        return ctx == null || ctx.ImporterKind == PipelineImporterKind.ModelImporter ||
+               (!ctx.HasExternalUris && string.Equals(
+                   System.IO.Path.GetExtension(ctx.PrimaryAssetPath), ".prefab",
+                   System.StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>2.5 探针是否发现 glTF 声明了不存在的必需伴生。</summary>

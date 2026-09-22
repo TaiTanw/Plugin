@@ -29,15 +29,33 @@ public static partial class RetinarBatchModelBuilder
     {
         string modelPath = importer.assetPath;
         var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var inUnitDependencies = new List<string>();
         // 观察当前引用（可能已串到兄弟单元），但不能据此注册文件来源。
+        // 已经在本单元的依赖按路径绑；不拿文件名到账本里两套图之间投票。
         foreach (string dependency in AssetDatabase.GetDependencies(modelPath, true))
         {
             if (!FlattenTextureIdentity.IsTextureFile(dependency)) continue;
             string name = Path.GetFileName(dependency);
             names.Add(name);
+            if (identity.IsInUnit(dependency))
+            {
+                if (!inUnitDependencies.Exists(p => string.Equals(p, dependency, StringComparison.OrdinalIgnoreCase)))
+                    inUnitDependencies.Add(dependency);
+                continue;
+            }
+
             if (identity.ResolveForModel(modelPath, name) == null)
                 identity.Warn("模型贴图没有唯一的本次合法副本", modelPath, dependency);
         }
+
+        foreach (string dependency in inUnitDependencies)
+        {
+            names.Add(Path.GetFileNameWithoutExtension(dependency));
+            string fileName = Path.GetFileName(dependency);
+            if (string.IsNullOrEmpty(FlattenTextureIdentity.SelectUniqueCandidate(fileName, inUnitDependencies)))
+                identity.Warn("模型贴图没有唯一的本次合法副本", modelPath, dependency);
+        }
+
         foreach (var entry in importer.GetExternalObjectMap())
         {
             if (entry.Key.type == typeof(Texture) || entry.Key.type == typeof(Texture2D)) names.Add(entry.Key.name);
@@ -52,7 +70,9 @@ public static partial class RetinarBatchModelBuilder
         var existing = importer.GetExternalObjectMap();
         foreach (string name in names)
         {
-            string path = identity.ResolveForModel(modelPath, name);
+            string path = FlattenTextureIdentity.SelectUniqueCandidate(name, inUnitDependencies);
+            if (string.IsNullOrEmpty(path) && !InUnitDependenciesNameThis(name, inUnitDependencies))
+                path = identity.ResolveForModel(modelPath, name);
             Texture texture = string.IsNullOrEmpty(path) ? null : AssetDatabase.LoadAssetAtPath<Texture>(path);
             if (texture == null)
             {
@@ -69,5 +89,23 @@ public static partial class RetinarBatchModelBuilder
             }
         }
         return count;
+    }
+
+    // 本单元依赖里已经有这个名字时，账本再空也不许改投另一张。
+    static bool InUnitDependenciesNameThis(string name, List<string> paths)
+    {
+        bool exact = false;
+        bool stem = false;
+        for (int i = 0; i < paths.Count; i++)
+        {
+            if (string.Equals(Path.GetFileName(paths[i]), name, StringComparison.OrdinalIgnoreCase))
+                exact = true;
+            if (!Path.HasExtension(name) &&
+                string.Equals(Path.GetFileNameWithoutExtension(paths[i]), name, StringComparison.OrdinalIgnoreCase))
+                stem = true;
+        }
+
+        if (exact) return true;
+        return !Path.HasExtension(name) && stem;
     }
 }

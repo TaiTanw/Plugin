@@ -49,6 +49,12 @@ public sealed class RetinarFlattenOptions
     /// <summary>是否在最终 Prefab 根节点添加/更新 BoxCollider。</summary>
     public bool AddBoxCollider;
 
+    /// <summary>
+    /// true：Begin 存 Art 前剥 Missing Script。false：源上仍有缺脚本则 Begin 失败。
+    /// 由 policy 冻结抄入；本类不猜人工/管线。
+    /// </summary>
+    public bool StripMissingScripts;
+
     /// <summary>④ 写出根。空则 <see cref="FlattenBuildSettings.ArtRoot"/>。</summary>
     public string ArtRoot;
 }

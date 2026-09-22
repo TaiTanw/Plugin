@@ -38,6 +38,14 @@ public static class FlattenOperationSettingsGui
             EditorGUILayout.HelpBox(reason + " 仍可按其快照执行。", MessageType.Warning);
         }
 
+        if (panelScope == FlattenSettingsScope.Pipeline)
+        {
+            EditorGUILayout.HelpBox(
+                "Missing Script：自动线固定剥后再写入 Art 副本（Incoming 不改）。" +
+                "人工在「平铺设置（人工）」勾选；不勾则④失败并列出缺脚本。",
+                MessageType.Info);
+        }
+
         using (new EditorGUI.DisabledScope(!editable))
         {
             EditorGUI.BeginChangeCheck();
@@ -45,11 +53,24 @@ public static class FlattenOperationSettingsGui
                 "执行前清空本次 Art 单元", settings.ClearDestinationArtFolder);
             bool collider = EditorGUILayout.ToggleLeft(
                 "最终 Prefab 添加根 BoxCollider", settings.AddBoxCollider);
+            bool strip = settings.StripMissingScripts;
+            if (panelScope == FlattenSettingsScope.Manual)
+            {
+                strip = EditorGUILayout.ToggleLeft(
+                    "剥 Missing Script 再存 Art 副本（不勾则④失败并列出）",
+                    settings.StripMissingScripts);
+            }
+
             if (EditorGUI.EndChangeCheck())
             {
                 Undo.RecordObject(settings, "修改平铺操作配置");
                 settings.ClearDestinationArtFolder = clear;
                 settings.AddBoxCollider = collider;
+                if (panelScope == FlattenSettingsScope.Manual)
+                {
+                    settings.StripMissingScripts = strip;
+                }
+
                 EditorUtility.SetDirty(settings);
             }
 

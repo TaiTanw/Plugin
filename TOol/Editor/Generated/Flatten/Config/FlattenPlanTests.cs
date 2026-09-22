@@ -67,7 +67,8 @@ public class FlattenPlanTests
             FlattenSettingsScope.Pipeline,
             true,
             true,
-            FlattenCategorySettings.CreateDefaults());
+            FlattenCategorySettings.CreateDefaults(),
+            true);
         var plan = new FlattenPlan
         {
             SourcePrefabPath = "Assets/IncomingPrefab/probe.prefab",
@@ -90,6 +91,7 @@ public class FlattenPlanTests
         Assert.That(options.ClearDestinationArtFolder, Is.True);
         Assert.That(options.ConvertZUpToYUp, Is.True);
         Assert.That(options.AddBoxCollider, Is.True);
+        Assert.That(options.StripMissingScripts, Is.True);
     }
 
     [Test]
@@ -133,6 +135,22 @@ public class FlattenPlanTests
         Assert.That(row.Ok, Is.False);
         Assert.That(row.FailedStep, Is.EqualTo(FlattenStep.MissingSidecars));
         Assert.That(row.Message, Does.Contain("缺 1"));
+    }
+
+    [TestCase("Assets/Incoming/root.prefab", PipelineImporterKind.Unknown, false, true)]
+    [TestCase("Assets/Incoming/root.PREFAB", PipelineImporterKind.Unknown, false, true)]
+    [TestCase("Assets/Incoming/root.glb", PipelineImporterKind.ScriptedImporter, false, false)]
+    [TestCase("Assets/Incoming/root.gltf", PipelineImporterKind.ScriptedImporter, true, false)]
+    [TestCase("Assets/Incoming/root.txt", PipelineImporterKind.Unknown, false, false)]
+    public void FromContext_PrefabAllowsNestedModelImporters_WithoutChangingGltf(
+        string path, PipelineImporterKind kind, bool externalUris, bool expected)
+    {
+        var ctx = new PipelineJobContext
+        {
+            PrimaryAssetPath = path, ImporterKind = kind, HasExternalUris = externalUris
+        };
+        var plan = ToolFlattenApi.FromContext(ctx, ToolFlattenRequest.ForPipeline(), "Assets/IncomingPrefab/root.prefab");
+        Assert.That(plan.ApplyArtModelImporter, Is.EqualTo(expected));
     }
 
     [Test]

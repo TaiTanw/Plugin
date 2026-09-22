@@ -395,20 +395,14 @@ public static partial class RetinarBatchModelBuilder
                     identity.Warn("收尾不补拷未知来源贴图", asset.PrefabPath, path);
                 continue;
             }
-            string targetFolder = FlattenCopyRunner.ResolveRelativeFolder(path, operationPolicy);
-            if (string.IsNullOrEmpty(targetFolder))
+            string requestedTargetPath = FlattenCopyRunner.ResolveDestAssetPath(
+                asset.AssetFolder, path, operationPolicy);
+            if (string.IsNullOrEmpty(requestedTargetPath))
             {
                 continue;
             }
 
-            string destFolder = asset.AssetFolder + "/" + targetFolder;
-            FlattenLayout.EnsureFolder(destFolder);
-            string requestedTargetPath = destFolder + "/" + Path.GetFileName(path);
-            if (IsTextureAsset(path))
-            {
-                SyncNewerSourceTextureToWorkingCopy(path, requestedTargetPath);
-            }
-
+            FlattenLayout.EnsureFolder(Path.GetDirectoryName(requestedTargetPath).Replace("\\", "/"));
             string copiedPath = CopyAssetToExactPath(path, requestedTargetPath);
             if (!copiedPath.Equals(path, StringComparison.OrdinalIgnoreCase))
             {
@@ -472,28 +466,35 @@ public static partial class RetinarBatchModelBuilder
                 " Extract 前外部 .fbm 贴图=" + externalBefore.Count +
                 (externalBefore.Count > 0 ? "：\n" + string.Join("\n", externalBefore.ToArray()) : string.Empty));
 
-            // 已无外部 .fbm 时不必 Extract（会盖贴图、冲顶点色）。
+            // 已无外部 .fbm、或外部 .fbm 本趟已有本单元副本时不必 Extract（会盖贴图、冲顶点色）。
             // 但仍可能挂着兄弟 Art 包或源导入区的同名贴图（GetDependencies 会带上），要 AddRemap 到本包副本。
-            if (externalBefore.Count == 0)
+            bool skipExtract = externalBefore.Count == 0 ||
+                               AllExternalFbmHaveUnitCopies(externalBefore, identity);
+            if (skipExtract)
             {
                 bool settingsDirty =
                     importer.materialLocation != ModelImporterMaterialLocation.InPrefab ||
                     importer.materialSearch != ModelImporterMaterialSearch.Local ||
                     importer.materialName != ModelImporterMaterialName.BasedOnMaterialName;
                 int remapCount = RemapModelImporterTexturesToArtFolder(importer, assetFolder, textureFolder, identity);
+                string skipReason = externalBefore.Count == 0
+                    ? "无外部 .fbm"
+                    : "外部 .fbm 已有本单元副本";
                 if (settingsDirty || remapCount > 0)
                 {
                     importer.materialLocation = ModelImporterMaterialLocation.InPrefab;
                     importer.materialSearch = ModelImporterMaterialSearch.Local;
                     importer.materialName = ModelImporterMaterialName.BasedOnMaterialName;
-                    Debug.Log("[Retinar] ExtractAndBind 跳过 Extract（无外部 .fbm），校正材质搜索并 AddRemap 外部贴图 " +
+                    Debug.Log("[Retinar] ExtractAndBind 跳过 Extract（" + skipReason +
+                        "），校正材质搜索并 AddRemap 外部贴图 " +
                         remapCount + " 条后重导: " + modelPath);
                     SaveAndReimportPreservingMeshVertexColors(importer);
                     changed = true;
                 }
                 else
                 {
-                    Debug.Log("[Retinar] ExtractAndBind 跳过: 无外部 .fbm / 外部贴图，材质搜索已是 Local — " + modelPath);
+                    Debug.Log("[Retinar] ExtractAndBind 跳过: " + skipReason +
+                        " / 外部贴图，材质搜索已是 Local — " + modelPath);
                 }
 
                 continue;
@@ -579,7 +580,8 @@ public static partial class RetinarBatchModelBuilder
             }
         }
 
-        FlattenModelCompanionFolders(assetFolder, operationPolicy);
+        FlattenModelCompanionFolders(assetFolder, operationPolicy, identity);
+        identity?.TrustMatchingUnitTextures();
         Debug.Log("[Retinar] ExtractAndBind 结束 assetFolder=" + assetFolder + " changed=" + changed);
         return changed;
     }
@@ -724,6 +726,26 @@ public static partial class RetinarBatchModelBuilder
         }
 
         return result;
+    }
+
+    private static bool AllExternalFbmHaveUnitCopies(
+        List<string> externalBefore,
+        FlattenTextureIdentity identity)
+    {
+        if (identity == null || externalBefore == null || externalBefore.Count == 0)
+        {
+            return false;
+        }
+
+        for (int i = 0; i < externalBefore.Count; i++)
+        {
+            if (string.IsNullOrEmpty(identity.ResolveExact(externalBefore[i])))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private static bool RemapAllArtMaterialsToLocalTextures(string assetFolder, FlattenTextureIdentity identity = null)

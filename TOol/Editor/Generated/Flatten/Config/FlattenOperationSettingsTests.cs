@@ -16,6 +16,18 @@ public class FlattenOperationSettingsTests
         Assert.That(FlattenOperationSettings.GetScope(pipeline), Is.EqualTo(FlattenSettingsScope.Pipeline));
         Assert.That(manual.ClearDestinationArtFolder, Is.False);
         Assert.That(pipeline.ClearDestinationArtFolder, Is.True);
+        Assert.That(manual.CreatePolicy().StripMissingScripts, Is.False);
+        Assert.That(pipeline.CreatePolicy().StripMissingScripts, Is.True);
+        bool previous = pipeline.StripMissingScripts;
+        try
+        {
+            pipeline.StripMissingScripts = false;
+            Assert.That(pipeline.CreatePolicy().StripMissingScripts, Is.True);
+        }
+        finally
+        {
+            pipeline.StripMissingScripts = previous;
+        }
     }
 
     [Test]
@@ -26,15 +38,18 @@ public class FlattenOperationSettingsTests
         {
             settings.ClearDestinationArtFolder = true;
             settings.AddBoxCollider = true;
+            settings.StripMissingScripts = true;
             settings.SetCategory("Model", false, "fbx,obj");
 
             FlattenOperationPolicy snapshot = settings.CreatePolicy();
             settings.ClearDestinationArtFolder = false;
             settings.AddBoxCollider = false;
+            settings.StripMissingScripts = false;
             settings.SetCategory("Model", true, "glb");
 
             Assert.That(snapshot.ClearDestinationArtFolder, Is.True);
             Assert.That(snapshot.AddBoxCollider, Is.True);
+            Assert.That(snapshot.StripMissingScripts, Is.True);
             Assert.That(snapshot.Categories.IsEnabled("Model"), Is.False);
             Assert.That(snapshot.Categories.GetSuffixes("Model", new[] { "fallback" }),
                 Is.EquivalentTo(new[] { "fbx", "obj" }));
@@ -78,7 +93,8 @@ public class FlattenOperationSettingsTests
             FlattenSettingsScope.Pipeline,
             true,
             true,
-            FlattenCategorySettings.CreateDefaults());
+            FlattenCategorySettings.CreateDefaults(),
+            true);
         ToolFlattenRequest request = ToolFlattenRequest.ForPipeline(policy);
         request.ConvertZUpToYUp = true;
 
@@ -87,6 +103,7 @@ public class FlattenOperationSettingsTests
         Assert.That(options.OperationPolicy, Is.SameAs(policy));
         Assert.That(options.ClearDestinationArtFolder, Is.True);
         Assert.That(options.AddBoxCollider, Is.True);
+        Assert.That(options.StripMissingScripts, Is.True);
         Assert.That(options.ConvertZUpToYUp, Is.True);
     }
 }
