@@ -1,7 +1,7 @@
 # 开发者须知
 
 操作者流程不在本层：[操作者须知](../operator/README.md) · 总目：[docs/](../README.md)  
-宿主 Unity 2022.3 Built-in。插件 Git：`Assets/Plugin`。推荐标签 **v1.6.8**。
+宿主 Unity 2022.3 Built-in。插件 Git：`Assets/Plugin`。推荐标签 **v1.7.0**。
 
 下文是现约。历史切片在文末归档，不覆盖本页。
 
@@ -69,7 +69,7 @@ OBJ 缺 `.mtl`/贴图不进 40。空槽只观察。首个非 0 退出码保留�
 | 材质细节 | 目前仍共用一份 Material SO | 未拆人工/管线实例 |
 | 人工三根路径 | `BatchFbxImportSettings` | 选择器「手动端路径」；管线不读 |
 | L1 扫描夹 / 纳入大类 | EditorPrefs | 仅人工总面板 |
-| ⑥ 路径 / 是否 UP | `RetinarExportSettings`（一份） | 人工⑥与管线⑥共用 |
+| ⑥ 路径 / 是否把 AB 拷进交付夹 / 是否 UP / 是否拷模型 / 是否写资源信息表 | `RetinarExportSettings`（一份） | 人工⑥与管线⑥共用。模型与资源表默认关。取消拷贝仍先构建双端。步骤 ⑥ 关掉则整段不跑 |
 
 ---
 
@@ -80,6 +80,7 @@ OBJ 缺 `.mtl`/贴图不进 40。空槽只观察。首个非 0 退出码保留�
 | 战略（短） | [01_requirements/strategy.md](./01_requirements/strategy.md) |
 | 三条「自动」 | [01_requirements/tech-and-ops.md](./01_requirements/tech-and-ops.md) |
 | 结构 | [02_structure/overview.md](./02_structure/overview.md) |
+| 模型后缀四张表 | [02_structure/model-suffixes.md](./02_structure/model-suffixes.md) |
 | 风险（通道混用、Op 隐式调用；硬约束仍看本页） | [02_structure/risks.md](./02_structure/risks.md) |
 | 待办 | [03_open-items/backlog.md](./03_open-items/backlog.md) |
 | Runner / 窄口 / 退出码 | [04_implementation/pipeline-flow.md](./04_implementation/pipeline-flow.md) |

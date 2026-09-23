@@ -28,6 +28,12 @@ public class RetinarExportSettings : ScriptableObject
     [Tooltip("是否把 AB 拷到 Deliverables/<名>/03_assetbundles（同夹 name_android / name_ios，不按平台分子夹）。")]
     public bool copyAbToDeliverables = true;
 
+    [Tooltip("AB 成功后，把预设体依赖的模型文件拷到 Deliverables/<名>/01_source/Model。默认关。人工与管线都读本字段。")]
+    public bool exportSourceModels;
+
+    [Tooltip("AB 成功后，按模板写 Deliverables/<名>/06_docs/asset_info.xlsx。默认关。写失败不让本趟 AB 失败。")]
+    public bool exportAssetInfo;
+
     private static RetinarExportSettings assetInstance;
     private static RetinarExportSettings fallbackInstance;
     private static bool fallbackWarningLogged;

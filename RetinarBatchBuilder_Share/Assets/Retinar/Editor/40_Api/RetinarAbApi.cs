@@ -283,6 +283,27 @@ public static class RetinarAbApi
                    : string.Empty);
     }
 
+    static string FormatExtraSuffix(RetinarAbBuildOptions options)
+    {
+        if (options == null)
+        {
+            return " (AB only)";
+        }
+
+        string suffix = options.ExportUnityPackage ? " +UP" : string.Empty;
+        if (options.ExportSourceModels)
+        {
+            suffix += " +Model";
+        }
+
+        if (options.ExportAssetInfo)
+        {
+            suffix += " +Info";
+        }
+
+        return suffix.Length == 0 ? " (AB only)" : " (" + suffix.TrimStart() + ")";
+    }
+
     /// <summary>按 Options 打 AB，可选 UnityPackage；不改 Prefab、不跑门禁。</summary>
     public static RetinarAbBuildResult Build(IList<string> prefabPaths, RetinarAbBuildOptions options)
     {
@@ -339,6 +360,9 @@ public static class RetinarAbApi
                 result.BuiltBundleFiles.AddRange(builtFiles);
             }
 
+            RetinarOptionalDeliverables.WriteAfterAb(
+                prefabPath, assetName, deliverableRoot, options);
+
             if (options.ExportUnityPackage)
             {
                 List<string> dropped;
@@ -357,7 +381,7 @@ public static class RetinarAbApi
 
             result.OkNames.Add(assetName);
             Debug.Log("[Retinar][Ab] 完成: " + assetName + " ← " + prefabPath +
-                      (options.ExportUnityPackage ? " (+UP)" : " (AB only)"));
+                      FormatExtraSuffix(options));
         }
 
         return result;

@@ -38,7 +38,7 @@
 
 模型 Collector 会把 Prefab 依赖里的 FBX/GLB 展开进列表。刷白 Op 对非 `ModelImporter`（如 glb）**Skip**——文件在列表里，本 Op 仍不跑。
 
-② 导入写死 `.fbx/.glb/.gltf/.obj`，与模型 Op 后缀表独立。
+② 导入写死 `.fbx/.glb/.gltf/.obj`，与模型 Op 后缀表独立。四张表互不带动：[模型后缀](../02_structure/model-suffixes.md)。
 
 ## 加东西
 

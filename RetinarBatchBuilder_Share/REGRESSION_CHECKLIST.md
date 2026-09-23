@@ -57,7 +57,7 @@
 
 ## 5. ⑥输出与端上验收
 
-- [ ] 使用管线⑥ / RetinarAbApi.Build，核对代码中的双端/LZ4及导出SO的路径、可选UP、拷贝开关。
+- [ ] 使用管线⑥ / RetinarAbApi.Build，核对代码中的双端/LZ4及导出SO的路径、可选UP、拷贝开关。模型文件与资源信息表默认关；打开后失败仍不得把退出码改成 60。
 - [ ] 检查实际 AB 存在、非零、更新时间与可加载性；不能只靠弹窗或 exit=0。
 - [ ] 输出 AB/UP 只含指定 Prefab 及依赖，不打整棵 Art。UP 开启时在干净工程验证。
 - [ ] 插件 1 不主动做④材质/Importer/Prefab变换；④ **不再**写 AB 标签。核对⑥仍出双端 AB。
@@ -67,7 +67,7 @@
 
 ## 6. 旧清单不再适用的要求
 
-- 旧规范化导出/成品直达菜单、30_Business、门禁诊断文件、runtime_requirements、01_source、texture_size_report 和全套 00–06 已删除。
+- 旧规范化导出/成品直达菜单、30_Business、门禁诊断文件、runtime_requirements、texture_size_report 和全套 00–06 已删除。导出 SO 默认关的 `01_source/Model` 与 `asset_info.xlsx` 是窄口附加，不是把旧全套导出做回来。
 - “未知依赖必须在⑥停包”“⑥校验时强制 Extract 自愈”不是当前能力；④缺必需 sidecar 的失败闸仍有效，两者不能互相替代。
 - GLB/glTF 现可直接入库；“GLB 必须先由 UnityPackage 派生”已过时。
 - Model 仅 FBX/OBJ、全资产都要求 SafeZone/Collider、所有生成副本 GUID 永不改变等旧一刀切要求不适用。

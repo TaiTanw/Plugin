@@ -20,6 +20,18 @@ public sealed class RetinarAbBuildOptions
     public bool CopyAbToDeliverables = true;
 
     /// <summary>
+    /// AB 成功后，把该预设体依赖的模型文件拷到 Deliverables/&lt;名&gt;/01_source/Model。
+    /// 默认关。不读调度层。
+    /// </summary>
+    public bool ExportSourceModels;
+
+    /// <summary>
+    /// AB 成功后，按仓库模板写 Deliverables/&lt;名&gt;/06_docs/asset_info.xlsx。
+    /// 默认关。失败不计入 AB 失败。
+    /// </summary>
+    public bool ExportAssetInfo;
+
+    /// <summary>
     /// ⑥ UP 按此前缀切 Art 单元。空则回落 <see cref="RetinarPaths.ArtRoot"/>。
     /// 编排写入；本类不 Load 管线 SO。
     /// </summary>
@@ -83,6 +95,8 @@ public sealed class RetinarAbBuildOptions
             opt.AssetBundleRoot = settings.assetBundleRoot;
             opt.ExportUnityPackage = settings.exportUnityPackage;
             opt.CopyAbToDeliverables = settings.copyAbToDeliverables;
+            opt.ExportSourceModels = settings.exportSourceModels;
+            opt.ExportAssetInfo = settings.exportAssetInfo;
         }
 
         if (exportUnityPackageOverride.HasValue)

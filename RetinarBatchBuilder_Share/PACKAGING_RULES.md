@@ -18,7 +18,7 @@
 | 模型格式 | FBX/OBJ/GLB/glTF。B′ 另有相对 URI 整树。人工直接选 FBX 与管线同一套空壳，不 SafeZone。碰撞体跟平铺 SO，默认关 |
 | 缺伴生 | 旧⑥门禁已删。glTF `MissingUris` 非空 → ④ `FlattenFailed(40)`，**整趟停止**，不承诺其余行继续。OBJ 缺 `.mtl`/贴图**不进**该闸。FBX 外置贴图①跟拷（D25-2 A） |
 | `.fbm` | 禁止改缓存文件。④ 自愈；无⑥兜底。B 残留外部 `.fbm` 仍可进 AB；编排 **Fail(41)** 不停⑤⑥ |
-| 贴图体积/报告 | 旧 5MB 报告线、`01_source`、xlsx、runtime 文案已删。压图走插件 2 SO/OP |
+| 贴图体积/报告 | 旧 5MB 报告线、runtime 文案、全套 00–06 已删。压图走插件 2 SO/OP。导出 SO 默认关时，⑥ 可另写 `01_source/Model` 与 `06_docs/asset_info.xlsx`。取消「拷 AB 到交付夹」仍先构建双端，成功后才写 UP / 模型 / 资源表。步骤 ⑥ 关掉则整段不跑 |
 | 顶点色 | D19：重导可冲色，不是 CLI/AB 必须全白 |
 | AB 标签 | ④ **不再**写 Prefab Importer 标签；⑥ 用 `AssetBundleBuild[]`（D24-R4 / 步骤 8） |
 | InPrefab | 不是旧门禁遗物。External 会在目标工程自动生成 `Materials/` 与 `.fbm` 目录 |

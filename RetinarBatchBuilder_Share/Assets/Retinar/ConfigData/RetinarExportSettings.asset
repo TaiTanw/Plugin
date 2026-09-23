@@ -16,3 +16,5 @@ MonoBehaviour:
   assetBundleRoot: AssetBundles
   exportUnityPackage: 0
   copyAbToDeliverables: 1
+  exportSourceModels: 0
+  exportAssetInfo: 0

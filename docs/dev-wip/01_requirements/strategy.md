@@ -4,11 +4,11 @@
 
 | 项 | 口径 |
 |---|---|
-| 宿主 | Unity 2022.3 `Plugin2022`；插件仓 `Assets/Plugin`；`team` Gitea、`origin` GitHub；推荐 **v1.6.8** |
+| 宿主 | Unity 2022.3 `Plugin2022`；插件仓 `Assets/Plugin`；`team` Gitea、`origin` GitHub；推荐 **v1.7.0** |
 | 线 | 面板/CLI 入库固定开；SO 管③④⑤⑥（默认全开，④⑤可关）。②→③→⑥ 是可裁剪最小线，不是默认 |
 | ④ | 物理在 TOol；自动 `FromContext`→`Run(plan)`；人工选 Branch 组 plan，**禁止** `PipelineJobContext.Build`。两按钮都是完整④，不接⑤⑥。内核不读 ctx、不 Load 管线 SO。旧 3518 行对照删除，禁止先清空 |
 | ⑤ | 代调 L1 `RunMasterBatch`。材质透明在 Material Op，不扩模型 ctx。贴图无条件 NeedsWork 的 Op 见 `AllowMasterBatch` |
-| ⑥ | `RetinarAbApi.Build`；`{stem}_android.assetbundle` / `_ios`；产品夹不分平台。旧门禁/全套导出已删，不是「默认关仍可开」 |
+| ⑥ | `RetinarAbApi.Build`；`{stem}_android.assetbundle` / `_ios`；产品夹不分平台。旧门禁/全套导出已删，不是「默认关仍可开」。导出 SO 的「拷到交付夹」只决定 03 写不写，不跳过构建。另有两档默认关的窄口产物：模型文件、资源信息表，双端构建成功后才写。步骤 ⑥ 关掉则不调用 `Build` |
 | glTF | ②整包入库，④ B′ 相对 URI 树。转 GLB（D22）不开发 |
 | 配置 | 管线/人工同数据类可两份实例。L2 勾选、L1 路径仍 Prefs。材质 SO 尚未拆份 |
 | 停放 | Docker/队列/License、七步乱序产品按钮、坏行跳过、稳定行 ID、⑥随④重写 |

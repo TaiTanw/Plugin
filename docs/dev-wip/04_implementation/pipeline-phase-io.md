@@ -51,6 +51,6 @@ Bindings（空则 SourcePath+MaterialId 合成一行）
 
 **⑤** `RunMasterBatch`；`FailedCount>0` → 50，⑥仍跑。
 
-**⑥** 打当前 `prefabPaths`。双端都成功才 0。
+**⑥** 打当前 `prefabPaths`。双端都成功才 0。导出 SO 取消「拷到交付夹」仍会构建，成功后才写 UP / 模型文件 / 资源信息表。步骤 ⑥ 关掉则不调用 `Build`。附加失败不改 60。
 
 `PipelineResult.PrefabOutputs` 是③当时的列表；④覆盖不会回写这里。⑥ 用局部 `prefabPaths`。插件 1/2 不引用错误码类。

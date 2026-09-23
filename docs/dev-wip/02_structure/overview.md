@@ -38,7 +38,7 @@ Binding：`SourcePath`、`MaterialId`、`ConvertZUpToYUp`。同一物理路径�
 | 模型输入 | ③ 已写出的 Prefab | 选中模型会先③ |
 | 失败 | Prefab/ctx 对不齐 → Fail | 不建 ctx |
 
-七步：Begin → B\|B′ → E? → D → C → Finish。Finish **不写** AB 标签。能力表：[pipeline-flatten-capabilities](../04_implementation/pipeline-flatten-capabilities.md)。
+七步：Begin → B\|B′ → E? → D → C → Finish。Finish **不写** AB 标签。能力表：[pipeline-flatten-capabilities](../04_implementation/pipeline-flatten-capabilities.md)。入盘、⑤可处理、④分类、⑥交付是四张后缀表，改一处不带动另外三处：[模型后缀](./model-suffixes.md)。
 
 目录未迁、内核未拆文件。不要顺手开：① 外置图跟拷扩范围、重写⑥、D19 当门禁。
 
@@ -50,7 +50,7 @@ Collector 定类型池 → 勾选 Op 的 `Evaluate` → 只 Execute `NeedsWork`�
 
 ## ⑥
 
-`RetinarAbApi.Build`：显式 `AssetBundleBuild[]`。平台/LZ4 仍钉在代码。旧 DirectPackage / 门禁代码已删。
+`RetinarAbApi.Build`：显式 `AssetBundleBuild[]`。平台/LZ4 仍钉在代码。旧 DirectPackage / 门禁代码已删。导出 SO 可另开模型文件与资源信息表，默认关；取消「拷到交付夹」仍先构建双端，成功后才写这些附加项。步骤 ⑥ 关掉则不调用 `Build`。⑥ 仍不读步骤 SO / ctx。
 
 ## 仍未收口（不是旧债清单）
 
