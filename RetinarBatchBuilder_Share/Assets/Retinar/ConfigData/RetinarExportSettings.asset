@@ -14,7 +14,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   deliverableRoot: Deliverables
   assetBundleRoot: AssetBundles
-  exportUnityPackage: 0
+  exportUnityPackage: 1
   copyAbToDeliverables: 1
-  exportSourceModels: 0
-  exportAssetInfo: 0
+  exportSourceModels: 1
+  exportAssetInfo: 1
