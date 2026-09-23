@@ -1,7 +1,8 @@
 # Asset Plugin（资源工具集）
 
 Unity Editor 插件：工程外模型 → Incoming → Prefab → Art → 资源处理 → 双端 AssetBundle。  
-宿主：Unity 2022.3（Plugin2022，Built-in RP）。当前推荐标签 **v1.7.0**。  
+宿主：本分支 `other` 对应 Unity **2020.3**（ModleEvent，Built-in RP）。当前推荐标签 **v1.7.0**。  
+同一套代码在 Unity 2022.3 的宿主是 Plugin2022，发布看 `main`。  
 远程：Gitea `team`（协作）· GitHub `origin`（备份）
 
 日常：[操作者须知](./docs/operator/README.md)  
@@ -28,7 +29,7 @@ Unity Editor 插件：工程外模型 → Incoming → Prefab → Art → 资源
 
 ## 协作
 
-开发走独立分支 + PR。禁止提交 `.env` / Token。Gitea 默认分支若仍是 `other`，左上角改选 `main`。  
+开发走独立分支 + PR。禁止提交 `.env` / Token。`other` 对应该 2020.3 工程；发布线仍看 `main`。  
 旧链：[CLI_AUTOMATION_DEV.md](./docs/CLI_AUTOMATION_DEV.md) · 日志：[timeline](./docs/dev-wip/05_dev-log/timeline.md)
 
 ## 须知风险
