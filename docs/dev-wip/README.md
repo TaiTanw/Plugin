@@ -1,7 +1,7 @@
 # 开发者须知
 
 操作者流程不在本层：[操作者须知](../operator/README.md) · 总目：[docs/](../README.md)  
-宿主 Unity 2022.3 Built-in。插件 Git：`Assets/Plugin`。推荐标签 **v1.7.0**。
+宿主 Unity 2022.3 Built-in。插件 Git：`Assets/Plugin`。推荐标签 **v1.7.2**。
 
 下文是现约。历史切片在文末归档，不覆盖本页。
 
