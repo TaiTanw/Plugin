@@ -115,7 +115,12 @@ public static class FlattenCopyRunner
         string parent = ImmediateParentName(path);
         if (IsEmbeddedMediaFolderName(parent))
         {
-            return folder + "/" + parent + "/" + fileName;
+            // 同名模型的 .fbm 也必须隔离；否则不同 FBX 里的同名贴图会互相占坑。
+            string modelFolder = ImmediateParentName(Path.GetDirectoryName(path)?.Replace("\\", "/"));
+            return folder + "/" +
+                   (modelFolder.StartsWith("_model_", StringComparison.OrdinalIgnoreCase)
+                       ? modelFolder + "/" : string.Empty) +
+                   parent + "/" + fileName;
         }
 
         string leaf = LastSegment(folder);
@@ -127,6 +132,21 @@ public static class FlattenCopyRunner
         }
 
         return folder + "/" + fileName;
+    }
+
+    /// <summary>同一 Art 单元内的不同模型同名时，保留文件名和相对伴生路径。</summary>
+    public static string ResolveModelCollisionPath(string requestedPath, string sourceGuid)
+    {
+        string normalized = (requestedPath ?? string.Empty).Replace("\\", "/");
+        string fileName = Path.GetFileName(normalized);
+        string parent = Path.GetDirectoryName(normalized)?.Replace("\\", "/");
+        if (string.IsNullOrEmpty(parent) || string.IsNullOrEmpty(fileName) ||
+            string.IsNullOrEmpty(sourceGuid))
+        {
+            return null;
+        }
+
+        return parent + "/_model_" + sourceGuid + "/" + fileName;
     }
 
     static string CombineAssetPath(string left, string right)

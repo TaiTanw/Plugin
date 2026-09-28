@@ -25,7 +25,7 @@ using UnityEngine;
 //   RetinarBatchModelBuilder.cs                  七步实现 + 共用引用 / 路径工具
 //   RetinarBatchModelBuilder.AssetResolution.cs  E 抽取 + 收尾引用整理
 //   RetinarBatchModelBuilder.TextureBinding.cs   已知来源的贴图绑定
-//   RetinarBatchModelBuilder.AtomicRelocate.cs   B′ 相对 URI 整树迁移
+//   ModelRelativeFileProbe.cs                     按格式扫描需保留的相对文件
 // =====================================================================================
 public static partial class RetinarBatchModelBuilder
 {
@@ -102,7 +102,7 @@ public static partial class RetinarBatchModelBuilder
             return false;
         }
 
-        string sourceModelPath = FindMainModelDependency(sourcePath);
+        string sourceModelPath = FindAnyModelDependency(sourcePath);
         if (string.IsNullOrEmpty(sourceModelPath))
         {
             GameObject probe = AssetDatabase.LoadAssetAtPath<GameObject>(sourcePath);
@@ -121,7 +121,7 @@ public static partial class RetinarBatchModelBuilder
         string assetName;
         string assetFolder;
         ResolvePackagedAssetIdentity(sourcePath, out assetName, out assetFolder);
-        // B′ 保持相对 URI 整树规则；仅普通平铺建立迁移前贴图身份。
+        // 逐模型平铺建立迁移前贴图身份；旧兼容入口仍可显式跳过。
         FlattenTextureIdentity textureIdentity = flattenOptions.SkipDependencySplit
             ? null : FlattenTextureIdentity.Capture(sourcePath, assetFolder);
 
@@ -184,7 +184,6 @@ public static partial class RetinarBatchModelBuilder
         work = new RetinarFlattenWork
         {
             SourcePath = sourcePath,
-            SourceModelPath = sourceModelPath,
             AssetName = assetName,
             AssetFolder = assetFolder,
             PrefabPath = prefabPath,
@@ -195,7 +194,7 @@ public static partial class RetinarBatchModelBuilder
         return true;
     }
 
-    /// <summary>B 按后缀拆依赖 + OBJ .mtl 跟拷 + Model 伴生夹整理。</summary>
+    /// <summary>按每个模型的策略复制依赖，再处理 OBJ .mtl 与模型伴生夹。</summary>
     public static bool FlattenSplitDependencies(RetinarFlattenWork work)
     {
         if (work == null || string.IsNullOrEmpty(work.PrefabPath))
@@ -204,7 +203,12 @@ public static partial class RetinarBatchModelBuilder
         }
 
         work.CopiedDependencies = CopyAdjustedPrefabDependencies(
-            work.PrefabPath, work.AssetFolder, work.Options.OperationPolicy, work.TextureIdentity);
+            work.PrefabPath, work.AssetFolder, work.Options.OperationPolicy,
+            work.TextureIdentity, work.Options.ModelUnits);
+        if (work.CopiedDependencies == null)
+        {
+            return false;
+        }
         work.TextureIdentity?.RegisterCopies(work.CopiedDependencies);
         CopyObjMaterialLibrariesBesideCopiedModels(work.CopiedDependencies);
         FlattenModelCompanionFolders(work.AssetFolder, work.Options.OperationPolicy, work.TextureIdentity);
@@ -213,29 +217,6 @@ public static partial class RetinarBatchModelBuilder
         AssetDatabase.Refresh();
         work.TextureIdentity?.TrustMatchingUnitTextures();
         return work.CopiedDependencies != null;
-    }
-
-    /// <summary>B′ 原子搬迁。不跑伴生夹整理。</summary>
-    public static bool FlattenRelocateAtomic(RetinarFlattenWork work)
-    {
-        if (work == null || work.Options == null)
-        {
-            return false;
-        }
-
-        work.CopiedDependencies = RelocateAtomicPackage(
-            work.AssetFolder, work.AssetName, work.Options, work.SourceModelPath);
-        if (work.CopiedDependencies == null)
-        {
-            Debug.LogError("[Retinar] B′ 原子搬迁未完整写入必需文件: " + work.SourcePath);
-            return false;
-        }
-
-        CopyObjMaterialLibrariesBesideCopiedModels(work.CopiedDependencies);
-        FlattenCopyRunner.LogUnknownIfAny(work.AssetFolder, work.AssetName);
-        AssetDatabase.SaveAssets();
-        AssetDatabase.Refresh();
-        return true;
     }
 
     /// <summary>E1 导入设置 + E2 Extract 内嵌贴图并绑回。</summary>
@@ -326,6 +307,11 @@ public static partial class RetinarBatchModelBuilder
         if (savedPrefab == null || savedPrefab.GetComponentsInChildren<Renderer>(true).Length == 0)
         {
             Debug.LogError("Prepared prefab has no renderers and will not be bundled: " + work.PrefabPath);
+            return false;
+        }
+
+        if (!ValidatePackagedModelDependencies(work.AssetFolder, work.PrefabPath))
+        {
             return false;
         }
 
@@ -457,7 +443,7 @@ public static partial class RetinarBatchModelBuilder
         }
     }
 
-    private static string FindMainModelDependency(string assetPath)
+    private static string FindAnyModelDependency(string assetPath)
     {
         foreach (string dependency in AssetDatabase.GetDependencies(assetPath, true))
         {
@@ -475,9 +461,19 @@ public static partial class RetinarBatchModelBuilder
         string prefabPath,
         string assetFolder,
         FlattenOperationPolicy operationPolicy,
-        FlattenTextureIdentity identity = null)
+        FlattenTextureIdentity identity = null,
+        IList<FlattenModelUnit> modelUnits = null)
     {
         var copied = new Dictionary<string, string>();
+        IList<FlattenModelUnit> units = modelUnits != null && modelUnits.Count > 0
+            ? modelUnits : FlattenBuildService.BuildModelUnits(prefabPath);
+        var modelByPath = new Dictionary<string, FlattenModelUnit>(System.StringComparer.OrdinalIgnoreCase);
+        foreach (FlattenModelUnit unit in units)
+        {
+            if (unit != null && !string.IsNullOrEmpty(unit.ModelPath))
+                modelByPath[unit.ModelPath.Replace("\\", "/")] = unit;
+        }
+
         foreach (string dependency in AssetDatabase.GetDependencies(prefabPath, true))
         {
             string path = dependency.Replace("\\", "/");
@@ -491,14 +487,81 @@ public static partial class RetinarBatchModelBuilder
                 continue;
             }
 
+            if (IsModelAsset(path) && !modelByPath.ContainsKey(path))
+            {
+                Debug.LogError("[Retinar] 模型未进入④复制计划: " + path);
+                return null;
+            }
+
+            if (modelByPath.TryGetValue(path, out FlattenModelUnit modelUnit) &&
+                modelUnit.Strategy == FlattenModelCopyStrategy.PreserveRelativeFiles)
+            {
+                ModelRelativeFileScan scan;
+                if (!ModelRelativeFileProbe.TryScan(AssetPathToFullPath(path), out scan) ||
+                    !scan.HasRelativeFiles)
+                {
+                    Debug.LogError("[Retinar] 模型相对文件策略与当前格式或文件不符: " + path);
+                    return null;
+                }
+
+                string copiedModelPath;
+                if (!TryCopyReferencedModelPackage(
+                        path, assetFolder, scan, modelByPath.Count == 1, out copiedModelPath))
+                    return null;
+                copied[path] = copiedModelPath;
+                continue;
+            }
+
+            ModelRelativeFileScan currentScan;
+            if (modelUnit != null &&
+                ModelRelativeFileProbe.TryScan(AssetPathToFullPath(path), out currentScan) &&
+                currentScan.HasRelativeFiles)
+            {
+                Debug.LogError("[Retinar] 模型在计划后出现相对文件引用，请重新执行④: " + path);
+                return null;
+            }
+
             string requestedTargetPath = FlattenCopyRunner.ResolveDestAssetPath(assetFolder, path, operationPolicy);
             if (string.IsNullOrEmpty(requestedTargetPath))
             {
                 continue;
             }
 
+            // 两个来源模型常都叫 fbx.FBX。CopyAssetToExactPath 对已占用目标会直接返回，
+            // 所以必须在复制前给后一个模型独立目录，不能让它映射到第一个模型的子资产。
+            if (modelUnit != null &&
+                (copied.Any(pair =>
+                     !pair.Key.Equals(path, System.StringComparison.OrdinalIgnoreCase) &&
+                     pair.Value.Equals(requestedTargetPath, System.StringComparison.OrdinalIgnoreCase)) ||
+                 AssetDatabase.LoadMainAssetAtPath(requestedTargetPath) != null))
+            {
+                string guid = AssetDatabase.AssetPathToGUID(path);
+                if (string.IsNullOrEmpty(guid))
+                {
+                    Debug.LogError("[Retinar] 同名模型无法读取 GUID，停止平铺: " + path);
+                    return null;
+                }
+
+                requestedTargetPath = FlattenCopyRunner.ResolveModelCollisionPath(requestedTargetPath, guid);
+                if (copied.Values.Any(value => value.Equals(requestedTargetPath, System.StringComparison.OrdinalIgnoreCase)) ||
+                    AssetDatabase.LoadMainAssetAtPath(requestedTargetPath) != null)
+                {
+                    Debug.LogError("[Retinar] 同名模型的独立目标路径已占用，停止平铺: " +
+                                   path + " → " + requestedTargetPath);
+                    return null;
+                }
+
+                Debug.Log("[Retinar] 同名模型分开存放: " + path + " → " + requestedTargetPath);
+            }
+
             FlattenLayout.EnsureFolder(Path.GetDirectoryName(requestedTargetPath).Replace("\\", "/"));
             string copiedPath = CopyAssetToExactPath(path, requestedTargetPath, identity);
+            if (modelUnit != null &&
+                !copiedPath.Equals(requestedTargetPath, System.StringComparison.OrdinalIgnoreCase))
+            {
+                Debug.LogError("[Retinar] 模型复制失败，停止平铺: " + path + " → " + requestedTargetPath);
+                return null;
+            }
             if (copiedPath != path)
             {
                 copied[path] = copiedPath;
@@ -506,6 +569,194 @@ public static partial class RetinarBatchModelBuilder
         }
 
         return copied;
+    }
+
+    private static bool TryCopyReferencedModelPackage(
+        string sourceModelPath,
+        string assetFolder,
+        ModelRelativeFileScan scan,
+        bool singleModelAtomicLayout,
+        out string copiedModelPath)
+    {
+        copiedModelPath = null;
+        if (!scan.FileOk || scan.MissingReferences.Count > 0)
+        {
+            Debug.LogError("[Retinar] 模型相对文件缺失，停止平铺: " + sourceModelPath +
+                           " 缺失引用: " + string.Join(", ", scan.MissingReferences.ToArray()) +
+                           " " + string.Join("; ", scan.Notes.ToArray()));
+            return false;
+        }
+
+        string sourceFull = AssetPathToFullPath(sourceModelPath);
+        string guid = AssetDatabase.AssetPathToGUID(sourceModelPath);
+        if (string.IsNullOrEmpty(sourceFull) || string.IsNullOrEmpty(guid))
+        {
+            Debug.LogError("[Retinar] 无法定位模型依赖: " + sourceModelPath);
+            return false;
+        }
+
+        string extension = Path.GetExtension(sourceModelPath).TrimStart('.').ToLowerInvariant();
+        string packageName = extension == "gltf"
+            ? "_gltf_package_" + guid.Substring(0, 8)
+            : "_model_package_" + extension + "_" + guid.Substring(0, 8);
+        string packageRoot = singleModelAtomicLayout
+            ? FlattenLayout.Combine(assetFolder, Path.GetFileName(assetFolder))
+            : FlattenLayout.ModelFolder(assetFolder) + "/" + packageName;
+        FlattenLayout.EnsureFolder(packageRoot);
+
+        // Sidecars go first: importing the copied .gltf before its .bin exists
+        // creates an incomplete set of Mesh sub-assets and prevents Prefab remapping.
+        foreach (string sidecarFull in scan.SidecarFullPaths)
+        {
+            string relative = ModelRelativeFileProbe.MakeRelativeToModelDir(sourceFull, sidecarFull);
+            string target = ResolveModelPackageTarget(packageRoot, relative);
+            if (string.IsNullOrEmpty(target))
+            {
+                Debug.LogError("[Retinar] 模型伴生文件越过包目录: " + sourceModelPath + " → " + relative);
+                return false;
+            }
+
+            FlattenLayout.EnsureFolder(Path.GetDirectoryName(target).Replace("\\", "/"));
+            string sidecarAssetPath = FullPathToAssetPath(sidecarFull);
+            string sourceHint = string.IsNullOrEmpty(sidecarAssetPath) ? sidecarFull : sidecarAssetPath;
+            string copied = CopyPackageFileToArt(sourceHint, sidecarFull, target);
+            if (!string.Equals(copied, target, System.StringComparison.OrdinalIgnoreCase) ||
+                !File.Exists(AssetPathToFullPath(target)))
+            {
+                Debug.LogError("[Retinar] 模型伴生文件复制失败: " + sidecarFull + " → " + target);
+                return false;
+            }
+        }
+
+        AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
+        string targetModel = packageRoot + "/" + Path.GetFileName(sourceModelPath);
+        string result = CopyAssetToExactPath(sourceModelPath, targetModel);
+        if (!string.Equals(result, targetModel, System.StringComparison.OrdinalIgnoreCase))
+        {
+            Debug.LogError("[Retinar] 模型文件复制失败: " + sourceModelPath + " → " + targetModel);
+            return false;
+        }
+
+        AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
+        ModelRelativeFileScan copiedScan;
+        if (!ModelRelativeFileProbe.TryScan(AssetPathToFullPath(targetModel), out copiedScan) ||
+            !copiedScan.FileOk || !copiedScan.HasRelativeFiles ||
+            copiedScan.MissingReferences.Count > 0)
+        {
+            Debug.LogError("[Retinar] 模型副本仍缺伴生文件: " + targetModel +
+                           " 缺失引用: " +
+                           (copiedScan == null ? "无法扫描" : string.Join(", ", copiedScan.MissingReferences.ToArray())));
+            return false;
+        }
+
+        foreach (string copiedSidecar in copiedScan.SidecarFullPaths)
+        {
+            if (ModelRelativeFileProbe.MakeRelativeToModelDir(
+                    AssetPathToFullPath(targetModel), copiedSidecar) == null)
+            {
+                Debug.LogError("[Retinar] 模型副本仍引用包外文件: " + targetModel + " → " + copiedSidecar);
+                return false;
+            }
+        }
+
+        copiedModelPath = targetModel;
+        return true;
+    }
+
+    private static string CopyPackageFileToArt(string sourceHint, string sourceFull, string destAsset)
+    {
+        destAsset = destAsset.Replace("\\", "/");
+        string destFull = AssetPathToFullPath(destAsset);
+        if (string.IsNullOrEmpty(destFull))
+        {
+            Debug.LogWarning("[Retinar] 模型包无法解析目标: " + destAsset);
+            return sourceHint;
+        }
+
+        if (sourceHint.StartsWith("Assets/", System.StringComparison.OrdinalIgnoreCase) &&
+            AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(sourceHint) != null)
+        {
+            return CopyAssetToExactPath(sourceHint, destAsset);
+        }
+
+        string destDir = Path.GetDirectoryName(destFull);
+        if (!string.IsNullOrEmpty(destDir) && !Directory.Exists(destDir))
+        {
+            Directory.CreateDirectory(destDir);
+        }
+
+        try
+        {
+            if (!File.Exists(destFull)) File.Copy(sourceFull, destFull, false);
+        }
+        catch (System.Exception ex)
+        {
+            Debug.LogWarning("[Retinar] 模型包 File.Copy 失败: " + sourceFull + " → " + destFull + " " + ex.Message);
+            return sourceHint;
+        }
+
+        AssetDatabase.ImportAsset(destAsset, ImportAssetOptions.ForceUpdate);
+        return destAsset;
+    }
+
+    private static string ResolveModelPackageTarget(string packageRoot, string relative)
+    {
+        if (string.IsNullOrEmpty(relative))
+        {
+            return null;
+        }
+
+        string rootFull = AssetPathToFullPath(packageRoot);
+        string targetFull;
+        try
+        {
+            targetFull = Path.GetFullPath(Path.Combine(rootFull, relative.Replace('/', Path.DirectorySeparatorChar)));
+        }
+        catch (System.Exception)
+        {
+            return null;
+        }
+
+        string rootPrefix = rootFull.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) +
+                            Path.DirectorySeparatorChar;
+        if (!targetFull.StartsWith(rootPrefix, System.StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        return FullPathToAssetPath(targetFull);
+    }
+
+    private static bool ValidatePackagedModelDependencies(string assetFolder, string prefabPath)
+    {
+        string artFull = AssetPathToFullPath(assetFolder);
+        foreach (string modelFull in Directory.GetFiles(artFull, "*.*", SearchOption.AllDirectories))
+        {
+            ModelRelativeFileScan scan;
+            if (!ModelRelativeFileProbe.TryScan(modelFull, out scan) ||
+                (scan.FileOk && scan.MissingReferences.Count == 0))
+            {
+                continue;
+            }
+
+            Debug.LogError("[Retinar] Art 模型缺相对文件: " + FullPathToAssetPath(modelFull) +
+                           " 缺失引用: " + string.Join(", ", scan.MissingReferences.ToArray()));
+            return false;
+        }
+
+        foreach (string dependency in AssetDatabase.GetDependencies(prefabPath, true))
+        {
+            string normalized = dependency.Replace("\\", "/");
+            if (IsModelAsset(normalized) &&
+                !normalized.StartsWith(assetFolder + "/", System.StringComparison.OrdinalIgnoreCase))
+            {
+                Debug.LogError("[Retinar] Art Prefab 仍引用外部模型，停止交付: " +
+                               prefabPath + " → " + normalized);
+                return false;
+            }
+        }
+
+        return true;
     }
 
     // OBJ 的 .mtl 不是 AssetDatabase 依赖，GetDependencies 拿不到；平铺分类表里也没有它
@@ -1206,8 +1457,23 @@ public static partial class RetinarBatchModelBuilder
 
         foreach (string filePath in Directory.GetFiles(modelFullPath, "*.*", SearchOption.AllDirectories))
         {
+            string relativeModelPath = filePath.Substring(modelFullPath.Length).TrimStart('/', '\\');
+            if (relativeModelPath.StartsWith("_gltf_package_", System.StringComparison.OrdinalIgnoreCase) ||
+                relativeModelPath.StartsWith("_model_package_", System.StringComparison.OrdinalIgnoreCase))
+            {
+                // Preserve each model package's relative file references.
+                continue;
+            }
+
             string extension = Path.GetExtension(filePath).ToLowerInvariant();
             if (extension == ".meta")
+            {
+                continue;
+            }
+
+            // 同名模型会被放进 Model/_model_<GUID>/；这里仅整理伴生文件，
+            // 不能把模型本体再压到 Model/ 根部，否则会删掉第二个模型。
+            if (IsModelAsset(filePath))
             {
                 continue;
             }
@@ -1639,8 +1905,7 @@ public static partial class RetinarBatchModelBuilder
                     Path.GetFileName(sourceTexturePath);
                 FlattenLayout.EnsureFolder(FlattenLayout.TextureFolder(assetFolder));
                 // 目标文件夹里没有副本——很可能是因为源贴图/伴生文件夹被移动过，
-                // B′ 未采用步骤 11 的普通平铺身份账本，此处保留其原有补拷行为，
-                // 而不是让材质继续指向工程里的外部路径（那样后面校验会把整批打包判为失败）。
+                // 保留对仍未找到本地副本的外部贴图的补拷，避免材质继续引用单元外路径。
                 string copiedPath = CopyAssetToExactPath(sourceTexturePath, targetTexturePath);
                 copiedTexture = AssetDatabase.LoadAssetAtPath<Texture>(copiedPath);
                 if (copiedTexture == null)

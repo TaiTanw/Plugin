@@ -140,7 +140,8 @@ public class FlattenSmokePathTests
 
         string service = ReadPluginFile("TOol/Editor/Generated/Flatten/Service/FlattenBuildService.cs");
         Assert.That(service, Does.Contain("TryBeginPackagedFlatten"));
-        Assert.That(service, Does.Contain("FlattenRelocateAtomic"));
+        Assert.That(service, Does.Contain("BuildModelUnits"));
+        Assert.That(service, Does.Not.Contain("RetinarBatchModelBuilder.FlattenRelocateAtomic(work)"));
         Assert.That(service, Does.Contain("FlattenSplitDependencies"));
         Assert.That(service, Does.Contain("FlattenApplyImportAndExtract"));
         Assert.That(service, Does.Contain("FlattenRemap"));
@@ -169,7 +170,7 @@ public class FlattenSmokePathTests
         const System.Reflection.BindingFlags flags = System.Reflection.BindingFlags.Public |
             System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static;
         string[] kept = { "ValidateFlattenSelectedToArt", "TryBeginPackagedFlatten", "FlattenSplitDependencies",
-            "FlattenRelocateAtomic", "FlattenApplyImportAndExtract", "FlattenRemap", "FlattenCopyRendererMaterials",
+            "CopyPackageFileToArt", "FlattenApplyImportAndExtract", "FlattenRemap", "FlattenCopyRendererMaterials",
             "TryFinishPackagedFlatten", "TryGetRendererBounds", "AddOrUpdateBoxCollider", "WrapIncomingPrefabInEmptyShell",
             "NormalizePreparedPrefabAnimations", "TryHealExternalDependencies", "BindKnownTexture" };
         foreach (string name in kept)

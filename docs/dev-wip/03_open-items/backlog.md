@@ -14,6 +14,9 @@
 | 2 | D25-2 B | FBX 内嵌抽到单元外 `.fbm` 时 E 口才该 Extract | **调试暂放** |
 | 3 | D25-4 | 同名贴图串兄弟单元应 `exit=42`、保留原引用 | **调试暂放** |
 | 4 | D26-6 | 无 Op 时 typed 告警、⑤不阻断⑥ | 代码已收 |
+| 5 | D27-1 | ④展开嵌套 Prefab 的漏口：丢失源资产的嵌套实例不是 `Connected`，不展开也不报错，套空父后成空节点进 AB；根 Prefab 是 Variant 时根不在展开范围，Art 可能仍挂 Incoming 基础 Prefab | **待办** |
+
+D27-1 说明（2026-09-28）：嵌套 GLB 套壳已定为④自动完全展开（`UnpackNestedPrefabInstances`），不禁止、不警告；展开是 Mesh 改绑到 Art 副本的前提。待补：展开后检查丢失的嵌套 Prefab（倾向 40 整趟停）；用根为 Variant 的 pack 跑管线后清空导入区，核对 Art 与 AB。③ 用 `Object.Instantiate` 克隆，`PreferUnpackCompletely` 实际空跑，无影响。
 
 不要拆 3518 行目录、不要重写⑥、不要在本仓接 License/Docker。坏行跳过、稳定行 ID、⑥改名：**停放**。
 
@@ -62,7 +65,7 @@
 
 ## B. Unresolved
 
-工程名 / submodule / 两宿主对齐；素材库是否永远只要双端 AB；嵌套 GLB Prefab 禁止 vs 警告；Converter 是否专用 URP。  
+工程名 / submodule / 两宿主对齐；素材库是否永远只要双端 AB；Converter 是否专用 URP。嵌套 GLB Prefab 已定为自动展开，漏口见 A 表 D27-1。  
 CLI 扩参、License 70、iOS-on-Linux：D5 已冻本入口不扩；属另开项或基建。
 
 ## C. Known risks

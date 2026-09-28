@@ -155,11 +155,15 @@ public sealed class FlattenTextureIdentity
         return Normalize(Path.Combine(Path.GetDirectoryName(modelPath), Path.GetFileNameWithoutExtension(modelPath) + ".fbm"));
     }
 
-    /// <summary>伴生搬移后的套层落点：image/Texture/&lt;模型名&gt;.fbm/。</summary>
+    /// <summary>伴生搬移后的套层落点；同名模型沿用 Model 内的独立目录。</summary>
     public static string DestFbmFolder(string artModelPath, string textureFolder)
     {
+        string parent = Path.GetFileName(Path.GetDirectoryName(artModelPath)?.Replace("\\", "/"));
+        string modelDisambiguation = !string.IsNullOrEmpty(parent) &&
+                                     parent.StartsWith("_model_", StringComparison.OrdinalIgnoreCase)
+            ? parent + "/" : string.Empty;
         return Normalize((textureFolder ?? string.Empty).TrimEnd('/') + "/" +
-                         Path.GetFileNameWithoutExtension(artModelPath) + ".fbm");
+                         modelDisambiguation + Path.GetFileNameWithoutExtension(artModelPath) + ".fbm");
     }
 
     public void RegisterExtracted(string modelPath, string folder, IDictionary<string, string> before)

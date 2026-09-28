@@ -110,6 +110,35 @@ public class FlattenPlanTests
     }
 
     [Test]
+    public void CreateOptionsFromPlan_ModelUnitsOverrideLegacyWholeRowBranch()
+    {
+        var plan = new FlattenPlan
+        {
+            Branch = FlattenBranch.RelocateAtomic,
+            ModelUnits = new List<FlattenModelUnit>
+            {
+                new FlattenModelUnit
+                {
+                    ModelPath = "Assets/Incoming/a.fbx",
+                    Strategy = FlattenModelCopyStrategy.Categorized
+                },
+                new FlattenModelUnit
+                {
+                    ModelPath = "Assets/Incoming/b.gltf",
+                    Strategy = FlattenModelCopyStrategy.PreserveRelativeFiles,
+                    SidecarPaths = new List<string> { "Assets/Incoming/b.bin" }
+                }
+            }
+        };
+
+        RetinarFlattenOptions options = FlattenBuildService.CreateOptionsFromPlan(plan);
+        Assert.That(options.SkipDependencySplit, Is.False);
+        Assert.That(options.ModelUnits, Has.Count.EqualTo(2));
+        Assert.That(options.ModelUnits[1].SidecarPaths, Is.EquivalentTo(new[] { "Assets/Incoming/b.bin" }));
+        Assert.That(options.ModelUnits[1].SidecarPaths, Is.Not.SameAs(plan.ModelUnits[1].SidecarPaths));
+    }
+
+    [Test]
     public void FromContext_ThenRun_MissingUrisFailBeforeBegin()
     {
         var ctx = new PipelineJobContext

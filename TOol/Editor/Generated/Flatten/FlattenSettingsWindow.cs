@@ -67,8 +67,8 @@ public sealed class FlattenSettingsWindow : EditorWindow
             EditorStyles.boldLabel);
         EditorGUILayout.HelpBox(
             panelScope == FlattenSettingsScope.Pipeline
-                ? "只影响管线④。运行前冻结快照。人工 B/B′ 不读本资产。路径固定，缺则创建。"
-                : "只影响人工平铺（选中 → B / B′）。管线④不读本资产。路径固定，缺则创建。",
+                ? "只影响自动管线④。运行前冻结快照。手动平铺不读本资产。路径固定，缺则创建。"
+                : "只影响手动平铺。自动管线④不读本资产。路径固定，缺则创建。",
             MessageType.Info);
 
         SettingsAssetPathGui.DrawPinned(settings);

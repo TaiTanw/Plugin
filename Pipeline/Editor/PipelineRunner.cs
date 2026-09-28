@@ -643,10 +643,21 @@ public static class PipelineRunner
                 loggedClear = true;
             }
 
-            if (plan.Branch == FlattenBranch.RelocateAtomic)
+            int categorizedModels = 0;
+            int preservedModels = 0;
+            for (int modelIndex = 0; plan.ModelUnits != null && modelIndex < plan.ModelUnits.Count; modelIndex++)
             {
-                result.Info("[Pipeline] ④ [" + (i + 1) + "] SkipDependencySplit + B′ 原子搬迁");
+                FlattenModelUnit unit = plan.ModelUnits[modelIndex];
+                if (unit == null) continue;
+                if (unit.Strategy == FlattenModelCopyStrategy.PreserveRelativeFiles)
+                    preservedModels++;
+                else
+                    categorizedModels++;
+                result.Info("[Pipeline] ④ [" + (i + 1) + "] 模型 " + unit.ModelPath +
+                            " → " + unit.Strategy + " 伴生=" + unit.SidecarPaths.Count);
             }
+            result.Info("[Pipeline] ④ [" + (i + 1) + "] 模型策略 分类=" + categorizedModels +
+                        " 保相对路径=" + preservedModels);
 
             if (plan.MissingUris != null && plan.MissingUris.Count > 0)
             {

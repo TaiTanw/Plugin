@@ -5,12 +5,11 @@ using System.Collections.Generic;
 // =====================================================================================
 
 /// <summary>
-/// 一份源 Prefab 在平铺过程中的可变状态。B / B′ 交出的源→副本表也在这里。
+/// 一份源 Prefab 在平铺过程中的可变状态，含所有模型共用的源→副本表。
 /// </summary>
 public sealed class RetinarFlattenWork
 {
     public string SourcePath;
-    public string SourceModelPath;
     public string AssetName;
     public string AssetFolder;
     public string PrefabPath;

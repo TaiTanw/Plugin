@@ -1,7 +1,7 @@
 // =====================================================================================
 // 10_Flatten — 资源平铺：流程调度
 //
-// 职责：把选中的 Prefab/模型送入人工完整④；普通 B 与原子 B′ 是互斥入口。
+// 职责：把选中的 Prefab/模型送入手动④；每个模型独立选择复制策略。
 // 具体搬文件 / Importer 仍在 RetinarBatchModelBuilder（后续按能力拆文件）。
 // =====================================================================================
 
@@ -9,31 +9,18 @@
 public static class RetinarFlattenScheduler
 {
     /// <summary>
-    /// 批量汇总：普通 B 分支完成整趟④。不打 AB、不写 Deliverables。
+    /// 手动入口完成整趟④。不打 AB、不写 Deliverables。
     /// </summary>
     public static void FlattenSelectedToArt()
     {
         ManualFlattenResult result = FlattenSelectedToArt(
             FlattenOperationSettings.LoadManualOrDefaults());
-        DebugResult(result, "普通平铺");
+        DebugResult(result, "手动平铺（逐模型策略）");
     }
 
     public static ManualFlattenResult FlattenSelectedToArt(FlattenOperationSettings settings)
     {
-        return ManualFlattenService.RunSelection(settings, ManualFlattenMode.SplitDependencies);
-    }
-
-    public static void RelocateSelectedToArtAtomically()
-    {
-        ManualFlattenResult result = RelocateSelectedToArtAtomically(
-            FlattenOperationSettings.LoadManualOrDefaults());
-        DebugResult(result, "原子迁移");
-    }
-
-    public static ManualFlattenResult RelocateSelectedToArtAtomically(
-        FlattenOperationSettings settings)
-    {
-        return ManualFlattenService.RunSelection(settings, ManualFlattenMode.RelocateAtomic);
+        return ManualFlattenService.RunSelection(settings, ManualFlattenMode.PerModel);
     }
 
     public static bool ValidateFlattenSelectedToArt()

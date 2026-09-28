@@ -45,7 +45,10 @@ public class PipelineGltfUriProbeTests
         Assert.That(FlattenBuildService.HasMissingSidecars(ctx), Is.True);
 
         RetinarFlattenOptions options = FlattenBuildService.CreateOptions(ctx, null);
-        Assert.That(options.SkipDependencySplit, Is.True);
+        Assert.That(options.SkipDependencySplit, Is.False);
+        Assert.That(options.ModelUnits, Has.Count.EqualTo(1));
+        Assert.That(options.ModelUnits[0].Strategy,
+            Is.EqualTo(FlattenModelCopyStrategy.PreserveRelativeFiles));
         Assert.That(options.MissingUris, Is.EquivalentTo(ctx.MissingUris));
         Assert.That(options.MissingUris, Is.Not.SameAs(ctx.MissingUris));
     }

@@ -17,25 +17,13 @@ public static class RetinarMenu
         RetinarEditorUtil.OpenDeliverablesFolder();
     }
 
-    [MenuItem("Tools/手动操作栏/步骤/[④] 平铺/原子迁移（选中）", false, 34)]
-    public static void MenuRelocateSelectedToArtAtomically()
-    {
-        RetinarFlattenScheduler.RelocateSelectedToArtAtomically();
-    }
-
-    [MenuItem("Tools/手动操作栏/步骤/[④] 平铺/原子迁移（选中）", true)]
-    public static bool MenuRelocateSelectedToArtAtomicallyValidate()
-    {
-        return RetinarFlattenScheduler.ValidateFlattenSelectedToArt();
-    }
-
-    [MenuItem("Tools/手动操作栏/步骤/[④] 平铺/平铺（选中）", false, 35)]
+    [MenuItem("Tools/手动操作栏/步骤/[④] 平铺/手动平铺（逐模型策略）", false, 35)]
     public static void MenuFlattenSelectedToArt()
     {
         RetinarFlattenScheduler.FlattenSelectedToArt();
     }
 
-    [MenuItem("Tools/手动操作栏/步骤/[④] 平铺/平铺（选中）", true)]
+    [MenuItem("Tools/手动操作栏/步骤/[④] 平铺/手动平铺（逐模型策略）", true)]
     public static bool MenuFlattenSelectedToArtValidate()
     {
         return RetinarFlattenScheduler.ValidateFlattenSelectedToArt();

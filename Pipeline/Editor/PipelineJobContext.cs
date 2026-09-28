@@ -89,6 +89,11 @@ public sealed class PipelineJobContext
         {
             PipelineGltfUriProbe.Apply(ctx);
         }
+        else if (ext == ".prefab")
+        {
+            // The root is a Prefab; ④ scans each model dependency for URI companions.
+            ctx.HasExternalUris = false;
+        }
         else
         {
             ctx.Warnings.Add("未单独探测的扩展名: " + ext);

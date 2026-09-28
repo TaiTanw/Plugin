@@ -1,4 +1,6 @@
+using System;
 using System.Collections.Generic;
+using System.IO;
 using UnityEditor;
 using UnityEngine;
 
@@ -25,11 +27,29 @@ public static class FlattenBuildService
         }
 
         string sourcePrefabPath = plan.SourcePrefabPath;
+        if (plan.ModelUnits == null || plan.ModelUnits.Count == 0)
+        {
+            plan.ModelUnits = BuildModelUnits(sourcePrefabPath, plan.PrimaryAssetPath);
+        }
+
+        for (int i = 0; i < plan.ModelUnits.Count; i++)
+        {
+            FlattenModelUnit unit = plan.ModelUnits[i];
+            if (unit != null && unit.MissingReferences != null && unit.MissingReferences.Count > 0)
+            {
+                return FlattenRowResult.Failed(
+                    FlattenStep.MissingSidecars,
+                    "④ 模型缺必需伴生: " + unit.ModelPath + "（缺 " + unit.MissingReferences.Count +
+                    "：" + string.Join(", ", unit.MissingReferences.ToArray()) + "）",
+                    sourcePrefabPath);
+            }
+        }
+
         if (plan.MissingUris != null && plan.MissingUris.Count > 0)
         {
             return FlattenRowResult.Failed(
                 FlattenStep.MissingSidecars,
-                "④ glTF 缺必需伴生，无法执行 B′: " +
+                "④ 模型缺必需伴生: " +
                 (string.IsNullOrEmpty(plan.PrimaryAssetPath) ? sourcePrefabPath : plan.PrimaryAssetPath) +
                 "（缺 " + plan.MissingUris.Count + "）",
                 sourcePrefabPath);
@@ -50,25 +70,12 @@ public static class FlattenBuildService
                 sourcePrefabPath);
         }
 
-        if (plan.Branch == FlattenBranch.RelocateAtomic)
-        {
-            if (!RetinarBatchModelBuilder.FlattenRelocateAtomic(work))
-            {
-                return WithFacts(
-                    FlattenRowResult.Failed(
-                        FlattenStep.RelocateAtomic,
-                        "B′ 原子搬迁失败: " + sourcePrefabPath,
-                        sourcePrefabPath,
-                        work != null ? work.PrefabPath : null),
-                    work);
-            }
-        }
-        else if (!RetinarBatchModelBuilder.FlattenSplitDependencies(work))
+        if (!RetinarBatchModelBuilder.FlattenSplitDependencies(work))
         {
             return WithFacts(
                 FlattenRowResult.Failed(
                     FlattenStep.SplitDependencies,
-                    "B 拆依赖失败: " + sourcePrefabPath,
+                    "模型依赖复制失败: " + sourcePrefabPath,
                     sourcePrefabPath,
                     work != null ? work.PrefabPath : null),
                 work);
@@ -111,20 +118,31 @@ public static class FlattenBuildService
         options.AddBoxCollider = options.OperationPolicy.AddBoxCollider;
         options.StripMissingScripts = options.OperationPolicy.StripMissingScripts;
         options.ArtRoot = plan.ArtRoot;
+        options.PrimaryAssetPath = plan.PrimaryAssetPath;
+        if (plan.SidecarPaths != null) options.SidecarPaths = new List<string>(plan.SidecarPaths);
+        if (plan.MissingUris != null) options.MissingUris = new List<string>(plan.MissingUris);
 
-        if (plan.Branch == FlattenBranch.RelocateAtomic)
+        if (plan.ModelUnits != null)
+        {
+            for (int i = 0; i < plan.ModelUnits.Count; i++)
+            {
+                FlattenModelUnit unit = plan.ModelUnits[i];
+                if (unit == null) continue;
+                options.ModelUnits.Add(new FlattenModelUnit
+                {
+                    ModelPath = unit.ModelPath,
+                    Strategy = unit.Strategy,
+                    SidecarPaths = unit.SidecarPaths != null
+                        ? new List<string>(unit.SidecarPaths) : new List<string>(),
+                    MissingReferences = unit.MissingReferences != null
+                        ? new List<string>(unit.MissingReferences) : new List<string>()
+                });
+            }
+        }
+
+        if (options.ModelUnits.Count == 0 && plan.Branch == FlattenBranch.RelocateAtomic)
         {
             options.SkipDependencySplit = true;
-            options.PrimaryAssetPath = plan.PrimaryAssetPath;
-            if (plan.SidecarPaths != null && plan.SidecarPaths.Count > 0)
-            {
-                options.SidecarPaths = new List<string>(plan.SidecarPaths);
-            }
-
-            if (plan.MissingUris != null && plan.MissingUris.Count > 0)
-            {
-                options.MissingUris = new List<string>(plan.MissingUris);
-            }
         }
 
         return options;
@@ -146,6 +164,7 @@ public static class FlattenBuildService
         plan.Branch = ShouldRelocateAtomic(ctx)
             ? FlattenBranch.RelocateAtomic
             : FlattenBranch.SplitDependencies;
+        plan.ModelUnits = BuildModelUnits(sourcePrefabPath, ctx != null ? ctx.PrimaryAssetPath : null);
         plan.ApplyArtModelImporter = ShouldApplyArtModelImporter(ctx);
         if (ctx != null)
         {
@@ -164,6 +183,58 @@ public static class FlattenBuildService
         return plan;
     }
 
+    /// <summary>从 Prefab 的每个模型依赖生成策略；ctx 只补充直接模型入口。</summary>
+    public static List<FlattenModelUnit> BuildModelUnits(string prefabPath, string primaryHint = null)
+    {
+        var paths = new List<string>();
+        if (!string.IsNullOrEmpty(prefabPath))
+        {
+            string[] dependencies = AssetDatabase.GetDependencies(prefabPath, true);
+            if (dependencies != null) paths.AddRange(dependencies);
+        }
+
+        if (!string.IsNullOrEmpty(primaryHint)) paths.Add(primaryHint);
+        return BuildModelUnitsFromPaths(paths);
+    }
+
+    /// <summary>Unity 依赖定位模型；.bin 和外图由 glTF URI 扫描。</summary>
+    public static List<FlattenModelUnit> BuildModelUnitsFromPaths(IList<string> paths)
+    {
+        var result = new List<FlattenModelUnit>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (paths == null) return result;
+
+        for (int i = 0; i < paths.Count; i++)
+        {
+            string path = (paths[i] ?? string.Empty).Replace("\\", "/");
+            string extension = Path.GetExtension(path);
+            if (!FlattenSidecarFacts.IsKernelModelExtension(extension) || !seen.Add(path)) continue;
+
+            var unit = new FlattenModelUnit { ModelPath = path };
+            string full = path.StartsWith("Assets/", StringComparison.OrdinalIgnoreCase)
+                ? Path.Combine(Directory.GetCurrentDirectory(), path) : path;
+            ModelRelativeFileScan scan;
+            if (ModelRelativeFileProbe.TryScan(full, out scan) && scan.HasRelativeFiles)
+            {
+                unit.Strategy = FlattenModelCopyStrategy.PreserveRelativeFiles;
+                if (!scan.FileOk) unit.MissingReferences.Add("模型文件不可读取");
+                unit.MissingReferences.AddRange(scan.MissingReferences);
+                string project = Directory.GetCurrentDirectory().Replace("\\", "/").TrimEnd('/') + "/";
+                for (int s = 0; s < scan.SidecarFullPaths.Count; s++)
+                {
+                    string sidecar = scan.SidecarFullPaths[s].Replace("\\", "/");
+                    unit.SidecarPaths.Add(sidecar.StartsWith(project, StringComparison.OrdinalIgnoreCase)
+                        ? sidecar.Substring(project.Length) : sidecar);
+                }
+            }
+
+            result.Add(unit);
+        }
+
+        result.Sort((a, b) => StringComparer.OrdinalIgnoreCase.Compare(a.ModelPath, b.ModelPath));
+        return result;
+    }
+
     static bool ShouldRelocateAtomic(PipelineJobContext ctx)
     {
         return ctx != null && ctx.HasExternalUris;
@@ -176,7 +247,7 @@ public static class FlattenBuildService
     static bool ShouldApplyArtModelImporter(PipelineJobContext ctx)
     {
         // Prefab 自身是 Unknown；E 仍须逐个检查包内实际的 ModelImporter。
-        // glTF 的 B′ 相对树继续沿用原来的跳过规则。
+        // 单独导入的 ScriptedImporter 不进入 ModelImporter 阶段；Prefab 要检查其中的模型。
         return ctx == null || ctx.ImporterKind == PipelineImporterKind.ModelImporter ||
                (!ctx.HasExternalUris && string.Equals(
                    System.IO.Path.GetExtension(ctx.PrimaryAssetPath), ".prefab",

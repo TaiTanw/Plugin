@@ -82,21 +82,20 @@ public static class RetinarOptionalDeliverables
             }
 
             copied += CopyFileToModelDir(sourceFull, Path.GetFileName(assetPath), modelDir, written);
-            if (string.Equals(Path.GetExtension(assetPath), ".gltf", StringComparison.OrdinalIgnoreCase))
-            {
-                copied += CopyGltfSidecars(sourceFull, modelDir, written);
-            }
+            copied += CopyModelRelativeFiles(sourceFull, modelDir, written);
         }
 
         Debug.Log("[Retinar][Ab] 模型文件 " + copied + " 个 → " + modelDir);
     }
 
-    static int CopyGltfSidecars(
-        string gltfFullPath,
+    static int CopyModelRelativeFiles(
+        string modelFullPath,
         string modelDir,
         Dictionary<string, string> written)
     {
-        GltfExternalScan scan = GltfPackageFiles.Scan(gltfFullPath);
+        ModelRelativeFileScan scan;
+        if (!ModelRelativeFileProbe.TryScan(modelFullPath, out scan) || !scan.HasRelativeFiles)
+            return 0;
         int copied = 0;
         for (int i = 0; i < scan.SidecarFullPaths.Count; i++)
         {
@@ -106,21 +105,20 @@ public static class RetinarOptionalDeliverables
                 continue;
             }
 
-            string relative = GltfPackageFiles.MakeRelativeToGltfDir(gltfFullPath, sidecar)
-                .Replace("\\", "/");
-            if (!IsSafeRelativePath(relative))
+            string relative = ModelRelativeFileProbe.MakeRelativeToModelDir(modelFullPath, sidecar);
+            if (string.IsNullOrEmpty(relative) || !IsSafeRelativePath(relative))
             {
-                Debug.LogWarning("[Retinar][Ab] 跳过跳出模型目录的 glTF 伴生: " + sidecar);
+                Debug.LogWarning("[Retinar][Ab] 跳过跳出模型目录的伴生: " + sidecar);
                 continue;
             }
 
             copied += CopyFileToModelDir(sidecar, relative, modelDir, written);
         }
 
-        if (scan.MissingUris.Count > 0)
+        if (scan.MissingReferences.Count > 0)
         {
-            Debug.LogWarning("[Retinar][Ab] glTF 伴生缺失 " + scan.MissingUris.Count +
-                             " 条（不阻断 AB）: " + gltfFullPath);
+            Debug.LogWarning("[Retinar][Ab] 模型伴生缺失 " + scan.MissingReferences.Count +
+                             " 条（不阻断 AB）: " + modelFullPath);
         }
 
         return copied;

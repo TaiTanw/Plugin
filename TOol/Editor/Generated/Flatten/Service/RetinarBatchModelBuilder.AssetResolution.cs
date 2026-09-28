@@ -6,8 +6,8 @@ using UnityEditor;
 using UnityEngine;
 
 // ④ 引用整理与 E 抽取。步骤 12 已删除旧 SafeZone 专用的源资产搜集链。
-// E 是 Extract 唯一产品入口；Finish 不再 Extract。普通 B 的贴图来源受步骤 11 约束，
-// 无合法副本只警告并保留引用；B′ 相对树沿用原有处理。这里不是交付质量闸。
+// E 是 Extract 唯一产品入口；Finish 不再 Extract。贴图来源受身份账本约束，
+// 无合法副本只警告并保留引用。这里不是交付质量闸。
 public static partial class RetinarBatchModelBuilder
 {
     // ---------------------------------------------------------------------------
@@ -395,6 +395,16 @@ public static partial class RetinarBatchModelBuilder
                     identity.Warn("收尾不补拷未知来源贴图", asset.PrefabPath, path);
                 continue;
             }
+
+            // A generic late copy imports the glTF without its URI files and cannot
+            // rebind the Prefab's Mesh references. The final audit reports this remap failure.
+            if (path.EndsWith(".gltf", StringComparison.OrdinalIgnoreCase) &&
+                GltfPackageFiles.Scan(AssetPathToFullPath(path)).HasExternalUris)
+            {
+                Debug.LogError("[Retinar] glTF 模型引用未在平铺时重绑: " + asset.PrefabPath + " → " + path);
+                continue;
+            }
+
             string requestedTargetPath = FlattenCopyRunner.ResolveDestAssetPath(
                 asset.AssetFolder, path, operationPolicy);
             if (string.IsNullOrEmpty(requestedTargetPath))

@@ -38,5 +38,21 @@ public class FlattenCopyRunnerTests
             FlattenCopyRunner.AppendSourceDisambiguation("image/UI", source, true),
             Is.EqualTo("image/UI/牵引关系/Text-1.png"));
     }
+
+    [Test]
+    public void SameNamedModels_KeepSeparateFbmTextureFolders()
+    {
+        const string guid = "c10f34ef1f9867746a0bf055f3e3562d";
+        const string target = "Assets/Art/BDDAD/Model/fbx.FBX";
+        string secondModel = FlattenCopyRunner.ResolveModelCollisionPath(target, guid);
+        Assert.That(secondModel, Is.EqualTo("Assets/Art/BDDAD/Model/_model_" + guid + "/fbx.FBX"));
+
+        string secondTexture = FlattenCopyRunner.AppendSourceDisambiguation(
+            "image/Texture", "Assets/Art/BDDAD/Model/_model_" + guid + "/fbx.fbm/rotor.png", true);
+        string textureFolder = FlattenTextureIdentity.DestFbmFolder(
+            secondModel, "Assets/Art/BDDAD/image/Texture");
+        Assert.That("Assets/Art/BDDAD/" + secondTexture,
+            Is.EqualTo(textureFolder + "/rotor.png"));
+    }
 }
 #endif

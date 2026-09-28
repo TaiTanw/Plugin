@@ -1,4 +1,5 @@
 #if UNITY_INCLUDE_TESTS
+using System.Collections.Generic;
 using System.IO;
 using System.Text.RegularExpressions;
 using NUnit.Framework;
@@ -115,6 +116,75 @@ public class FlattenManualPlanFactoryTests
         Assert.That(plan.Branch, Is.EqualTo(FlattenBranch.RelocateAtomic));
         Assert.That(plan.PrimaryAssetPath, Is.EqualTo(gltfAssetPath));
         Assert.That(plan.SidecarPaths, Does.Contain(TestRootAssetPath + "/data.bin"));
+    }
+
+    [Test]
+    public void MixedModels_AssignsRelativeUriStrategyOnlyToGltf()
+    {
+        WriteBytes("data.bin", new byte[] { 1, 2, 3, 4 });
+        string gltf = TestRootAssetPath + "/complete.gltf";
+        WriteText("complete.gltf",
+            "{\"asset\":{\"version\":\"2.0\"}," +
+            "\"buffers\":[{\"uri\":\"data.bin\",\"byteLength\":4}]}");
+        string fbx = TestRootAssetPath + "/other.fbx";
+
+        List<FlattenModelUnit> units = FlattenBuildService.BuildModelUnitsFromPaths(
+            new[] { fbx, gltf, gltf });
+
+        Assert.That(units, Has.Count.EqualTo(2));
+        Assert.That(units.Find(x => x.ModelPath == fbx).Strategy,
+            Is.EqualTo(FlattenModelCopyStrategy.Categorized));
+        FlattenModelUnit gltfUnit = units.Find(x => x.ModelPath == gltf);
+        Assert.That(gltfUnit.Strategy, Is.EqualTo(FlattenModelCopyStrategy.PreserveRelativeFiles));
+        Assert.That(gltfUnit.SidecarPaths, Does.Contain(TestRootAssetPath + "/data.bin"));
+        Assert.That(gltfUnit.MissingReferences, Is.Empty);
+    }
+
+    [Test]
+    public void RelativeImageWithoutBin_StillPreservesModelPackage()
+    {
+        WriteBytes("albedo.png", new byte[] { 1, 2, 3, 4 });
+        string gltf = TestRootAssetPath + "/image-only.gltf";
+        WriteText("image-only.gltf",
+            "{\"asset\":{\"version\":\"2.0\"}," +
+            "\"images\":[{\"uri\":\"albedo.png\"}]}");
+
+        List<FlattenModelUnit> units = FlattenBuildService.BuildModelUnitsFromPaths(new[] { gltf });
+
+        Assert.That(units, Has.Count.EqualTo(1));
+        Assert.That(units[0].Strategy, Is.EqualTo(FlattenModelCopyStrategy.PreserveRelativeFiles));
+        Assert.That(units[0].SidecarPaths, Does.Contain(TestRootAssetPath + "/albedo.png"));
+    }
+
+    [Test]
+    public void EmbeddedGltf_UsesCategorizedStrategy()
+    {
+        string gltf = TestRootAssetPath + "/embedded.gltf";
+        WriteText("embedded.gltf",
+            "{\"asset\":{\"version\":\"2.0\"}," +
+            "\"buffers\":[{\"uri\":\"data:application/octet-stream;base64,AQID\",\"byteLength\":3}]}");
+
+        List<FlattenModelUnit> units = FlattenBuildService.BuildModelUnitsFromPaths(new[] { gltf });
+
+        Assert.That(units, Has.Count.EqualTo(1));
+        Assert.That(units[0].Strategy, Is.EqualTo(FlattenModelCopyStrategy.Categorized));
+        Assert.That(units[0].SidecarPaths, Is.Empty);
+    }
+
+    [Test]
+    public void RelativeFileOutsideModelDirectory_FailsBeforeArtIsCleared()
+    {
+        WriteBytes("data.bin", new byte[] { 1, 2, 3, 4 });
+        string gltf = TestRootAssetPath + "/nested/outer.gltf";
+        WriteText("nested/outer.gltf",
+            "{\"asset\":{\"version\":\"2.0\"}," +
+            "\"buffers\":[{\"uri\":\"../data.bin\",\"byteLength\":4}]}");
+
+        List<FlattenModelUnit> units = FlattenBuildService.BuildModelUnitsFromPaths(new[] { gltf });
+
+        Assert.That(units[0].Strategy, Is.EqualTo(FlattenModelCopyStrategy.PreserveRelativeFiles));
+        Assert.That(units[0].MissingReferences, Has.Count.EqualTo(1));
+        Assert.That(units[0].MissingReferences[0], Does.Contain("目录外"));
     }
 
     [Test]

@@ -11,7 +11,8 @@ using UnityEngine;
 public enum ManualFlattenMode
 {
     SplitDependencies = 0,
-    RelocateAtomic = 1
+    RelocateAtomic = 1,
+    PerModel = 2
 }
 
 public sealed class ManualFlattenResult
@@ -31,7 +32,7 @@ public sealed class ManualFlattenResult
     }
 }
 
-/// <summary>人工完整④。B / B′ 由按钮写入 plan.Branch。</summary>
+/// <summary>人工完整④。自动入口按每个模型依赖选择复制策略；旧模式保留给兼容调用。</summary>
 public static class ManualFlattenOrchestration
 {
     public static ManualFlattenResult RunSelection(
@@ -81,7 +82,10 @@ public static class ManualFlattenOrchestration
         {
             string output;
             string error;
-            if (TryRunOne(selectedPaths[i], policy, branch, out output, out error))
+            bool ok = mode == ManualFlattenMode.PerModel
+                ? TryRunOnePerModel(selectedPaths[i], policy, out output, out error)
+                : TryRunOne(selectedPaths[i], policy, branch, out output, out error);
+            if (ok)
             {
                 result.Succeeded++;
                 if (!string.IsNullOrEmpty(output))
@@ -100,6 +104,64 @@ public static class ManualFlattenOrchestration
         Debug.Log("[ManualFlatten] " + mode + "：" + result.Summary +
                   "；快照=" + policy.ToLogString());
         return result;
+    }
+
+    static bool TryRunOnePerModel(
+        string sourcePath,
+        FlattenOperationPolicy policy,
+        out string output,
+        out string error)
+    {
+        output = null;
+        error = null;
+        string extension = Path.GetExtension(sourcePath).ToLowerInvariant();
+        string prefabPath = sourcePath;
+        List<string> models;
+        if (extension == ".prefab")
+        {
+            models = FlattenSidecarFacts.ListModelDependencies(prefabPath);
+        }
+        else if (FlattenSidecarFacts.IsKernelModelExtension(extension))
+        {
+            List<FlattenModelUnit> inputUnits = FlattenBuildService.BuildModelUnitsFromPaths(
+                new[] { sourcePath });
+            if (inputUnits.Count == 1 && inputUnits[0].MissingReferences.Count > 0)
+            {
+                error = "模型缺必需伴生: " + sourcePath + "（" +
+                        string.Join(", ", inputUnits[0].MissingReferences.ToArray()) + "）";
+                return false;
+            }
+
+            List<string> prefabs = ToolPrefabApi.BuildPrefabs(new[] { sourcePath });
+            if (prefabs == null || prefabs.Count != 1)
+            {
+                error = "无法为模型建立人工平铺 Prefab: " + sourcePath;
+                return false;
+            }
+
+            prefabPath = prefabs[0];
+            models = new List<string> { sourcePath };
+        }
+        else
+        {
+            error = "不支持的人工平铺输入: " + sourcePath;
+            return false;
+        }
+
+        FlattenPlan plan = FlattenManualPlanFactory.Create(
+            prefabPath,
+            FlattenBranch.SplitDependencies,
+            policy,
+            null,
+            FlattenManualPlanFactory.InferApplyArtModelImporter(models));
+        plan.ModelUnits = FlattenBuildService.BuildModelUnits(prefabPath, sourcePath);
+        for (int i = 0; i < plan.ModelUnits.Count; i++)
+        {
+            FlattenModelUnit unit = plan.ModelUnits[i];
+            Debug.Log("[ManualFlatten] ④ 模型 " + unit.ModelPath + " → " +
+                      unit.Strategy + " 伴生=" + unit.SidecarPaths.Count);
+        }
+        return RunPlan(plan, out output, out error);
     }
 
     static bool TryRunOne(
@@ -167,9 +229,9 @@ public static class ManualFlattenOrchestration
         FlattenSidecarFacts facts;
         if (branch == FlattenBranch.RelocateAtomic)
         {
-            if (gltfs.Count != 1)
+            if (gltfs.Count != 1 || models.Count != 1)
             {
-                error = "原子迁移要求 Prefab 恰好依赖一个 .gltf 主包: " + prefabPath;
+                error = "原子迁移要求 Prefab 恰好只依赖一个 .gltf 模型包；混合模型请使用普通平铺: " + prefabPath;
                 return false;
             }
 

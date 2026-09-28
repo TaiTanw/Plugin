@@ -427,15 +427,56 @@ public static class RetinarAbApi
             string staging = Path.Combine(projectRoot, "Library", "RetinarAbBuild", suffix);
             RetinarEditorUtil.EnsureDiskDirectory(staging);
 
-            AssetBundleManifest manifest = BuildPipeline.BuildAssetBundles(
-                staging,
-                builds,
-                BuildAssetBundleOptions.ChunkBasedCompression,
-                target);
+            // Unity can report the actual build error only to the Console and return null.
+            // Capture it while the synchronous build runs so Pipeline's failure summary survives
+            // a subsequent script recompile / Console clear.
+            var buildErrors = new List<string>();
+            Application.LogCallback captureBuildError = (condition, stackTrace, type) =>
+            {
+                if (type != LogType.Error && type != LogType.Exception && type != LogType.Assert)
+                {
+                    return;
+                }
+
+                lock (buildErrors)
+                {
+                    if (buildErrors.Count < 3)
+                    {
+                        buildErrors.Add(condition);
+                    }
+                }
+            };
+
+            AssetBundleManifest manifest;
+            Application.logMessageReceivedThreaded += captureBuildError;
+            try
+            {
+                manifest = BuildPipeline.BuildAssetBundles(
+                    staging,
+                    builds,
+                    BuildAssetBundleOptions.ChunkBasedCompression,
+                    target);
+            }
+            catch (System.Exception ex)
+            {
+                failLines.Add(assetName + " — " + suffix + " BuildAssetBundles 异常: " + ex);
+                return false;
+            }
+            finally
+            {
+                Application.logMessageReceivedThreaded -= captureBuildError;
+            }
 
             if (manifest == null)
             {
                 failLines.Add(assetName + " — " + suffix + " BuildAssetBundles 返回 null");
+                lock (buildErrors)
+                {
+                    foreach (string buildError in buildErrors)
+                    {
+                        failLines.Add("  Unity 构建错误: " + buildError);
+                    }
+                }
                 return false;
             }
 
@@ -523,6 +564,30 @@ public static class RetinarAbApi
             .Where(p => p.StartsWith("Assets/", System.StringComparison.OrdinalIgnoreCase))
             .Distinct(System.StringComparer.OrdinalIgnoreCase)
             .ToList();
+
+        // Unity does not reliably report relative model files such as glTF .bin as
+        // AssetDatabase dependencies. Include every file found by the format scanner.
+        string projectPrefix = Path.GetFullPath(Directory.GetCurrentDirectory())
+            .Replace("\\", "/").TrimEnd('/') + "/";
+        var known = new HashSet<string>(deps, System.StringComparer.OrdinalIgnoreCase);
+        int modelDependencyCount = deps.Count;
+        for (int i = 0; i < modelDependencyCount; i++)
+        {
+            string modelPath = deps[i];
+            ModelRelativeFileScan scan;
+            if (!ModelRelativeFileProbe.TryScan(Path.Combine(Directory.GetCurrentDirectory(), modelPath), out scan) ||
+                !scan.HasRelativeFiles)
+                continue;
+
+            foreach (string sidecar in scan.SidecarFullPaths)
+            {
+                string full = Path.GetFullPath(sidecar).Replace("\\", "/");
+                if (!full.StartsWith(projectPrefix, System.StringComparison.OrdinalIgnoreCase)) continue;
+                string assetPath = full.Substring(projectPrefix.Length);
+                if (assetPath.StartsWith("Assets/", System.StringComparison.OrdinalIgnoreCase) && known.Add(assetPath))
+                    deps.Add(assetPath);
+            }
+        }
 
         if (string.IsNullOrEmpty(artFolderPrefix))
         {

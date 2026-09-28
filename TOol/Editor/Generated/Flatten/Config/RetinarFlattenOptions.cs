@@ -6,7 +6,7 @@ using System.Collections.Generic;
 // =====================================================================================
 
 /// <summary>
-/// 管线④传给平铺内核的选项。默认与菜单行为一致（按后缀拆依赖）。
+/// ④传给平铺内核的选项。手动与管线使用各自的配置快照。
 /// </summary>
 public sealed class RetinarFlattenOptions
 {
@@ -17,19 +17,21 @@ public sealed class RetinarFlattenOptions
         FlattenOperationPolicy.CreateDefaults(FlattenSettingsScope.Manual);
 
     /// <summary>
-    /// true：整段不跑按后缀拆依赖（拷贝循环）。改走 B′ 原子搬迁。
-    /// 由 FlattenBuildService 把 ctx.HasExternalUris 映射过来，本类不读 ctx。
+    /// 旧直接调用的纹理身份兼容开关。统一④的 ModelUnits 非空时始终为 false。
     /// </summary>
     public bool SkipDependencySplit;
 
-    /// <summary>主模型 Assets 路径（B′ 原子树根文件）。菜单 Default 为空。</summary>
+    /// <summary>④按模型执行的复制计划。</summary>
+    public List<FlattenModelUnit> ModelUnits = new List<FlattenModelUnit>();
+
+    /// <summary>旧调用兼容的主文件提示；逐模型复制不读取此字段。</summary>
     public string PrimaryAssetPath;
 
-    /// <summary>相对主文件的伴生（.bin / 外图等）。菜单 Default 为空。</summary>
+    /// <summary>旧调用兼容的伴生列表；逐模型复制使用 ModelUnits。</summary>
     public List<string> SidecarPaths = new List<string>();
 
     /// <summary>
-    /// glTF 已声明但 2.5 探测时不存在的必需伴生。B′ 必须拒绝执行，不能只拷主文件后报成功。
+    /// 旧调用兼容的缺失列表；ModelUnits 中每个模型另有 MissingReferences。
     /// </summary>
     public List<string> MissingUris = new List<string>();
 
